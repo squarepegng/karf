@@ -35,7 +35,9 @@ the repo into `~/Kerf/projects/`, finds the React + Tailwind app inside it
 it with Kerf attached and opens it. Edits change Kerf’s copy, not your
 original folder or GitHub, until a PR is made.
 
-In the app: **E** to edit, **P** to preview, **⌘K** to ask Kerf (Preview) or chat about the selection (Edit), **A** to annotate. Click to select, double-click text
+Kerf opens your app inside its editor window at `/__kerf/`: top bar (project, branch, page, desktop/tablet/mobile, version history, Create PR), Layers on the left, Design/Chat on the right, toolbar at the bottom.
+
+In the editor: **E** to edit, **P** to preview, **⌘K** to ask Kerf (Preview) or chat about the selection (Edit), **A** to annotate. Click to select, double-click text
 to retype, drag a field’s icon to scrub, **⌘Z** to undo.
 
 ## Run one app directly
@@ -83,8 +85,13 @@ same property edits the panel makes. Kerf highlights the targets in amber and
 writes nothing until you click **Apply**; every applied change can be undone.
 Requests about behavior or data are answered as developer work, with no edits.
 
+## Versions and pull requests
+
+- Going from Edit back to Preview saves your edits as a version. **History** shows each version, lets you see the screen **before** it, or **undo back** to it.
+- **Create PR** commits Kerf’s edits on a `kerf/…` branch, pushes it, and opens the pull request with GitHub’s `gh` CLI (or gives you the link to finish on GitHub). Creating it again on the same branch updates that pull request.
+
 ## Next
 
-1. Create a branch and PR from a session’s edits.
-2. Reorder (moving JSX between siblings), margins and sizes.
+1. Layout tools: margins, width and height, direction, reorder, add and remove elements, swap icons.
+2. Code-edit mode for anything the tools can’t express, with a diff preview and a compile check.
 3. Next.js support.

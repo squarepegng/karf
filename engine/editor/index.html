@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kerf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="/__kerf/editor.css">
+</head>
+<body>
+<div id="kerf">
+  <header id="top"></header>
+  <div id="body">
+    <aside class="side l" id="layers" hidden></aside>
+    <main id="stage">
+      <div id="frameBox">
+        <iframe id="frame" title="Your app" src="/"></iframe>
+        <div id="ov">
+          <div class="box hov" id="hov"><span class="tag"></span></div>
+          <div id="sibs"></div>
+          <div class="box sel" id="sel"><span class="tag"></span></div>
+          <div id="amb"></div>
+          <svg class="marks" id="marks" width="100%" height="100%"><g id="marksG"></g></svg>
+          <div class="annoCap" id="annoCap" hidden></div>
+          <div class="notePop" id="notePop" hidden></div>
+        </div>
+        <div class="peekBar" id="peekBar" hidden></div>
+      </div>
+      <div class="hint" id="hint" hidden></div>
+      <div class="ask" id="ask" hidden></div>
+      <div class="notesChip" id="notesChip" hidden></div>
+      <div class="noteRes" id="noteRes" hidden></div>
+      <div class="bar" id="bar"></div>
+      <div class="pop" id="changes" hidden></div>
+      <div class="toast" id="toast" hidden></div>
+    </main>
+    <aside class="side r" id="panel" hidden></aside>
+  </div>
+  <div class="scrim" id="modal" hidden></div>
+</div>
+<script src="/__kerf/editor.js"></script>
+</body>
+</html>

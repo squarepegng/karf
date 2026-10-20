@@ -122,7 +122,7 @@ export async function openProject(source, onUpdate = () => {}) {
           buf += d;
           log(String(d));
           const m = buf.match(/Local:\s+(http:\/\/localhost:\d+\/?)/);
-          if (m) { clearTimeout(t); projects.set(job.id, { proc, url: m[1], repoRoot, app: app.rel }); resolve(m[1]); }
+          if (m) { const url = (m[1].endsWith('/') ? m[1] : m[1] + '/') + '__kerf/'; clearTimeout(t); projects.set(job.id, { proc, url, repoRoot, app: app.rel }); resolve(url); }
         };
         proc.stdout.on('data', on);
         proc.stderr.on('data', on);

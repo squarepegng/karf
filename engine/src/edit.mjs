@@ -162,7 +162,7 @@ export function createEditor(webRoot, getTheme) {
       const { code, summary } = editElement(before, line, col, change, getTheme());
       if (code === before) return { file: rel, changed: false, summary };
       fs.writeFileSync(file, code);
-      history.push({ file, rel, before, after: code, loc, change, summary, at: Date.now() });
+      history.push({ file, rel, before, after: code, loc, change, summary, source: change.source || "hand", at: Date.now() });
       return { file: rel, changed: true, summary, n: history.length };
     },
     undo() {
