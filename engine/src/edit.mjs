@@ -5,6 +5,7 @@ import path from 'node:path';
 import MagicString from 'magic-string';
 import { parseCode, walk } from './ast.mjs';
 import { applyOps, isOffScale } from './tailwind.mjs';
+import { propsInfo, applyProps } from './props.mjs';
 
 export class KerfError extends Error {}
 
@@ -89,15 +90,24 @@ export function describe(code, line, col) {
     classKind: ci.kind,
     classReason: ci.reason,
     text: ti.editable ? { editable: true, value: ti.value } : { editable: false, reason: ti.reason },
+    ...propsInfo(code, el),
   };
 }
 
 // Apply class ops and/or a text change to one element. Returns the new code and a summary.
-export function editElement(code, line, col, { ops = [], text } = {}, theme) {
+export function editElement(code, line, col, { ops = [], text, props = [] } = {}, theme) {
   const el = findElement(code, line, col);
   if (!el) throw new KerfError('Element not found. The file may have changed; reload and try again.');
   const s = new MagicString(code);
-  const summary = { added: [], removed: [], offScale: [], text: null };
+  const summary = { added: [], removed: [], offScale: [], text: null, props: [] };
+
+  if (props.length) {
+    try {
+      summary.props = applyProps(s, code, el, props);
+    } catch (e) {
+      throw new KerfError(e.message);
+    }
+  }
 
   if (ops.length) {
     const ci = classInfo(el);

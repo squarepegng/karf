@@ -153,6 +153,7 @@
         const parts = [];
         if (sm.removed.length || sm.added.length) parts.push(`${sm.removed.join(' ') || '—'} → ${sm.added.join(' ')}`);
         if (sm.text) parts.push(`“${sm.text.to}”`);
+        (sm.props || []).forEach((p) => parts.push(`${p.name}: ${p.from ?? 'default'} → ${p.to}`));
         toast(`${fileName(r.file)} · ${parts.join(' · ')}`, sm.offScale.length ? `Off your scale: ${sm.offScale.join(', ')}` : '');
       }
       afterEdit();
@@ -323,6 +324,7 @@
     if (!inf) h += `<div class="sec"><span class="note">Reading code…</span></div>`;
     else if (inf.error) h += `<div class="sec"><span class="note warn">${esc(inf.error)}</span></div>`;
     else {
+      h += propsSection(inf);
       if (inf.classKind === 'dynamic') h += `<div class="sec"><span class="note warn">${esc(inf.classReason)}</span></div>`;
       if (inf.text?.editable) h += sec('Content', `<label class="inp"><input type="text" data-text="1" value="${esc(inf.text.value)}" aria-label="Text"></label>`);
       else if (isText(el)) h += sec('Content', `<span class="note">${esc(inf.text?.reason || '')}</span>`);
@@ -373,7 +375,7 @@
   function setMode(m) {
     S.mode = m;
     if (m === 'preview') { S.sel = null; S.hover = null; S.changesOpen = false; renderChanges(); }
-    if (m === 'edit') { S.askOpen = false; S.proposal = null; }
+    if (m === 'edit') S.askOpen = false;
     renderBar();
     renderPanel();
     renderAsk();
@@ -421,10 +423,15 @@
     e.stopImmediatePropagation();
   };
   ['pointerdown', 'mousedown', 'mouseup', 'pointerup', 'touchstart', 'submit', 'contextmenu'].forEach((t) => window.addEventListener(t, block, true));
+  let lastClick = null;
   window.addEventListener('click', (e) => {
     if (S.mode !== 'edit' || inUI(e)) return;
     if (S.editing && S.editing.contains(e.target)) return;
     block(e);
+    // A click on a <label> makes the browser click its input too: ignore that echo.
+    const now = performance.now();
+    if (lastClick && now - lastClick.t < 80 && lastClick.el !== e.target && !lastClick.el.contains(e.target)) return;
+    lastClick = { el: e.target, t: now };
     const el = pick(e.target);
     if (S.editing) S.editing.blur();
     select(el);
@@ -444,13 +451,13 @@
     if (typing) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      if (S.mode === 'edit') { S.tab = 'chat'; renderPanel(); renderBar(); } else { S.askOpen = true; S.proposal = null; renderAsk(); renderBar(); }
+      if (S.mode === 'edit') { S.tab = 'chat'; renderPanel(); renderBar(); } else { S.askOpen = true; renderAsk(); renderBar(); }
       return;
     }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && S.mode === 'edit') { e.preventDefault(); undo(); return; }
     if (e.key === 'Escape' && (S.noteDraft || S.tool === 'annotate' || S.askOpen)) {
       e.preventDefault();
-      if (S.noteDraft) { S.noteDraft = null; renderMarks(); } else if (S.tool === 'annotate') setTool('select'); else { S.askOpen = false; S.proposal = null; S.amber = []; renderAsk(); renderBar(); }
+      if (S.noteDraft) { S.noteDraft = null; renderMarks(); } else if (S.tool === 'annotate') setTool('select'); else { S.askOpen = false; S.amber = []; renderAsk(); renderBar(); }
       return;
     }
     if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setTool(S.tool === 'annotate' ? 'select' : 'annotate'); return; }
@@ -553,8 +560,9 @@
   const PROP_NAMES = { bg: 'Fill', color: 'Text color', borderC: 'Stroke color', fontSize: 'Size', fontWeight: 'Weight', lineHeight: 'Line height', letterSpacing: 'Letter spacing', align: 'Align', radius: 'Radius', rTL: 'Top-left corner', rTR: 'Top-right corner', rBR: 'Bottom-right corner', rBL: 'Bottom-left corner', padX: 'Padding X', padY: 'Padding Y', gap: 'Gap', borderW: 'Stroke', opacity: 'Opacity', shadow: 'Shadow' };
   const UNIT = { fontSize: 'px', lineHeight: 'px', radius: 'px', rTL: 'px', rTR: 'px', rBR: 'px', rBL: 'px', padX: 'px', padY: 'px', gap: 'px', borderW: 'px', opacity: '%', letterSpacing: '%' };
   const opLabel = (o) => `${PROP_NAMES[o.prop] || o.prop} ${o.value}${UNIT[o.prop] || ''}`;
+  const editLabel = (e) => [...e.ops.map(opLabel), ...(e.props || []).map((p) => `${p.name}: ${p.value}`), ...(e.text ? [`“${e.text}”`] : [])].join(' · ');
 
-  Object.assign(S, { tab: 'design', chat: [], tool: 'select', shape: 'box', notes: [], noteDraft: null, amber: [], askOpen: false, askBusy: false, proposal: null, proposalWhere: null });
+  Object.assign(S, { tab: 'design', chat: [], tool: 'select', shape: 'box', notes: [], noteDraft: null, amber: [], askOpen: false, card: null });
 
   function measure(el) {
     const cs = getComputedStyle(el);
@@ -562,7 +570,9 @@
   }
   function targetOf(el, note) {
     const def = defOf(el), use = useOf(el);
-    return { loc: def || use, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note };
+    // Component usages (icons, buttons) carry their properties at the use site.
+    const loc = use && (!def || el.tagName.toLowerCase() === 'svg') ? use : def || use;
+    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note };
   }
   function uniq(list) {
     const seen = new Set(), out = [];
@@ -574,6 +584,7 @@
   const visibleTargets = () => uniq(tagged().filter(onScreen).map((el) => targetOf(el))).slice(0, 80);
   function selectionTargets() {
     const el = S.sel.el, out = [targetOf(el)];
+    if (activeLoc() !== out[0].loc) out.unshift({ ...out[0], loc: activeLoc() });
     let p = el.parentElement;
     for (let i = 0; p && i < 2; p = p.parentElement) { const q = pick(p); if (q) { out.push(targetOf(q)); p = q; i++; } }
     tagged(el).slice(0, 30).forEach((c) => out.push(targetOf(c)));
@@ -583,79 +594,96 @@
   function noteTargets(n, i) {
     const pts = n.shape === 'pin' ? [[n.x, n.y]] : n.shape === 'arrow' ? [[n.x2, n.y2]] : [[n.x + n.w / 2, n.y + n.h / 2]];
     const els = [];
-    for (const [px, py] of pts) {
-      document.elementsFromPoint(px - scrollX, py - scrollY).map(pick).filter(Boolean).slice(0, 3).forEach((e) => els.push(e));
-    }
+    for (const [px, py] of pts) document.elementsFromPoint(px - scrollX, py - scrollY).map(pick).filter(Boolean).slice(0, 3).forEach((e) => els.push(e));
     if (n.shape === 'box' || n.shape === 'circle') {
       tagged().forEach((el) => {
         const r = el.getBoundingClientRect(), cx = r.left + r.width / 2 + scrollX, cy = r.top + r.height / 2 + scrollY;
         if (cx >= n.x && cx <= n.x + n.w && cy >= n.y && cy <= n.y + n.h) els.push(el);
       });
     }
-    return uniq(els.map((el) => targetOf(el, i + 1))).slice(0, 15);
+    return uniq(els.map((el) => targetOf(el, i + 1))).slice(0, 20);
   }
 
-  async function askAI(request, targets, where) {
-    const r = await api('/ai', { request, targets });
-    S.amber = r.edits.map((e) => e.loc);
-    return r;
+  /* One conversation shared by the Ask bar, notes and chat */
+  function historyFor() {
+    const h = [];
+    for (const m of S.chat) {
+      if (m.role === 'user') h.push({ role: 'user', text: m.text });
+      else if (m.error) h.push({ role: 'assistant', text: `(error) ${m.error}` });
+      else if (m.proposal) h.push({ role: 'assistant', text: `${m.proposal.message}\nProposed: ${m.proposal.edits.map((e) => `${e.tag} ${editLabel(e)}`).join('; ') || 'no edits'}\nStatus: ${m.status}` });
+    }
+    // Keep strict user/assistant alternation.
+    return h.filter((x, i) => !(i > 0 && h[i - 1].role === x.role));
   }
-  async function applyEdits(edits) {
-    const r = await api('/ai/apply', { edits });
-    const ok = r.results.filter((x) => x.ok && x.changed).length, bad = r.results.filter((x) => !x.ok);
-    S.count = r.n;
+  async function runAI(text, targets, where, shown, followUp) {
+    text = String(text || '').trim();
+    if (!text || S.card?.busy) return;
+    const history = historyFor();
+    const ctx = followUp ? 'Follow-up' : where === 'chat' && S.sel ? ((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || S.sel.el.tagName.toLowerCase()) : where === 'notes' ? `${S.notes.length} note${S.notes.length === 1 ? '' : 's'}` : 'Whole screen';
+    S.chat.push({ role: 'user', text, shown: shown || text, ctx, where });
+    const m = { role: 'kerf', busy: true, status: 'pending', where, targets };
+    S.chat.push(m);
+    S.card = m;
+    renderAll();
+    try {
+      m.proposal = await api('/ai', { request: text, targets, history });
+      S.amber = m.proposal.edits.map((e) => e.loc);
+      if (!m.proposal.edits.length) m.status = 'info';
+    } catch (e) { m.error = e.message; }
+    m.busy = false;
+    renderAll();
+  }
+  async function decide(m, v) {
+    if (!m || m.status !== 'pending') return;
     S.amber = [];
-    toast(`Applied ${ok} change${ok === 1 ? '' : 's'}`, bad.length ? `${bad.length} skipped: ${bad[0].error}` : '', !!bad.length && !ok);
-    afterEdit();
-    renderBar();
-    return ok;
+    if (v === 'apply') {
+      const r = await api('/ai/apply', { edits: m.proposal.edits }).catch((e) => ({ error: e.message }));
+      if (r.error) { toast(r.error, '', true); return; }
+      const ok = r.results.filter((x) => x.ok && x.changed).length, bad = r.results.filter((x) => !x.ok);
+      S.count = r.n;
+      m.status = ok ? 'applied' : 'failed';
+      toast(`Applied ${ok} change${ok === 1 ? '' : 's'}`, bad.length ? `${bad.length} skipped: ${bad[0].error}` : '', !!bad.length && !ok);
+      if (m.where === 'notes' && ok) S.notes = [];
+      afterEdit();
+    } else m.status = 'discarded';
+    renderAll();
   }
-  const proposalHTML = (p, act, i) => `<div class="prop"><div class="kerfSays"><i class="dotA"></i><span>${esc(p.message)}</span></div>
-    ${p.edits.length ? `<div class="edits">${p.edits.map((e) => `<div class="ed"><b>${esc(e.tag)}</b><span>${esc(e.why)}</span><span class="mono">${esc(e.ops.map(opLabel).join(' · '))}${e.text ? ` · “${esc(e.text)}”` : ''}</span></div>`).join('')}</div>` : ''}
-    ${act ? `<div class="acts">${p.edits.length ? `<button class="ghostBtn" data-act="${act}" data-i="${i ?? ''}" data-v="discard">Discard</button><button class="amberBtn" data-act="${act}" data-i="${i ?? ''}" data-v="apply">Apply ${p.edits.length} change${p.edits.length === 1 ? '' : 's'}</button>` : `<button class="ghostBtn" data-act="${act}" data-i="${i ?? ''}" data-v="discard">OK</button>`}</div>` : ''}</div>`;
+  const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: '' };
+  function kerfHTML(m, i) {
+    if (m.busy) return `<div class="prop"><div class="kerfSays"><i class="spin"></i><span class="note">Kerf is reading the code…</span></div></div>`;
+    if (m.error) return `<div class="prop err"><span class="note warn">${esc(m.error)}</span></div>`;
+    const p = m.proposal;
+    const badge = { partial: 'Partly possible', not_yet: 'Not possible in Kerf yet', needs_developer: 'For developers' }[p.scope];
+    return `<div class="prop"><div class="kerfSays"><i class="dotA"></i><span>${badge ? `<b class="badge">${badge}</b> ` : ''}${esc(p.message)}</span></div>
+      ${p.edits.length ? `<div class="edits">${p.edits.map((e) => `<div class="ed"><b>${esc(e.tag)}</b><span>${esc(e.why)}</span><span class="mono">${esc(editLabel(e))}</span></div>`).join('')}</div>` : ''}
+      ${m.status === 'pending' ? `<div class="acts"><button class="ghostBtn" data-act="decide" data-i="${i}" data-v="discard">Discard</button><button class="amberBtn" data-act="decide" data-i="${i}" data-v="apply">Apply ${p.edits.length} change${p.edits.length === 1 ? '' : 's'}</button></div>` : STATUS[m.status] ? `<span class="note">${STATUS[m.status]}</span>` : ''}</div>`;
+  }
+  const replyForm = (where) => `<form class="reply" data-form="reply" data-where="${where}"><input id="replyIn" placeholder="Reply to Kerf…" autocomplete="off" aria-label="Reply to Kerf"><button class="sendB" aria-label="Send">${ico('up', 14)}</button></form>`;
 
   /* Ask bar (Preview) */
   function renderAsk() {
     const a = $('ask');
     a.hidden = !(S.askOpen && S.mode === 'preview');
     if (a.hidden) return;
-    a.innerHTML = S.proposal && S.proposalWhere === 'ask'
-      ? proposalHTML(S.proposal, 'askP')
-      : `<form class="askF" data-form="ask"><span class="spark">${ico('spark', 16)}</span><input id="askIn" placeholder="${S.askBusy ? 'Kerf is thinking…' : 'Ask Kerf to change something on this screen'}" ${S.askBusy ? 'disabled' : ''} autocomplete="off" aria-label="Ask Kerf"><button class="sendB" ${S.askBusy ? 'disabled' : ''} aria-label="Send">${S.askBusy ? '<i class="spin"></i>' : ico('up', 14)}</button></form>
+    const m = S.card && S.card.where === 'ask' ? S.card : null;
+    if (m) {
+      a.innerHTML = `<div class="cardTop"><span class="note">Kerf</span>${hb('closeCard', 'x', 'Close')}</div>${kerfHTML(m, S.chat.indexOf(m))}${m.busy ? '' : replyForm('ask')}`;
+      if (!m.busy) setTimeout(() => root.getElementById('replyIn')?.focus(), 0);
+    } else {
+      a.innerHTML = `<form class="askF" data-form="ask"><span class="spark">${ico('spark', 16)}</span><input id="askIn" placeholder="Ask Kerf to change something on this screen" autocomplete="off" aria-label="Ask Kerf"><button class="sendB" aria-label="Send">${ico('up', 14)}</button></form>
         <div class="askHints">${['Make this page feel more premium', 'Make the text easier to read', 'Tighten the spacing'].map((s) => `<button data-act="askHint" data-v="${s}">${s}</button>`).join('')}</div>`;
-    if (!S.askBusy && !S.proposal) setTimeout(() => root.getElementById('askIn')?.focus(), 0);
-  }
-  async function sendAsk(text) {
-    if (!text.trim() || S.askBusy) return;
-    S.askBusy = true; renderAsk();
-    try { S.proposal = await askAI(text, visibleTargets(), 'ask'); S.proposalWhere = 'ask'; }
-    catch (e) { toast(e.message, '', true); }
-    S.askBusy = false; renderAsk();
+      setTimeout(() => root.getElementById('askIn')?.focus(), 0);
+    }
   }
 
   /* Chat (Edit, ⌘K) */
   function chatHTML() {
     const ctx = S.sel ? `${esc((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || S.sel.el.tagName.toLowerCase())} · ${esc(fileName(activeLoc()))}` : 'Whole screen';
     const msgs = S.chat.map((m, i) => m.role === 'user'
-      ? `<div class="uMsg"><span class="ctx">${esc(m.ctx)}</span><div class="bub">${esc(m.text)}</div></div>`
-      : m.busy ? `<div class="kMsg"><i class="spin"></i><span class="note">Kerf is reading the code…</span></div>`
-      : m.error ? `<div class="kMsg"><span class="note warn">${esc(m.error)}</span></div>`
-      : `<div class="kMsg">${proposalHTML(m.proposal, m.status === 'pending' ? 'chatP' : '', i)}${m.status !== 'pending' ? `<span class="note">${m.status === 'applied' ? 'Applied' : 'Discarded'}</span>` : ''}</div>`).join('');
-    return `<div class="chatScroll" id="chatScroll">${msgs || `<div class="empty"><b>Ask Kerf about what you selected</b><span>Select an element, then describe the change, like “make this card feel lighter”. Kerf reads its code and proposes edits for you to approve.</span></div>`}</div>
-      <form class="comp" data-form="chat"><span class="ctx">${ctx}</span><textarea id="chatIn" rows="2" placeholder="Describe a change…" aria-label="Message Kerf"></textarea><button class="sendB" aria-label="Send">${ico('up', 14)}</button></form>`;
-  }
-  async function sendChat(text) {
-    if (!text.trim()) return;
-    const ctx = S.sel ? ((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || S.sel.el.tagName.toLowerCase()) : 'Whole screen';
-    S.chat.push({ role: 'user', text, ctx });
-    const ci = root.getElementById('chatIn'); if (ci) ci.value = '';
-    const m = { role: 'kerf', busy: true, status: 'pending' };
-    S.chat.push(m);
-    renderPanel();
-    try { m.proposal = await askAI(text, S.sel ? selectionTargets() : visibleTargets(), 'chat'); }
-    catch (e) { m.error = e.message; }
-    m.busy = false;
-    renderPanel();
+      ? `<div class="uMsg"><span class="ctx">${esc(m.ctx)}</span><div class="bub">${esc(m.shown || m.text)}</div></div>`
+      : `<div class="kMsg">${kerfHTML(m, i)}</div>`).join('');
+    return `<div class="chatScroll" id="chatScroll">${msgs || `<div class="empty"><b>Talk to Kerf</b><span>Select an element and describe the change, like “make these icons lighter”. Kerf reads the code, proposes edits in amber, and you approve them. Ask, notes and chat share this one conversation, so you can follow up here.</span></div>`}</div>
+      <form class="comp" data-form="chat"><span class="ctx">${ctx}</span><textarea id="chatIn" rows="2" placeholder="Describe a change, or follow up…" aria-label="Message Kerf"></textarea><button class="sendB" aria-label="Send">${ico('up', 14)}</button></form>`;
   }
 
   /* Annotations */
@@ -665,18 +693,18 @@
     if (n.shape === 'box') s = `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6" ${st}/>`;
     else if (n.shape === 'circle') s = `<ellipse cx="${n.x + n.w / 2}" cy="${n.y + n.h / 2}" rx="${n.w / 2}" ry="${n.h / 2}" ${st}/>`;
     else if (n.shape === 'arrow') { const a = Math.atan2(n.y2 - n.y, n.x2 - n.x), L = 12; s = `<path d="M${n.x} ${n.y}L${n.x2} ${n.y2}M${n.x2} ${n.y2}L${n.x2 - L * Math.cos(a - 0.5)} ${n.y2 - L * Math.sin(a - 0.5)}M${n.x2} ${n.y2}L${n.x2 - L * Math.cos(a + 0.5)} ${n.y2 - L * Math.sin(a + 0.5)}" stroke="#2B66D9" stroke-width="2.5" fill="none" stroke-linecap="round"/>`; }
-    const [bx, by] = n.shape === 'pin' ? [n.x, n.y] : n.shape === 'arrow' ? [n.x, n.y] : [n.x + n.w, n.y];
+    const [bx, by] = n.shape === 'pin' || n.shape === 'arrow' ? [n.x, n.y] : [n.x + n.w, n.y];
     if (i != null) s += `<g transform="translate(${bx} ${by})"><path d="M0 0h12a12 12 0 0 1 0 24h-0a12 12 0 0 1-12-12z" transform="translate(-4 -20)" fill="#2B66D9"/><text x="8" y="-3" fill="#fff" font-size="11" font-weight="600" font-family="Geist,system-ui,sans-serif" text-anchor="middle">${i + 1}</text></g>`;
     else if (n.shape === 'pin') s += `<circle cx="${n.x}" cy="${n.y}" r="6" fill="#2B66D9"/>`;
     return s;
   }
   function renderMarks() {
-    const g = $('marksG');
-    g.innerHTML = S.notes.map((n, i) => shapeSVG(n, i)).join('') + (S.noteDraft ? shapeSVG(S.noteDraft, null, true) : '');
+    $('marksG').innerHTML = S.notes.map((n, i) => shapeSVG(n, i)).join('') + (S.noteDraft ? shapeSVG(S.noteDraft, null, true) : '');
     $('annoCap').hidden = S.tool !== 'annotate';
+    const busy = S.card?.busy && S.card.where === 'notes';
     const chip = $('notesChip');
     chip.hidden = !S.notes.length || !!S.noteDraft;
-    if (!chip.hidden) chip.innerHTML = `<span>${S.notes.length} note${S.notes.length === 1 ? '' : 's'}</span><button class="ghostBtn" data-act="notesClear">Clear</button><button class="lightBtn" data-act="notesApply" ${S.askBusy ? 'disabled' : ''}>${S.askBusy ? '<i class="spin dark"></i>Reading…' : `${ico('spark', 14)}Apply ${S.notes.length > 1 ? 'all ' + S.notes.length : 'note'}`}</button>`;
+    if (!chip.hidden) chip.innerHTML = `<span>${S.notes.length} note${S.notes.length === 1 ? '' : 's'}</span><button class="ghostBtn" data-act="notesClear">Clear</button><button class="lightBtn" data-act="notesApply" ${busy ? 'disabled' : ''}>${busy ? '<i class="spin dark"></i>Reading…' : `${ico('spark', 14)}Apply ${S.notes.length > 1 ? 'all ' + S.notes.length : 'note'}`}</button>`;
     const pop = $('notePop');
     pop.hidden = !S.noteDraft;
     if (S.noteDraft) {
@@ -689,17 +717,20 @@
       }
     } else delete pop.dataset.open;
     const res = $('noteRes');
-    res.hidden = !(S.proposal && S.proposalWhere === 'notes');
-    if (!res.hidden) res.innerHTML = proposalHTML(S.proposal, 'notesP');
+    const m = S.card && S.card.where === 'notes' && !S.card.busy ? S.card : null;
+    res.hidden = !m;
+    if (m) res.innerHTML = `<div class="cardTop"><span class="note">Kerf · notes</span>${hb('closeCard', 'x', 'Close')}</div>${kerfHTML(m, S.chat.indexOf(m))}${replyForm('notes')}`;
   }
-  async function applyNotes() {
-    if (!S.notes.length || S.askBusy) return;
-    S.askBusy = true; renderMarks();
+  function renderAll() {
+    renderAsk();
+    renderMarks();
+    if (S.mode === 'edit' && S.tab === 'chat') renderPanel();
+  }
+  function applyNotes() {
+    if (!S.notes.length) return;
     const targets = uniq(S.notes.flatMap((n, i) => noteTargets(n, i)));
     const request = S.notes.map((n, i) => `Note ${i + 1}: ${n.text}`).join('\n') + '\nEach element is tagged with the note it sits under.';
-    try { S.proposal = await askAI(request, targets, 'notes'); S.proposalWhere = 'notes'; }
-    catch (e) { toast(e.message, '', true); }
-    S.askBusy = false; renderMarks();
+    runAI(request, targets, 'notes', S.notes.map((n, i) => `${i + 1}. ${n.text}`).join('\n'));
   }
   let draw = null;
   root.addEventListener('pointerdown', (e) => {
@@ -711,11 +742,10 @@
   window.addEventListener('pointermove', (e) => {
     if (!draw) return;
     const x2 = e.clientX + scrollX, y2 = e.clientY + scrollY;
-    S.noteDraft = S.shape === 'arrow' ? { shape: 'arrow', x: draw.x, y: draw.y, x2, y2 } : { shape: S.shape === 'pin' ? 'pin' : S.shape, x: Math.min(draw.x, x2), y: Math.min(draw.y, y2), w: Math.abs(x2 - draw.x), h: Math.abs(y2 - draw.y) };
-    if (S.shape === 'pin') S.noteDraft = { shape: 'pin', x: x2, y: y2 };
+    S.noteDraft = S.shape === 'pin' ? { shape: 'pin', x: x2, y: y2 } : S.shape === 'arrow' ? { shape: 'arrow', x: draw.x, y: draw.y, x2, y2 } : { shape: S.shape, x: Math.min(draw.x, x2), y: Math.min(draw.y, y2), w: Math.abs(x2 - draw.x), h: Math.abs(y2 - draw.y) };
     renderMarks();
   });
-  window.addEventListener('pointerup', (e) => {
+  window.addEventListener('pointerup', () => {
     if (!draw) return;
     const d = S.noteDraft;
     if (!d || (d.shape !== 'pin' && d.shape !== 'arrow' && d.w < 8 && d.h < 8) || (d.shape === 'arrow' && Math.hypot(d.x2 - d.x, d.y2 - d.y) < 8)) S.noteDraft = { shape: 'pin', x: draw.x, y: draw.y };
@@ -741,42 +771,56 @@
     const a = e.target.closest('[data-act]');
     if (!a) return;
     const act = a.dataset.act, v = a.dataset.v;
-    if (act === 'ask') { S.askOpen = !S.askOpen; S.proposal = null; renderAsk(); }
-    else if (act === 'askHint') sendAsk(v);
-    else if (act === 'askP' || act === 'notesP') {
-      const p = S.proposal;
-      S.proposal = null; S.amber = [];
-      if (v === 'apply' && p) applyEdits(p.edits).then((ok) => { if (act === 'notesP' && ok) S.notes = []; renderMarks(); });
-      if (act === 'askP' && v === 'apply') S.askOpen = false;
-      renderAsk(); renderMarks();
-    }
-    else if (act === 'chatP') {
-      const m = S.chat[+a.dataset.i];
-      if (!m) return;
-      m.status = v === 'apply' ? 'applied' : 'discarded';
-      S.amber = [];
-      if (v === 'apply') applyEdits(m.proposal.edits);
-      renderPanel();
-    }
-    else if (act === 'tab') { S.tab = v; renderPanel(); }
+    if (act === 'ask') { S.askOpen = !S.askOpen; if (S.card?.where === 'ask' && !S.card.busy && S.card.status !== 'pending') S.card = null; renderAsk(); renderBar(); }
+    else if (act === 'askHint') runAI(v, visibleTargets(), 'ask');
+    else if (act === 'decide') decide(S.chat[+a.dataset.i], v);
+    else if (act === 'closeCard') { if (S.card?.status === 'pending') S.card.status = 'discarded'; S.card = null; S.amber = []; renderAll(); }
+    else if (act === 'tab') { S.tab = v; renderPanel(); renderBar(); }
     else if (act === 'tool') setTool(S.tool === v ? 'select' : v);
     else if (act === 'shape') { S.shape = v; renderBar(); }
     else if (act === 'noteAdd') addNote();
     else if (act === 'noteDiscard') { S.noteDraft = null; renderMarks(); }
-    else if (act === 'notesClear') { S.notes = []; S.proposal = null; S.amber = []; renderMarks(); }
+    else if (act === 'notesClear') { S.notes = []; if (S.card?.where === 'notes') S.card = null; S.amber = []; renderMarks(); }
     else if (act === 'notesApply') applyNotes();
+    else if (act === 'setProp') commitProp(a.dataset.p, v);
   });
+  function commitProp(name, value) { commit({ props: [{ name, value }] }); }
   root.addEventListener('submit', (e) => {
     e.preventDefault();
     const f = e.target.dataset.form;
-    if (f === 'ask') sendAsk(root.getElementById('askIn').value);
-    if (f === 'chat') { const t = root.getElementById('chatIn'); sendChat(t.value); }
+    if (f === 'ask') runAI(root.getElementById('askIn').value, visibleTargets(), 'ask');
+    if (f === 'chat') { const t = root.getElementById('chatIn'); const v = t.value; t.value = ''; runAI(v, S.sel ? selectionTargets() : visibleTargets(), 'chat'); }
+    if (f === 'reply') {
+      const v = root.getElementById('replyIn').value, where = e.target.dataset.where;
+      const prev = S.card;
+      runAI(v, where === 'notes' && prev?.targets ? prev.targets : visibleTargets(), where, v, true);
+    }
+  });
+  root.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.dataset.propsel) commitProp(t.dataset.propsel, t.value);
+    if (t.dataset.propnum) { const n = parseFloat(t.value); if (isFinite(n)) commitProp(t.dataset.propnum, n); }
+    if (t.dataset.proptext) commitProp(t.dataset.proptext, t.value);
   });
   root.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey) return;
-    if (e.target.id === 'chatIn') { e.preventDefault(); sendChat(e.target.value); }
+    if (e.target.id === 'chatIn') { e.preventDefault(); const v = e.target.value; e.target.value = ''; runAI(v, S.sel ? selectionTargets() : visibleTargets(), 'chat'); }
     if (e.target.id === 'noteIn') { e.preventDefault(); addNote(); }
   });
+  // Component properties section for the Design panel.
+  function propsSection(inf) {
+    if (!inf?.component || !inf.props?.length) return '';
+    const rows = inf.props.map((p) => {
+      let ctl;
+      if (!p.editable) ctl = `<label class="inp lock" title="${esc(p.reason)}"><input value="set by code" disabled></label>`;
+      else if (p.kind === 'option') ctl = `<label class="inp"><select data-propsel="${esc(p.name)}">${p.value == null ? '<option value="" selected>Default</option>' : ''}${p.options.map((o) => `<option${o === p.value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>${ico('chev', 12)}</label>`;
+      else if (p.kind === 'boolean') ctl = `<div class="seg"><button data-act="setProp" data-p="${esc(p.name)}" data-v="false" class="${p.value === false || p.value == null ? 'on' : ''}">Off</button><button data-act="setProp" data-p="${esc(p.name)}" data-v="true" class="${p.value === true ? 'on' : ''}">On</button></div>`;
+      else if (p.kind === 'number') ctl = `<label class="inp"><input type="text" inputmode="decimal" data-propnum="${esc(p.name)}" value="${p.value ?? ''}" placeholder="Default"></label>`;
+      else ctl = `<label class="inp"><input type="text" data-proptext="${esc(p.name)}" value="${esc(p.value)}"></label>`;
+      return `<div class="kv"><span>${esc(p.name)}</span>${ctl}</div>`;
+    }).join('');
+    return sec(`Properties${inf.lib ? ` <span class="note">${esc(inf.lib.replace(/^@/, '').split('/')[0])}</span>` : ''}`, rows);
+  }
 
   /* ---------- start ---------- */
   api('/theme').then((t) => { S.theme = t; renderPanel(); }).catch(() => {});
@@ -914,13 +958,22 @@ button{font:inherit;color:inherit;cursor:pointer}
 .kbd{padding:0 4px;border-radius:4px;background:#2D2D32;color:#B0B0BA;font:400 10px/16px 'Geist Mono',ui-monospace,monospace}
 .chatScroll{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:14px 12px}
 .uMsg{align-self:flex-end;max-width:220px;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-.bub{padding:8px 10px;background:#2D2D32;border-radius:10px 10px 4px 10px;line-height:18px}
+.bub{white-space:pre-wrap;padding:8px 10px;background:#2D2D32;border-radius:10px 10px 4px 10px;line-height:18px}
 .ctx{display:inline-flex;align-self:flex-start;padding:2px 6px;border:1px solid #2B66D9;border-radius:4px;font:500 11px/14px Geist,system-ui,sans-serif;color:#EDEDF0}
 .uMsg .ctx{align-self:flex-end}
 .kMsg{display:flex;flex-direction:column;gap:6px}
 .comp{display:flex;flex-direction:column;gap:8px;padding:12px;border-top:1px solid #3A3A40;position:relative}
 .comp .sendB{position:absolute;right:20px;bottom:20px;width:28px;height:28px}
 .comp textarea{padding-right:44px}
+.kv{display:grid;grid-template-columns:84px minmax(0,1fr);align-items:center;gap:8px;color:#B0B0BA}
+.kv>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cardTop{display:flex;align-items:center;justify-content:space-between;padding:0 4px}
+.reply{display:flex;align-items:center;gap:8px;height:44px;padding:0 6px 0 12px;background:#2D2D32;border:1px solid #3A3A40;border-radius:12px}
+.reply:focus-within{border-color:#2B66D9}
+.reply input{flex:1;min-width:0;height:100%;background:transparent;border:0;outline:none;color:#EDEDF0;font:400 13px/18px Geist,system-ui,sans-serif}
+.noteRes{display:flex;flex-direction:column;gap:8px}
+.prop.err{border-color:#F06A5F}
+.badge{display:inline-block;margin-right:4px;padding:1px 6px;border-radius:4px;background:rgba(233,181,71,.16);color:#E9B547;font-weight:500;font-size:11px}
 `;
   }
 })();

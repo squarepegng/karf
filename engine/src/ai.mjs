@@ -8,6 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
 import { KerfError } from './edit.mjs';
+import { checkProp } from './props.mjs';
 
 const ENV = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env');
 const MODEL = 'claude-opus-5-5';
@@ -27,13 +28,14 @@ function apiKey() {
 }
 
 const Proposal = z.object({
-  scope: z.enum(['visual', 'needs_developer']).describe('needs_developer when the request changes behavior, data, logic or backend rather than how things look'),
+  scope: z.enum(['done', 'partial', 'not_yet', 'needs_developer']).describe('done: edits cover the request. partial: edits cover part of it and the rest needs something Kerf cannot change yet. not_yet: it is a visual change but nothing in the toolset can do it yet. needs_developer: it changes behavior, data, logic or backend.'),
   message: z.string().describe('One or two plain sentences to the designer: what you changed and how far it reaches, or why it needs a developer'),
   edits: z.array(
     z.object({
       loc: z.string().describe('Exactly one of the element ids you were given'),
       ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
       text: z.string().nullable().describe('New text, only when the element’s text is editable and the request asks to change wording; otherwise null'),
+      props: z.array(z.object({ name: z.string(), value: z.string() })).describe('Component property changes, only names listed as editable for that element, with one of its allowed values; [] if none'),
       why: z.string().describe('A few words, e.g. "warmer, more premium card"'),
     }),
   ),
@@ -47,8 +49,10 @@ How to work:
 - Use the project's own design tokens and spacing, radius and type scales (listed below) so edits stay on-system. Use raw hex colors only when no token fits.
 - Each element shows its source tag, its current classes and a few measured values. An element marked "shared component" is used in many places; editing it changes all of them, so mention that in your message.
 - Text is editable only where marked editable. Never invent product data.
-- If the request is about behavior, data, logic, payments, accounts or anything beyond how things look and are arranged, set scope to needs_developer, return no edits, and say briefly that it is one for the developers.
-- You can only change the properties in the schema (no margins, sizes or positions yet). If part of the request needs something else, say so in the message.
+- Components can also have editable properties, like Figma component properties (an icon's weight or stroke, a button's variant). Use them: they are often the right tool for "more refined", "lighter", "bolder" icons and controls. Only use property names and values listed for that element.
+- Always do what you can. If part of a request needs something not in your toolset yet (swapping to a different icon, margins, element sizes, moving things), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
+- needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Kerf cannot make them yet; use not_yet for those.
+- This can be a conversation: earlier turns are included. Read follow-ups ("smaller", "undo that", "try again but warmer") against what you proposed before and whether it was applied.
 - The message must describe only the edits you actually return. Write it for a designer, not a developer: plain words, no class names.`;
 
 function themeSummary(theme) {
@@ -69,6 +73,8 @@ function describeTarget(t, i) {
   if (t.classes?.length) lines.push(`  classes: ${t.classes.join(' ')}`);
   if (t.measured) lines.push(`  measured: ${Object.entries(t.measured).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   if (t.classKind === 'dynamic') lines.push('  (classes are computed in code; do not edit this element)');
+  const editable = (t.props || []).filter((p) => p.editable);
+  if (editable.length) lines.push(`  properties${t.lib ? ` (${t.lib})` : ''}: ${editable.map((p) => `${p.name}=${p.value ?? 'unset'}${p.options ? ` [${p.options.join('|')}]` : ` (${p.kind})`}`).join(', ')}`);
   return lines.join('\n');
 }
 
@@ -94,7 +100,7 @@ export function cleanOps(ops, theme) {
   return out;
 }
 
-export async function propose({ request, targets }, theme) {
+export async function propose({ request, targets, history = [] }, theme) {
   const key = apiKey();
   if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
   if (!request || !String(request).trim()) throw new KerfError('Say or type what should change.');
@@ -111,7 +117,10 @@ export async function propose({ request, targets }, theme) {
       fallbacks: 'default',
       output_config: { effort: 'medium', format: betaZodOutputFormat(Proposal) },
       system: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}`,
-      messages: [{ role: 'user', content: `Elements on screen:\n${targets.map(describeTarget).join('\n')}\n\nRequest:\n${request}` }],
+      messages: [
+        ...history.slice(-8).map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.text).slice(0, 2000) })),
+        { role: 'user', content: `Elements on screen:\n${targets.map(describeTarget).join('\n')}\n\nRequest:\n${request}` },
+      ],
     });
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) throw new KerfError('Anthropic didn’t accept the saved key. Save a new one on Kerf’s start page.');
@@ -129,7 +138,11 @@ export async function propose({ request, targets }, theme) {
     if (!t || t.classKind === 'dynamic') continue;
     const ops = cleanOps(e.ops || [], theme);
     const text = e.text && t.textEditable ? e.text : null;
-    if (ops.length || text) edits.push({ loc: e.loc, tag: t.tag, ops, text, why: e.why });
+    const props = [];
+    for (const p of e.props || []) {
+      try { props.push({ name: p.name, value: checkProp({ props: t.props || [] }, p.name, p.value) }); } catch { /* not allowed here */ }
+    }
+    if (ops.length || text || props.length) edits.push({ loc: e.loc, tag: t.tag, ops, text, props, why: e.why });
   }
   return { scope: p.scope, message: p.message, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } };
 }

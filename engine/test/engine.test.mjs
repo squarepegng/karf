@@ -95,3 +95,27 @@ test('retypes a label that sits next to an icon', () => {
   const { code } = editElement(src, 1, 23, { text: 'Unlock' }, th);
   assert.match(code, /<Icon \/> Unlock \{/);
 });
+
+const ICONS = `import { Gear, House } from '@phosphor-icons/react';
+import { Button } from '@/components/ui/button';
+export const A = () => <Gear weight="duotone" size={20} />;
+export const B = () => <House size={collapsed ? 22 : 20} />;
+export const C = () => <Button variant="ghost" onClick={go}>Go</Button>;
+`;
+
+test('component properties: read, change and add', () => {
+  const d = describe(ICONS, 3, 23);
+  assert.equal(d.lib, '@phosphor-icons/react');
+  assert.deepEqual(d.props.find((p) => p.name === 'weight').options.includes('thin'), true);
+  const { code } = editElement(ICONS, 3, 23, { props: [{ name: 'weight', value: 'light' }, { name: 'size', value: 18 }] }, th);
+  assert.match(code, /<Gear weight="light" size=\{18\} \/>/);
+  const added = editElement(ICONS, 3, 23, { props: [{ name: 'mirrored', value: true }] }, th).code;
+  assert.match(added, /<Gear mirrored=\{true\} weight="duotone"/);
+});
+
+test('component properties: refuses bad values, computed props and behavior props', () => {
+  assert.throws(() => editElement(ICONS, 3, 23, { props: [{ name: 'weight', value: 'heavy' }] }, th), /must be one of/);
+  assert.throws(() => editElement(ICONS, 4, 23, { props: [{ name: 'size', value: 18 }] }, th), /set by code/);
+  assert.throws(() => editElement(ICONS, 5, 23, { props: [{ name: 'onClick', value: 'x' }] }, th), /isn’t a property/);
+  assert.match(editElement(ICONS, 5, 23, { props: [{ name: 'variant', value: 'outline' }] }, th).code, /variant="outline"/);
+});
