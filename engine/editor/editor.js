@@ -290,6 +290,8 @@
     dup: '<rect x="5" y="5" width="8.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>',
     swap: '<path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
     image: '<rect x="2.5" y="3" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="6" cy="6.5" r="1.2" fill="currentColor"/><path d="M3 12l3.5-3.5 2.5 2.5 2-2 2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>',
+    clip: '<path d="M10.5 4.5L5.6 9.4a1.4 1.4 0 0 0 2 2l5-5a2.8 2.8 0 0 0-4-4l-5 5a4.2 4.2 0 0 0 6 6l4.4-4.4" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>',
+    mic: '<rect x="6" y="2" width="4" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M3.8 7.5a4.2 4.2 0 0 0 8.4 0M8 11.8V14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>',
     reload: '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v3h-3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
   };
   const ico = (n, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16" aria-hidden="true">${IC[n]}</svg>`;
@@ -489,7 +491,7 @@
       const hadFocus = document.activeElement?.id === 'chatIn';
       p.innerHTML = tabsHTML() + chatHTML();
       const sc = $('chatScroll'); if (sc) sc.scrollTop = sc.scrollHeight;
-      const ci = $('chatIn'); if (ci) { ci.value = draft; if (focusChat || hadFocus) ci.focus(); }
+      const ci = $('chatIn'); if (ci) { ci.value = draft; syncKC('chatIn'); if (focusChat || hadFocus) ci.focus(); }
       return;
     }
     const s = S.sel;
@@ -817,8 +819,7 @@
   });
   document.addEventListener('keydown', (e) => {
     const t = e.target, p = t.dataset && t.dataset.prop;
-    if (e.key === 'Enter' && !e.shiftKey && t.id === 'chatIn') { e.preventDefault(); sendChat(); return; }
-    if (e.key === 'Enter' && !e.shiftKey && t.id === 'noteIn') { e.preventDefault(); addNote(); return; }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && t.closest && t.closest('.kc')) { e.preventDefault(); t.form.requestSubmit(); return; }
     if (!p || t.dataset.color || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || !S.sel) return;
     e.preventDefault();
     const n = clamp(p, (parseFloat(t.value) || 0) + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 10 : 1));
@@ -830,11 +831,12 @@
     e.preventDefault();
     const f = e.target.dataset.form;
     if (f === 'path') { let v = $('pathIn').value.trim() || '/'; if (!v.startsWith('/')) v = '/' + v; frame.src = v; $('pathIn').blur(); }
-    if (f === 'ask') runAI($('askIn').value, visibleTargets(), 'ask');
+    if (f === 'ask') take('askIn', (v, atts) => runAI(v, visibleTargets(), 'ask', null, false, atts));
     if (f === 'chat') sendChat();
+    if (f === 'note') addNote();
     if (f === 'reply') {
-      const v = $('replyIn').value, where = e.target.dataset.where, prev = S.card;
-      runAI(v, where === 'notes' && prev?.targets ? prev.targets : visibleTargets(), where, v, true);
+      const where = e.target.dataset.where, prev = S.card;
+      take('replyIn', (v, atts) => runAI(v, where === 'notes' && prev?.targets ? prev.targets : visibleTargets(), where, v, true, atts));
     }
   });
   // Drag a field's icon to scrub its value, like Figma. Preview live, write once on release.
@@ -992,19 +994,19 @@
     clearTimeout(chatT);
     chatT = setTimeout(() => api('/chat', { messages: S.chat.filter((m) => !m.busy).map(({ targets, ...m }) => m), notes: S.notes }).catch(() => {}), 300);
   }
-  async function runAI(text, targets, where, shown, followUp) {
-    text = String(text || '').trim();
+  async function runAI(text, targets, where, shown, followUp, atts = []) {
+    text = String(text || '').trim() || (atts.length ? 'Use the attached image.' : '');
     if (!text || S.card?.busy) return;
     if (!targets.length) { toast('Nothing on screen to work with yet. Wait for the page to load, or select something.', '', true); return; }
     const history = historyFor();
     const ctx = followUp ? 'Follow-up' : where === 'chat' && S.sel ? ((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || nameOf(S.sel.el)) : where === 'notes' ? `${S.notes.length} note${S.notes.length === 1 ? '' : 's'}` : 'Whole screen';
-    S.chat.push({ role: 'user', text, shown: shown || text, ctx, where });
+    S.chat.push({ role: 'user', text, shown: shown || text, ctx, where, atts: atts.map((a) => ({ name: a.name, thumb: a.thumb })) });
     const m = { role: 'kerf', busy: true, status: 'pending', where, targets };
     S.chat.push(m);
     S.card = m;
     renderAI();
     try {
-      m.proposal = await api('/ai', { request: text, targets, history });
+      m.proposal = await api('/ai', { request: text, targets, history, images: atts.map((a) => ({ name: a.name, media_type: a.type, data: a.data, orig: a.orig })) });
       S.amber = m.proposal.edits.map((e) => e.loc);
       if (!m.proposal.edits.length) m.status = 'info';
     } catch (e) { m.error = e.message; }
@@ -1038,7 +1040,7 @@
       ${p.edits.length ? `<div class="edits">${p.edits.map((e) => `<div class="ed"><b>${esc(e.tag)}</b><span>${esc(e.why)}</span><span class="mono">${esc(editLabel(e))}</span></div>`).join('')}</div>` : ''}
       ${m.status === 'pending' ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="amberBtn" data-act2="decide" data-i="${i}" data-v="apply">Apply ${p.edits.length} change${p.edits.length === 1 ? '' : 's'}</button></div>` : STATUS[m.status] ? `<span class="note">${STATUS[m.status]}</span>` : ''}</div>`;
   }
-  const replyForm = (where) => `<form class="reply" data-form="reply" data-where="${where}"><input id="replyIn" placeholder="Reply to Kerf…" autocomplete="off" aria-label="Reply to Kerf"><button class="sendB" aria-label="Send">${ico('up', 14)}</button></form>`;
+  const replyForm = (where) => composer('replyIn', { form: 'reply', where, placeholder: 'Reply to Kerf…' });
   function renderAsk() {
     const a = $('ask');
     a.hidden = !(S.askOpen && S.mode === 'preview');
@@ -1046,26 +1048,142 @@
     const m = S.card && S.card.where === 'ask' ? S.card : null;
     if (m) {
       a.innerHTML = `<div class="card"><div class="cardTop"><span class="note">Kerf</span>${hb('closeCard2', 'x', 'Close', '', 'data-act2="closeCard"')}</div>${kerfHTML(m, S.chat.indexOf(m))}${m.busy ? '' : replyForm('ask')}</div>`;
-      if (!m.busy) setTimeout(() => $('replyIn')?.focus(), 0);
+      if (!m.busy) setTimeout(() => { $('replyIn')?.focus(); syncKC('replyIn'); }, 0);
     } else {
-      a.innerHTML = `<form class="askF" data-form="ask"><span class="spark">${ico('spark', 16)}</span><input id="askIn" placeholder="Ask Kerf to change something on this screen" autocomplete="off" aria-label="Ask Kerf"><button class="sendB" aria-label="Send">${ico('up', 14)}</button></form>
+      a.innerHTML = `${composer('askIn', { form: 'ask', big: true, lead: `<span class="spark">${ico('spark', 16)}</span>`, placeholder: 'Ask Kerf to change something on this screen' })}
         <div class="askHints">${['Make this page feel more premium', 'Make the text easier to read', 'Tighten the spacing'].map((s) => `<button data-act2="askHint" data-v="${s}">${s}</button>`).join('')}</div>`;
-      setTimeout(() => $('askIn')?.focus(), 0);
+      setTimeout(() => { $('askIn')?.focus(); syncKC('askIn'); }, 0);
     }
   }
   function chatHTML() {
     const ctx = S.sel ? `${esc((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || nameOf(S.sel.el))} · ${esc(fileName(activeLoc()))}` : 'Whole screen';
-    const msgs = S.chat.map((m, i) => (m.role === 'user' ? `<div class="uMsg"><span class="ctx">${esc(m.ctx)}</span><div class="bub">${esc(m.shown || m.text)}</div></div>` : `<div class="kMsg">${kerfHTML(m, i)}</div>`)).join('');
+    const msgs = S.chat.map((m, i) => (m.role === 'user' ? `<div class="uMsg"><span class="ctx">${esc(m.ctx)}</span>${m.atts?.length ? `<div class="uAtt">${m.atts.map((a) => `<img src="${a.thumb}" alt="${esc(a.name)}" title="${esc(a.name)}">`).join('')}</div>` : ''}<div class="bub">${esc(m.shown || m.text)}</div></div>` : `<div class="kMsg">${kerfHTML(m, i)}</div>`)).join('');
     return `<div class="chatScroll" id="chatScroll">${msgs || `<div class="empty"><b>Talk to Kerf</b><span>Select an element and describe the change, like “make these icons lighter”. Kerf reads the code, proposes edits in amber, and you approve them. Ask, notes and chat share this one conversation, so you can follow up here.</span></div>`}</div>
-      <form class="comp" data-form="chat"><span class="ctx">${ctx}</span><textarea id="chatIn" rows="2" placeholder="Describe a change, or follow up…" aria-label="Message Kerf"></textarea><button class="sendB" aria-label="Send">${ico('up', 14)}</button></form>`;
+      <div class="comp">${composer('chatIn', { form: 'chat', ctx, placeholder: 'Describe a change, or follow up…' })}</div>`;
   }
   function sendChat() {
-    const t = $('chatIn');
-    if (!t) return;
-    const v = t.value;
-    t.value = '';
-    runAI(v, S.sel ? selectionTargets() : visibleTargets(), 'chat');
+    take('chatIn', (v, atts) => runAI(v, S.sel ? selectionTargets() : visibleTargets(), 'chat', null, false, atts));
   }
+
+  /* composer: one message box for Ask, replies, chat and notes, with images and dictation */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  S.att = {}; S.drafts = {};
+  const KC = {};
+  let mic = null;
+  function composer(id, o) {
+    KC[id] = o;
+    const atts = S.att[id] || [];
+    const rec = mic?.id === id, has = (S.drafts[id] || '').trim() || atts.length;
+    return `<form class="kc${o.big ? ' big' : ''}" data-form="${o.form}" data-where="${o.where || ''}" data-kc="${id}">
+      ${atts.length ? `<div class="kcAtt">${atts.map((a, i) => `<span class="kcThumb" title="${esc(a.name)}"><img src="${a.thumb}" alt="${esc(a.name)}"><button type="button" data-act2="attX" data-id="${id}" data-i="${i}" aria-label="Remove ${esc(a.name)}">${ico('x', 10)}</button></span>`).join('')}</div>` : ''}
+      <div class="kcRow">${o.lead || ''}<textarea id="${id}" rows="1" placeholder="${esc(o.placeholder)}" aria-label="${esc(o.placeholder)}">${esc(S.drafts[id] || '')}</textarea></div>
+      <div class="kcBar">
+        <button type="button" class="kcB" data-act2="attach" data-id="${id}" title="Attach images · or paste / drop them here" aria-label="Attach images">${ico('clip', 15)}</button>
+        ${SR ? `<button type="button" class="kcB mic${rec ? ' rec' : ''}" data-act2="mic" data-id="${id}" title="${rec ? 'Stop dictation' : 'Dictate, in any language'}" aria-label="${rec ? 'Stop dictation' : 'Dictate'}">${ico('mic', 15)}</button>` : ''}
+        ${o.ctx ? `<span class="ctx">${o.ctx}</span>` : ''}
+        <span class="sp"></span>
+        ${o.send ? `<button class="lightBtn sm"${has ? '' : ' disabled'}>${o.send}</button>` : `<button class="sendB"${has ? '' : ' disabled'} aria-label="Send">${ico('up', 14)}</button>`}
+      </div></form>`;
+  }
+  const grow = (t) => { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 168) + 'px'; };
+  function syncKC(id) {
+    const t = $(id);
+    if (!t) return;
+    grow(t);
+    const has = !!(t.value.trim() || (S.att[id] || []).length);
+    t.form.querySelector('.sendB,.lightBtn')?.toggleAttribute('disabled', !has);
+  }
+  function reKC(id, focus = true) {
+    const form = document.querySelector(`[data-kc="${id}"]`);
+    if (!form || !KC[id]) return;
+    form.outerHTML = composer(id, KC[id]);
+    syncKC(id);
+    const t = $(id);
+    if (focus && t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+  }
+  // Read a composer, clear it, and hand its text and images on.
+  function take(id, fn) {
+    if (S.card?.busy) return;
+    const t = $(id), v = (t?.value || '').trim(), atts = S.att[id] || [];
+    if (!v && !atts.length) return;
+    if (mic?.id === id) stopMic();
+    S.drafts[id] = ''; S.att[id] = [];
+    if (t) { t.value = ''; reKC(id, false); }
+    fn(v, atts);
+  }
+  const loadImg = (url) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+  function shrink(img, max, q) {
+    const w = img.naturalWidth || max, h = img.naturalHeight || max, k = Math.min(1, max / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', q);
+  }
+  const b64 = (file) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(file); });
+  async function addFiles(id, files) {
+    const list = [...files].filter((x) => /^image\/(png|jpeg|gif|webp|svg\+xml|avif)$/.test(x.type));
+    if (!list.length) { toast('Kerf can read images: PNG, JPG, GIF, WebP or SVG.', '', true); return; }
+    const cur = (S.att[id] ||= []);
+    for (const file of list) {
+      if (cur.length >= 4) { toast('Up to 4 images per message.', '', true); break; }
+      if (file.size > 10 * 1024 * 1024) { toast(`${file.name} is over 10 MB.`, '', true); continue; }
+      const url = URL.createObjectURL(file);
+      try {
+        const img = await loadImg(url);
+        const ext = { 'image/jpeg': 'jpg', 'image/svg+xml': 'svg' }[file.type] || file.type.split('/')[1];
+        const name = file.name && file.name !== 'image.png' ? file.name : `pasted-image.${ext}`;
+        // Claude sees a resized copy; the original goes into the project only if Kerf places it in the design.
+        cur.push({ name, type: 'image/jpeg', data: shrink(img, 1568, 0.85).split(',')[1], thumb: shrink(img, 160, 0.8), orig: await b64(file) });
+      } catch { toast(`Couldn’t read ${file.name}.`, '', true); } finally { URL.revokeObjectURL(url); }
+    }
+    reKC(id);
+  }
+  function stopMic() { if (!mic) return; const r = mic.r; mic = null; try { r.stop(); } catch {} markMic(); }
+  const markMic = () => document.querySelectorAll('[data-act2="mic"]').forEach((b) => { const on = mic?.id === b.dataset.id; b.classList.toggle('rec', on); b.title = on ? 'Stop dictation' : 'Dictate, in any language'; });
+  function toggleMic(id) {
+    const same = mic?.id === id;
+    stopMic();
+    if (same) return;
+    const r = new SR();
+    r.lang = navigator.language || 'en-US';
+    r.continuous = true;
+    r.interimResults = true;
+    const t = $(id), base = t && t.value.trim() ? t.value.replace(/\s*$/, ' ') : '';
+    mic = { id, r };
+    r.onresult = (e) => {
+      let said = '';
+      for (const x of e.results) said += x[0].transcript;
+      const el = $(id);
+      if (el) { el.value = base + said.trimStart(); S.drafts[id] = el.value; syncKC(id); }
+    };
+    r.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('The microphone is blocked. Allow it for this site in your browser, then try again.', '', true);
+      else if (e.error !== 'no-speech' && e.error !== 'aborted') toast('Dictation stopped', e.error, true);
+    };
+    r.onend = () => { if (mic?.r === r) { mic = null; markMic(); } };
+    try { r.start(); } catch { mic = null; }
+    markMic();
+    t?.focus();
+  }
+  document.addEventListener('input', (e) => { const t = e.target; if (t.closest?.('.kc') && t.tagName === 'TEXTAREA') { S.drafts[t.id] = t.value; syncKC(t.id); } });
+  document.addEventListener('paste', (e) => {
+    const t = e.target.closest?.('.kc');
+    const files = [...(e.clipboardData?.files || [])];
+    if (!t || !files.length) return;
+    e.preventDefault();
+    addFiles(t.dataset.kc, files);
+  });
+  document.addEventListener('dragover', (e) => { const t = e.target.closest?.('.kc'); if (t && e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); t.classList.add('drop'); } });
+  document.addEventListener('dragleave', (e) => { const t = e.target.closest?.('.kc'); if (t && !t.contains(e.relatedTarget)) t.classList.remove('drop'); });
+  document.addEventListener('drop', (e) => {
+    const t = e.target.closest?.('.kc');
+    if (!t || !e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    t.classList.remove('drop');
+    addFiles(t.dataset.kc, e.dataTransfer.files);
+  });
 
   /* annotations */
   function shapeSVG(n, i, draft) {
@@ -1093,9 +1211,9 @@
       const ax = (n.shape === 'arrow' ? n.x2 : n.x + (n.w || 0)) - W.scrollX + 12, ay = (n.shape === 'arrow' ? n.y2 : n.y) - W.scrollY;
       pop.style.transform = `translate(${Math.min(ow - 332, Math.max(12, ax))}px,${Math.min(oh - 180, Math.max(12, ay))}px)`;
       if (!pop.dataset.open) {
-        pop.innerHTML = `<div class="secH"><span>Note ${S.notes.length + 1}</span>${hb('noteDiscard2', 'x', 'Discard', '', 'data-act2="noteDiscard"')}</div><textarea id="noteIn" rows="3" placeholder="What should change here?"></textarea><div class="acts"><span class="note">Kerf will read the code under this mark.</span><button class="lightBtn" data-act2="noteAdd">Add note</button></div>`;
+        pop.innerHTML = `<div class="secH"><span>Note ${S.notes.length + 1}</span>${hb('noteDiscard2', 'x', 'Discard', '', 'data-act2="noteDiscard"')}</div>${composer('noteIn', { form: 'note', send: 'Add note', placeholder: 'What should change here?' })}<span class="note">Kerf reads the code under this mark.</span>`;
         pop.dataset.open = '1';
-        setTimeout(() => $('noteIn')?.focus(), 0);
+        setTimeout(() => { $('noteIn')?.focus(); syncKC('noteIn'); }, 0);
       }
     } else delete pop.dataset.open;
     const res = $('noteRes');
@@ -1112,7 +1230,9 @@
     if (!S.notes.length) return;
     const targets = uniq(S.notes.flatMap((n, i) => noteTargets(n, i)));
     const request = S.notes.map((n, i) => `Note ${i + 1}: ${n.text}`).join('\n') + '\nEach element is tagged with the note it sits under.';
-    runAI(request, targets, 'notes', S.notes.map((n, i) => `${i + 1}. ${n.text}`).join('\n'));
+    const atts = [], tagged = [];
+    S.notes.forEach((n, i) => (n.atts || []).forEach((a) => { if (atts.length < 4) { atts.push(a); tagged.push(`Attachment ${atts.length} belongs to note ${i + 1}.`); } }));
+    runAI(request + (tagged.length ? '\n' + tagged.join(' ') : ''), targets, 'notes', S.notes.map((n, i) => `${i + 1}. ${n.text}`).join('\n'), false, atts);
   }
   let draw = null;
   const ovPoint = (e) => { const r = $('ov').getBoundingClientRect(); return { x: e.clientX - r.left + W.scrollX, y: e.clientY - r.top + W.scrollY }; };
@@ -1140,11 +1260,12 @@
   // Scrolling the page while annotating keeps the marks in place.
   $('annoCap').addEventListener('wheel', (e) => { if (W) W.scrollBy(e.deltaX, e.deltaY); }, { passive: true });
   function addNote() {
-    const v = ($('noteIn')?.value || '').trim();
-    if (!v || !S.noteDraft) return;
-    S.notes.push({ ...S.noteDraft, text: v });
-    S.noteDraft = null;
-    renderMarks();
+    if (!S.noteDraft) return;
+    take('noteIn', (v, atts) => {
+      S.notes.push({ ...S.noteDraft, text: v || 'See the attached image.', atts });
+      S.noteDraft = null;
+      renderMarks();
+    });
   }
   function setTool(t) {
     S.tool = t;
@@ -1162,6 +1283,9 @@
       else if (act === 'decide') decide(S.chat[+a.dataset.i], v);
       else if (act === 'closeCard') { if (S.card?.status === 'pending') S.card.status = 'discarded'; S.card = null; S.amber = []; renderAI(); }
       else if (act === 'noteAdd') addNote();
+      else if (act === 'attach') { const id = a.dataset.id; pickImages().then((fs) => fs.length && addFiles(id, fs)); }
+      else if (act === 'attX') { (S.att[a.dataset.id] || []).splice(+a.dataset.i, 1); reKC(a.dataset.id); }
+      else if (act === 'mic') toggleMic(a.dataset.id);
       else if (act === 'noteDiscard') { S.noteDraft = null; renderMarks(); }
       else if (act === 'notesClear') { S.notes = []; if (S.card?.where === 'notes') S.card = null; S.amber = []; renderMarks(); }
       else if (act === 'notesApply') applyNotes();
@@ -1240,6 +1364,16 @@
       <div class="r2"><button class="outline" data-act="imgUpload">Replace…</button><button class="outline" data-act="imgLink">Use a link</button></div>
       <label class="inp" title="Alt text"><span class="u">Alt</span><input type="text" data-alt="1" value="${esc(alt)}" placeholder="Describe the image"></label>
       <div class="ibs txt">${['cover', 'contain', 'fill'].map((v) => `<button class="ib${fit === v ? ' on' : ''}" data-act="set" data-p="fit" data-v="${v}" title="${v === 'cover' ? 'Fill the box, crop the edges' : v === 'contain' ? 'Fit inside the box' : 'Stretch to the box'}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('')}</div>`);
+  }
+  function pickImages() {
+    return new Promise((resolve) => {
+      const i = document.createElement('input');
+      i.type = 'file';
+      i.multiple = true;
+      i.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/avif';
+      i.onchange = () => resolve([...i.files]);
+      i.click();
+    });
   }
   function pickFile() {
     return new Promise((resolve) => {

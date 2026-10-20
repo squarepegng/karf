@@ -105,7 +105,7 @@ export default function kerf() {
                 return null;
               }
             }).filter(Boolean);
-            return send(200, await propose({ request: body.request, targets, history: body.history }, theme, library));
+            return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images }, theme, library));
           }
           if (route === '/ai/apply') {
             // Apply from the bottom of each file up, structure last per element, so positions stay valid.

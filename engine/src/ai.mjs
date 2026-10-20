@@ -44,7 +44,7 @@ const Proposal = z.object({
       insertJsx: z.string().nullable().describe('For insert or replace: the new JSX. Plain tags (div, p, h2, span, img, button, ul/li…) or the project’s components and icons, Tailwind classes using the project’s tokens, fixed text only. No handlers, no expressions.'),
       groupWith: z.array(z.string()).nullable().describe('For group: ids of the neighboring siblings to wrap together with this element, in the same parent'),
       groupClass: z.string().nullable().describe('For group: Tailwind classes for the new frame, e.g. "flex flex-row items-center gap-3"'),
-      imageSrc: z.string().nullable().describe('For image: one of the uploaded images, or a URL the designer gave'),
+      imageSrc: z.string().nullable().describe('For image: one of the uploaded images, "attachment:N" for an image attached to this message, or a URL the designer gave'),
       imageAlt: z.string().nullable().describe('For image: alt text describing the image'),
       why: z.string().describe('A few words, e.g. "warmer, more premium card"'),
     }),
@@ -151,13 +151,30 @@ export function cleanOps(ops, theme) {
   return out;
 }
 
-export async function propose({ request, targets, history = [] }, theme, library) {
+const IMG_TYPES = /^image\/(jpeg|png|gif|webp)$/;
+
+export async function propose({ request, targets, history = [], images = [] }, theme, library) {
   const key = apiKey();
   if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
   if (!request || !String(request).trim()) throw new KerfError('Say or type what should change.');
   if (!targets?.length) throw new KerfError('Nothing on screen to work with. Select something or draw a note first.');
 
   const allowed = new Map(targets.map((t) => [t.loc, t]));
+  // Images the designer attached: Claude sees them, and can place one in the design as "attachment:N".
+  const imgs = (Array.isArray(images) ? images : []).slice(0, 4).filter((i) => i && IMG_TYPES.test(i.media_type) && typeof i.data === 'string' && i.data.length < 7e6);
+  const saved = new Map();
+  const attachmentSrc = (n) => {
+    const im = imgs[n - 1];
+    if (!im) return null;
+    if (!saved.has(n)) {
+      try { saved.set(n, library.saveUpload(/\.\w+$/.test(im.name || '') ? im.name : `attachment-${n}.png`, im.orig || im.data).src); } catch { saved.set(n, null); }
+    }
+    return saved.get(n);
+  };
+  const lastText = `Elements on screen:\n${targets.map(describeTarget).join('\n')}\n\n${imgs.length ? `The designer attached ${imgs.length} image${imgs.length > 1 ? 's' : ''} (above). Treat them as a reference to match, a screenshot pointing at a problem, or an image to put in the design, whichever the request means. To place one, use imageSrc "attachment:N" (or src="attachment:N" in insertJsx).\n\n` : ''}Request:\n${request}`;
+  const lastContent = imgs.length
+    ? [...imgs.flatMap((im, n) => [{ type: 'text', text: `Attachment ${n + 1}: ${String(im.name || 'image').slice(0, 80)}` }, { type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } }]), { type: 'text', text: lastText }]
+    : lastText;
   const client = new Anthropic({ apiKey: key });
   let res;
   try {
@@ -170,7 +187,7 @@ export async function propose({ request, targets, history = [] }, theme, library
       system: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}\n${libSummary(library)}`,
       messages: [
         ...history.slice(-8).map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.text).slice(0, 2000) })),
-        { role: 'user', content: `Elements on screen:\n${targets.map(describeTarget).join('\n')}\n\nRequest:\n${request}` },
+        { role: 'user', content: lastContent },
       ],
     });
   } catch (e) {
@@ -196,7 +213,8 @@ export async function propose({ request, targets, history = [] }, theme, library
       if (e.action === 'swap') { if (!known(e.swapTo)) continue; st.to = e.swapTo; }
       if (e.action === 'insert' || e.action === 'replace') {
         try { checkSnippet(e.insertJsx || '', known); } catch { continue; }
-        st.jsx = e.insertJsx;
+        if (/attachment:\d/.test(e.insertJsx.replace(/attachment:(\d)/g, (m, n) => (imgs[+n - 1] ? '' : m)))) continue;
+        st.jsx = e.insertJsx.replace(/attachment:(\d)/g, (m, n) => attachmentSrc(+n) || m);
         if (e.action === 'insert') st.position = e.insertPosition || 'after';
       }
       if (e.action === 'group') {
@@ -204,7 +222,9 @@ export async function propose({ request, targets, history = [] }, theme, library
         st.className = (e.groupClass || 'flex flex-row items-center gap-2').replace(/[^\w\s:/.[\]#-]/g, '');
       }
       if (e.action === 'image') {
-        if (e.imageSrc && !uploads.has(e.imageSrc) && !urls.has(e.imageSrc)) e.imageSrc = null;
+        const att = String(e.imageSrc || '').match(/^attachment:(\d)$/);
+        if (att) e.imageSrc = attachmentSrc(+att[1]);
+        else if (e.imageSrc && !uploads.has(e.imageSrc) && !urls.has(e.imageSrc)) e.imageSrc = null;
         if (!e.imageSrc && e.imageAlt == null) continue;
         if (e.imageSrc) st.src = e.imageSrc;
         if (e.imageAlt != null) st.alt = e.imageAlt;
