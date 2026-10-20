@@ -173,5 +173,11 @@ test('image: new src replaces an imported image and drops the import; alt text',
 });
 test('refuses to delete elements shown by code or a component root', () => {
   assert.throws(() => structureEdit(PAGE, 9, PAGE.split('\n')[8].indexOf('<span'), { type: 'delete' }, ctx), /condition/);
-  assert.throws(() => structureEdit(PAGE, ...at(4), { type: 'delete' }, ctx), /outer element/);
+  assert.throws(() => structureEdit(PAGE, ...at(4), { type: "delete" }, ctx), /outer box/);
+});
+
+test('insert next to a page’s outer box goes inside it instead', () => {
+  const { code, summary } = structureEdit(PAGE, ...at(4), { type: 'insert', position: 'before', jsx: '<img src="/kerf/a.png" alt="" />' }, ctx);
+  assert.match(code, /<div className="flex">\n    <img src="\/kerf\/a.png" alt="" \/>/);
+  assert.match(summary.action, /went inside/);
 });

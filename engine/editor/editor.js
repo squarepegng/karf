@@ -1162,6 +1162,8 @@
       { k: 'frame', label: 'Frame', icon: 'frame', jsx: `<div className="flex flex-col gap-3 rounded-lg ${tokenClass('border', ['border'], 'border-gray-200')} border p-4"><p className="text-sm ${muted}">New frame</p></div>` },
     ];
   }
+  // Boxes that hold other elements take new ones inside; text, images and buttons get them after.
+  const defaultPos = () => (S.sel && S.sel.el.children.length && !['p', 'span', 'button', 'a', 'label', 'svg'].includes(S.sel.el.tagName.toLowerCase()) ? 'inside' : 'after');
   async function openInsert() {
     if (!S.sel) { toast('Select where the new element should go, then add it.', '', true); return; }
     const list = await templates();
@@ -1223,7 +1225,7 @@
       if (S.sel.el.tagName.toLowerCase() === 'svg') openIcons('swap');
       else { S.insertPos = 'after'; openSwapComponent(); }
     }
-    else if (act === 'insertMenu') openInsert();
+    else if (act === 'insertMenu') { S.insertPos = defaultPos(); openInsert(); }
     else if (act === 'insPos') { S.insertPos = v; openInsert(); }
     else if (act === 'insTpl') {
       const t = S._tpls[+v];
@@ -1256,7 +1258,7 @@
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'delete' }); }
     else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'duplicate' }); }
     else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'move', dir: e.key === 'ArrowUp' ? 'up' : 'down' }); }
-    else if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'i') { e.preventDefault(); e.stopImmediatePropagation(); openInsert(); }
+    else if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'i') { e.preventDefault(); e.stopImmediatePropagation(); S.insertPos = defaultPos(); openInsert(); }
   }
 
   /* drag to reorder on the canvas: drag the selected element over a sibling */

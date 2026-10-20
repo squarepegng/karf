@@ -38,9 +38,9 @@ function inJSX(parent, what) {
   const why = parent?.type === 'LogicalExpression' || parent?.type === 'ConditionalExpression'
     ? 'shown or hidden by code (a condition)'
     : parent?.type === 'ArrowFunctionExpression' || parent?.type === 'ReturnStatement' || parent?.type === 'ParenthesizedExpression'
-      ? 'the outer element of its component, or repeated by code (a list)'
+      ? 'the outer box of its page or component, or repeated by code (a list)'
       : 'placed by code';
-  throw new KerfError(`Kerf can’t ${what} this element because it’s ${why}. Select its parent instead.`);
+  throw new KerfError(`Kerf can’t ${what} this element because it’s ${why}. ${what.startsWith('insert') ? 'Add it inside instead, or select an element within it.' : 'Select the element around it, or one inside it.'}`);
 }
 
 /* ---------- imports ---------- */
@@ -185,17 +185,28 @@ export function structureEdit(code, line, col, op, ctx) {
       const comp = ctx.library.componentList().get(c);
       imports.push([c, comp ? ctx.library.importPath(ctx.file, comp.file) : ctx.library.findIcon(c)]);
     }
-    const pos = op.position || 'after';
+    let pos = op.position || 'after';
     const ind = indentAt(code, el.start);
+    const canSibling = parent && (parent.type === 'JSXElement' || parent.type === 'JSXFragment');
+    // Pick the nearest place that works: a page's outer box takes new elements inside it,
+    // and an element that can't hold children gets the new one next to it.
+    let note = '';
+    let atStart = op.position === 'inside-start';
+    if (pos === 'inside-start') pos = 'inside';
+    if (pos !== 'inside' && !canSibling && el.closingElement) { atStart = pos === 'before'; pos = 'inside'; note = ` (it’s the outer box of this page or component, so it went inside, at the ${atStart ? 'top' : 'bottom'})`; }
+    else if (pos === 'inside' && !el.closingElement && canSibling) { pos = 'after'; note = ` (<${name}> can’t hold elements, so it went after it)`; }
     if (pos === 'inside') {
-      if (!el.closingElement) throw new KerfError(`<${name}> can’t hold other elements. Kerf will add it next to it instead.`);
-      s.appendLeft(el.closingElement.start, `${el.children.length ? '' : '\n'}${ind}  ${op.jsx}\n${ind}`);
+      if (!el.closingElement) throw new KerfError(`<${name}> can’t hold other elements, and it has no neighbors Kerf can add to. Select the box around it.`);
+      const cl = el.closingElement.start, cls = lineStart(code, cl);
+      if (atStart) s.appendLeft(el.openingElement.end, `\n${ind}  ${op.jsx}`);
+      else if (!code.slice(cls, cl).trim()) s.appendLeft(cls, `${ind}  ${op.jsx}\n`); // closing tag on its own line
+      else s.appendLeft(cl, el.children.length ? op.jsx : `\n${ind}  ${op.jsx}\n${ind}`);
     } else {
       inJSX(parent, pos === 'before' ? 'insert before' : 'insert after');
       if (pos === 'before') s.appendRight(el.start, `${op.jsx}\n${ind}`);
       else s.appendLeft(el.end, `\n${ind}${op.jsx}`);
     }
-    label = `Added ${comps.length ? comps.join(', ') : (op.jsx.match(/^<([a-z0-9]+)/i) || [])[1] || 'element'} ${pos} <${name}>`;
+    label = `Added ${comps.length ? comps.join(', ') : (op.jsx.match(/^<([a-z0-9]+)/i) || [])[1] || 'element'} ${pos} <${name}>${note}`;
   } else if (op.type === 'image') {
     if (name !== 'img') throw new KerfError('Select an image to change it.');
     const attr = (k) => el.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === k);
