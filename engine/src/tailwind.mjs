@@ -47,6 +47,7 @@ export function buildTheme(t) {
     opacity: byValue(t.opacity, (v) => Math.round(parseFloat(v) * 100)),
     shadow: Object.keys(t.boxShadow || {}),
     colors: flattenColors(t.colors),
+    gradientPrefix: t.backgroundImage && !('gradient-to-r' in t.backgroundImage) ? 'bg-linear-to-' : 'bg-gradient-to-',
     keys: {
       fontSize: Object.keys(t.fontSize || {}),
       fontWeight: Object.keys(t.fontWeight || {}),
@@ -86,6 +87,8 @@ export function matcher(prop, th) {
   const corner = (c) => (cls) => cls === `rounded-${c}` || cls.startsWith(`rounded-${c}-`);
   switch (prop) {
     case 'bg': return (c) => c.startsWith('bg-') && isColor(c.slice(3), th);
+    case 'gradient': return (c) => /^bg-(gradient|linear)-to-/.test(c) || /^(from|via|to)-/.test(c);
+    case 'clipText': return (c) => c === 'bg-clip-text' || c === 'text-transparent';
     case 'color': return (c) => c.startsWith('text-') && isColor(c.slice(5), th);
     case 'borderC': return (c) => c.startsWith('border-') && isColor(c.slice(7), th);
     case 'fontSize': return (c) => c.startsWith('text-') && (fs.has(c.slice(5)) || /^\[[\d.]+(px|rem|em)\]$/.test(c.slice(5)));
@@ -135,6 +138,16 @@ export function classFor(prop, v, th) {
     case 'align': return `text-${v}`;
     case 'fit': return `object-${v}`;
     case 'shadow': return v === 'none' ? 'shadow-none' : v === 'DEFAULT' ? 'shadow' : `shadow-${v}`;
+    case 'gradient': {
+      // "r primary positive" or "br primary via-color positive": direction, then from (via) to.
+      const [dir, ...stops] = String(v).trim().split(/\s+/);
+      const c = (x) => (x.startsWith('#') ? `[${x}]` : x);
+      const out = [`${th.gradientPrefix || 'bg-gradient-to-'}${dir}`, `from-${c(stops[0])}`];
+      if (stops.length > 2) out.push(`via-${c(stops[1])}`);
+      out.push(`to-${c(stops[stops.length - 1])}`);
+      return out.join(' ');
+    }
+    case 'clipText': return 'bg-clip-text text-transparent';
     case 'bg': case 'color': case 'borderC': {
       const pre = { bg: 'bg', color: 'text', borderC: 'border' }[prop];
       if (String(v).startsWith('#')) return `${pre}-[${v}]`;
@@ -152,7 +165,14 @@ export function applyOps(list, ops, th) {
   let out = list.slice();
   const removed = [];
   const added = [];
-  for (const { prop, value } of ops) {
+  for (const op of ops) {
+    const prop = op.prop;
+    let value = op.value;
+    const base0 = (c) => !c.includes(':');
+    const also = prop === 'gradient' ? matcher('bg', th) : prop === 'bg' && value !== 'transparent' ? matcher('gradient', th) : prop === 'clipText' && value ? matcher('color', th) : null;
+    if (also) out = out.filter((c) => !(base0(c) && also(c) && removed.push(c)));
+    if (prop === 'color') out = out.filter((c) => !(base0(c) && c === 'text-transparent' && removed.push(c)));
+    if ((prop === 'gradient' || prop === 'clipText') && (value === 'none' || value === 'off' || value === false)) value = null;
     const m = matcher(prop, th);
     const base = (c) => !c.includes(':');
     // p-5 sets both axes: changing one axis splits it so the other is kept.

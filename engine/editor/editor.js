@@ -390,6 +390,50 @@
   }
   const isText = (el) => el && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
   const isLayout = (el) => el && el.isConnected && /flex|grid/.test(cs(el).display);
+  /* fill: solid or gradient */
+  const DIRS = [['r', '→ Right'], ['l', '← Left'], ['b', '↓ Down'], ['t', '↑ Up'], ['br', '↘ Down right'], ['bl', '↙ Down left'], ['tr', '↗ Up right'], ['tl', '↖ Up left']];
+  const CSSDIR = { r: 'to right', l: 'to left', b: 'to bottom', t: 'to top', br: 'to bottom right', bl: 'to bottom left', tr: 'to top right', tl: 'to top left' };
+  function gradOf() {
+    const cls = (info()?.classes || []).filter((c) => !c.includes(':'));
+    const dir = cls.map((c) => c.match(/^bg-(?:gradient|linear)-to-(\w+)$/)).find(Boolean);
+    if (!dir) return null;
+    const stop = (p) => (cls.find((c) => c.startsWith(p + '-')) || '').slice(p.length + 1).replace(/^\[|\]$/g, '') || null;
+    return { dir: dir[1], from: stop('from'), via: stop('via'), to: stop('to'), clip: cls.includes('bg-clip-text') };
+  }
+  const gradValue = (g) => [g.dir, g.from, g.via, g.to].filter(Boolean).join(' ');
+  const tokenSwatch = (n) => { const t = tokens().find(([k]) => k === n); return t ? swatch(t[1]) : n?.startsWith('#') ? n : 'transparent'; };
+  const stopSel = (key, cur, allowNone) => `<label class="inp"><i class="sw1" style="background:${esc(tokenSwatch(cur))}"></i><select data-gstop="${key}" aria-label="Gradient ${key}">${allowNone ? `<option value=""${cur ? '' : ' selected'}>No middle color</option>` : ''}${tokens().filter(([n]) => n !== 'transparent').map(([n]) => `<option${n === cur ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>${ico('chev', 12)}</label>`;
+  function fillBody(g, el) {
+    const seg = `<div class="seg"><button data-act="fillType" data-v="solid" class="${g ? '' : 'on'}">Solid</button><button data-act="fillType" data-v="gradient" class="${g ? 'on' : ''}">Gradient</button></div>`;
+    if (!g) return seg + colorRow('bg', 'Fill', 'rmFill');
+    const prev = `linear-gradient(${CSSDIR[g.dir] || 'to right'}, ${[g.from, g.via, g.to].filter(Boolean).map(tokenSwatch).join(', ')})`;
+    return seg + `<div class="gprev" style="background:${esc(prev)}"></div>
+      <div class="cr"><label class="inp"><select data-gstop="dir" aria-label="Direction">${DIRS.map(([v, n]) => `<option value="${v}"${v === g.dir ? ' selected' : ''}>${n}</option>`).join('')}</select>${ico('chev', 12)}</label><button class="ib" data-act="rmFill" title="Remove fill">${ico('minus')}</button></div>
+      <div class="kv"><span>From</span>${stopSel('from', g.from)}</div>
+      <div class="kv"><span>Middle</span>${stopSel('via', g.via, true)}</div>
+      <div class="kv"><span>To</span>${stopSel('to', g.to)}</div>
+      ${isText(el) ? `<div class="kv"><span>On text</span><div class="seg"><button data-act="clipText" data-v="off" class="${g.clip ? '' : 'on'}">Off</button><button data-act="clipText" data-v="on" class="${g.clip ? 'on' : ''}">On</button></div></div>` : ''}`;
+  }
+  document.addEventListener('change', (e) => {
+    const k = e.target.dataset?.gstop;
+    if (!k || !S.sel) return;
+    const g = gradOf() || { dir: 'r' };
+    g[k] = e.target.value || null;
+    commit({ ops: [{ prop: 'gradient', value: gradValue(g) }] });
+  });
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-act="fillType"],[data-act="clipText"]');
+    if (!a || !S.sel) return;
+    if (a.dataset.act === 'clipText') return commit({ ops: [{ prop: 'clipText', value: a.dataset.v }] });
+    const g = gradOf();
+    const names = tokens().map(([n]) => n).filter((n) => !['transparent', 'black', 'white'].includes(n));
+    if (a.dataset.v === 'gradient' && !g) {
+      const from = tokenOf('bg') && !tokenOf('bg').startsWith('#') ? tokenOf('bg') : names.includes('primary') ? 'primary' : names[0];
+      const to = names.find((n) => n !== from && /positive|accent|secondary|primary/.test(n)) || names.find((n) => n !== from);
+      commit({ ops: [{ prop: 'gradient', value: `r ${from} ${to}` }] });
+    } else if (a.dataset.v === 'solid' && g) commit({ ops: [{ prop: 'bg', value: g.from || 'transparent' }, { prop: 'clipText', value: 'off' }] });
+  });
+
   function propsSection(inf) {
     if (!inf?.component || !inf.props?.length) return '';
     const rows = inf.props.map((p) => {
@@ -454,8 +498,9 @@
       const indep = S.corners;
       h += sec('Appearance', `<div class="r2c">${nf('opacity', 'opa', 'Opacity', '%')}${nf('radius', 'rad', 'Corner radius')}<button class="ib${indep ? ' on' : ''}" data-act="corners" title="Independent corners">${ico('corners')}</button></div>
         ${indep ? `<div class="r4">${nf('rTL', cornerIco(0), 'Top left')}${nf('rTR', cornerIco(90), 'Top right')}${nf('rBR', cornerIco(180), 'Bottom right')}${nf('rBL', cornerIco(270), 'Bottom left')}</div>` : ''}`);
-      const hasFill = val('bg') && val('bg') !== 'transparent';
-      h += sec('Fill', hasFill ? colorRow('bg', 'Fill', 'rmFill') : '', hasFill ? '' : hb('addFill', 'plus', 'Add fill'));
+      const g = gradOf();
+      const hasFill = g || (val('bg') && val('bg') !== 'transparent');
+      h += sec('Fill', hasFill ? fillBody(g, el) : '', hasFill ? '' : hb('addFill', 'plus', 'Add fill'));
       const hasStroke = val('borderW') > 0;
       h += sec('Stroke', hasStroke ? colorRow('borderC', 'Stroke color', 'rmStroke') + `<div class="r2">${nf('borderW', 'sw', 'Stroke width')}<span></span></div>` : '', hasStroke ? '' : hb('addStroke', 'plus', 'Add stroke'));
       const sh = shadowOf(), keys = (S.theme?.shadow || []).filter((k) => k !== 'none' && k !== 'inner');
@@ -685,7 +730,7 @@
       case 'cpick': S.cpick = S.cpick === v ? null : v; renderPanel(); break;
       case 'token': case 'set': commit({ ops: [{ prop: a.dataset.p, value: v }] }); break;
       case 'addFill': commit({ ops: [{ prop: 'bg', value: tokens().find(([n]) => n === 'surface')?.[0] || 'white' }] }); break;
-      case 'rmFill': S.cpick = null; commit({ ops: [{ prop: 'bg', value: 'transparent' }] }); break;
+      case 'rmFill': S.cpick = null; commit({ ops: gradOf() ? [{ prop: 'gradient', value: 'none' }, { prop: 'clipText', value: 'off' }] : [{ prop: 'bg', value: 'transparent' }] }); break;
       case 'addStroke': commit({ ops: [{ prop: 'borderW', value: 1 }, { prop: 'borderC', value: tokens().find(([n]) => n === 'border')?.[0] || 'black' }] }); break;
       case 'rmStroke': S.cpick = null; commit({ ops: [{ prop: 'borderW', value: 0 }] }); break;
       case 'setProp': commit({ props: [{ name: a.dataset.p, value: v }] }); break;
@@ -837,10 +882,10 @@
   }
 
   /* ---------- AI: Ask bar, chat, annotations ---------- */
-  const PROP_NAMES = { bg: 'Fill', color: 'Text color', borderC: 'Stroke color', fontSize: 'Size', fontWeight: 'Weight', lineHeight: 'Line height', letterSpacing: 'Letter spacing', align: 'Align', radius: 'Radius', rTL: 'Top-left corner', rTR: 'Top-right corner', rBR: 'Bottom-right corner', rBL: 'Bottom-left corner', padX: 'Padding X', padY: 'Padding Y', gap: 'Gap', borderW: 'Stroke', opacity: 'Opacity', shadow: 'Shadow' };
+  const PROP_NAMES = { gradient: 'Gradient', clipText: 'Gradient text', fit: 'Image fit', bg: 'Fill', color: 'Text color', borderC: 'Stroke color', fontSize: 'Size', fontWeight: 'Weight', lineHeight: 'Line height', letterSpacing: 'Letter spacing', align: 'Align', radius: 'Radius', rTL: 'Top-left corner', rTR: 'Top-right corner', rBR: 'Bottom-right corner', rBL: 'Bottom-left corner', padX: 'Padding X', padY: 'Padding Y', gap: 'Gap', borderW: 'Stroke', opacity: 'Opacity', shadow: 'Shadow' };
   const UNIT = { fontSize: 'px', lineHeight: 'px', radius: 'px', rTL: 'px', rTR: 'px', rBR: 'px', rBL: 'px', padX: 'px', padY: 'px', gap: 'px', borderW: 'px', opacity: '%', letterSpacing: '%' };
   const opLabel = (o) => `${PROP_NAMES[o.prop] || o.prop} ${o.value}${UNIT[o.prop] || ''}`;
-  const structLabel = (st) => ({ delete: 'Delete', duplicate: 'Duplicate', move: `Move ${st.dir || 'to ' + st.index}`, swap: `Swap → ${st.to}`, insert: `Add ${st.position}: ${(st.jsx || '').slice(0, 60)}`, image: [st.src && `Image → ${st.src}`, st.alt != null && `Alt “${st.alt}”`].filter(Boolean).join(' · ') })[st.type];
+  const structLabel = (st) => ({ replace: `Replace with: ${(st.jsx || '').slice(0, 60)}`, delete: 'Delete', duplicate: 'Duplicate', move: `Move ${st.dir || 'to ' + st.index}`, swap: `Swap → ${st.to}`, insert: `Add ${st.position}: ${(st.jsx || '').slice(0, 60)}`, image: [st.src && `Image → ${st.src}`, st.alt != null && `Alt “${st.alt}”`].filter(Boolean).join(' · ') })[st.type];
   const editLabel = (e) => e.structure ? structLabel(e.structure) : [...e.ops.map(opLabel), ...(e.props || []).map((p) => `${p.name}: ${p.value}`), ...(e.text ? [`“${e.text}”`] : [])].join(' · ');
   function measure(el) {
     const c = cs(el);

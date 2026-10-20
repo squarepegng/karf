@@ -14,7 +14,7 @@ import { checkSnippet } from './structure.mjs';
 const ENV = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env');
 const MODEL = 'claude-opus-5-5';
 
-export const PROPS = ['bg', 'color', 'borderC', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'align', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity', 'shadow', 'fit'];
+export const PROPS = ['bg', 'color', 'borderC', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'align', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity', 'shadow', 'fit', 'gradient', 'clipText'];
 const NUMERIC = new Set(['fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity']);
 const COLOR = new Set(['bg', 'color', 'borderC']);
 
@@ -37,11 +37,11 @@ const Proposal = z.object({
       ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
       text: z.string().nullable().describe('New text, only when the element’s text is editable and the request asks to change wording; otherwise null'),
       props: z.array(z.object({ name: z.string(), value: z.string() })).describe('Component property changes, only names listed as editable for that element, with one of its allowed values; [] if none'),
-      action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'image']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit.'),
+      action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'replace', 'image']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit.'),
       moveDir: z.enum(['up', 'down']).nullable().describe('For move: one place earlier or later among its siblings'),
       swapTo: z.string().nullable().describe('For swap: exact name of an icon from the project’s icon library or one of its components'),
       insertPosition: z.enum(['before', 'after', 'inside']).nullable().describe('For insert: relative to this element; inside puts it at the end of its children'),
-      insertJsx: z.string().nullable().describe('For insert: the new JSX. Plain tags (div, p, h2, span, img, button, ul/li…) or the project’s components and icons, Tailwind classes using the project’s tokens, fixed text only. No handlers, no expressions.'),
+      insertJsx: z.string().nullable().describe('For insert or replace: the new JSX. Plain tags (div, p, h2, span, img, button, ul/li…) or the project’s components and icons, Tailwind classes using the project’s tokens, fixed text only. No handlers, no expressions.'),
       imageSrc: z.string().nullable().describe('For image: one of the uploaded images, or a URL the designer gave'),
       imageAlt: z.string().nullable().describe('For image: alt text describing the image'),
       why: z.string().describe('A few words, e.g. "warmer, more premium card"'),
@@ -58,7 +58,8 @@ How to work:
 - Each element shows its source tag, its current classes and a few measured values. An element marked "shared component" is used in many places; editing it changes all of them, so mention that in your message.
 - Text is editable only where marked editable. Never invent product data.
 - Components can also have editable properties, like Figma component properties (an icon's weight or stroke, a button's variant). Use them: they are often the right tool for "more refined", "lighter", "bolder" icons and controls. Only use property names and values listed for that element.
-- You can also change structure, like a designer in Figma: delete an element, duplicate it, move it up or down among its siblings, swap an icon or component for another (use the exact icon names from the project's library, e.g. "replace the bookmark with a heart" is a swap to Heart), insert new elements before, after or inside an element, and change an image's source or alt text. To replace a plain element with something different, insert the new one before it, then delete the old one. Elements shown by a condition or repeated by a list can't be deleted or moved; edit their parent or their style instead.
+- You can also change structure, like a designer in Figma: delete an element, duplicate it, move it up or down among its siblings, swap an icon or component for another (use the exact icon names from the project's library, e.g. "replace the bookmark with a heart" is a swap to Heart), insert new elements before, after or inside an element, and change an image's source or alt text. To replace an element with something different, use replace with the new JSX (never insert plus delete).
+- Gradients are a style: set the gradient property to "<direction> <from> <to>" or "<direction> <from> <via> <to>" with directions t, tr, r, br, b, bl, l, tl and project color tokens (e.g. "r primary positive"); "none" removes it. For gradient text, also set clipText to "on". Don't also set a fill: the gradient is the fill. Never rebuild an element just to restyle it. Elements shown by a condition or repeated by a list can't be deleted or moved; edit their parent or their style instead.
 - New elements must fit the design: reuse the project's components where one fits, and use the project's tokens and scales in their classes.
 - Always do what you can. If part of a request needs something not in your toolset yet (swapping to a different icon, margins, element sizes, moving things), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
 - needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Kerf cannot make them yet; use not_yet for those.
@@ -116,6 +117,13 @@ export function cleanOps(ops, theme) {
       else if (/^#?[0-9a-f]{6}$/i.test(v)) out.push({ prop, value: '#' + v.replace('#', '').toUpperCase() });
     } else if (prop === 'shadow') {
       if (v === 'none' || theme.shadow.includes(v)) out.push({ prop, value: v });
+    } else if (prop === 'gradient') {
+      const parts = v.split(/\s+/);
+      const ok = (c) => c in theme.colors || /^#[0-9a-f]{6}$/i.test(c);
+      if (v === 'none') out.push({ prop, value: 'none' });
+      else if (['t', 'tr', 'r', 'br', 'b', 'bl', 'l', 'tl'].includes(parts[0]) && parts.length >= 3 && parts.length <= 4 && parts.slice(1).every(ok)) out.push({ prop, value: v });
+    } else if (prop === 'clipText') {
+      out.push({ prop, value: /^(on|true|yes)$/i.test(v) ? 'on' : 'off' });
     } else if (prop === 'fit') {
       if (['cover', 'contain', 'fill', 'none', 'scale-down'].includes(v)) out.push({ prop, value: v });
     } else if (prop === 'align') {
@@ -168,9 +176,10 @@ export async function propose({ request, targets, history = [] }, theme, library
       const st = { type: e.action };
       if (e.action === 'move') st.dir = e.moveDir || 'down';
       if (e.action === 'swap') { if (!known(e.swapTo)) continue; st.to = e.swapTo; }
-      if (e.action === 'insert') {
+      if (e.action === 'insert' || e.action === 'replace') {
         try { checkSnippet(e.insertJsx || '', known); } catch { continue; }
-        st.jsx = e.insertJsx; st.position = e.insertPosition || 'after';
+        st.jsx = e.insertJsx;
+        if (e.action === 'insert') st.position = e.insertPosition || 'after';
       }
       if (e.action === 'image') {
         if (e.imageSrc && !uploads.has(e.imageSrc) && !urls.has(e.imageSrc)) e.imageSrc = null;
@@ -182,7 +191,9 @@ export async function propose({ request, targets, history = [] }, theme, library
       continue;
     }
     if (t.classKind === 'dynamic') continue;
-    const ops = cleanOps(e.ops || [], theme);
+    let ops = cleanOps(e.ops || [], theme);
+    // A gradient is the fill: drop a solid fill in the same edit so it can’t cancel the gradient.
+    if (ops.some((o) => o.prop === 'gradient' && o.value !== 'none')) ops = ops.filter((o) => o.prop !== 'bg');
     const text = e.text && t.textEditable ? e.text : null;
     const props = [];
     for (const p of e.props || []) {

@@ -181,3 +181,21 @@ test('insert next to a page’s outer box goes inside it instead', () => {
   assert.match(code, /<div className="flex">\n    <img src="\/kerf\/a.png" alt="" \/>/);
   assert.match(summary.action, /went inside/);
 });
+
+test('gradients replace solid fills, gradient text replaces the text color', () => {
+  assert.equal(ops('bg-surface p-4', [{ prop: 'gradient', value: 'r primary surface-2' }]), 'p-4 bg-gradient-to-r from-primary to-surface-2');
+  assert.equal(ops('bg-gradient-to-r from-primary to-surface p-4', [{ prop: 'bg', value: 'surface' }]), 'p-4 bg-surface');
+  assert.equal(ops('font-bold text-primary', [{ prop: 'gradient', value: 'br primary content' }, { prop: 'clipText', value: 'on' }]), 'font-bold bg-gradient-to-br from-primary to-content bg-clip-text text-transparent');
+  assert.equal(ops('bg-gradient-to-r from-primary to-content bg-clip-text text-transparent', [{ prop: 'gradient', value: 'none' }, { prop: 'clipText', value: 'off' }]), '');
+});
+
+test('replace swaps an element for new JSX in one step', () => {
+  const { code, summary } = structureEdit(PAGE, ...at(5), { type: 'replace', jsx: '<h1 className="bg-gradient-to-r from-primary to-positive bg-clip-text text-transparent">Title</h1>' }, ctx);
+  assert.match(code, /<h1 className="bg-gradient-to-r[^"]*">Title<\/h1>\n    <p>Body/);
+  assert.equal(summary.action, 'Replaced <h1>');
+  assert.match(structureEdit(PAGE, 9, PAGE.split('\n')[8].indexOf('<span'), { type: 'replace', jsx: '<strong>Shown</strong>' }, ctx).code, /\{ok && <strong>Shown<\/strong>\}/);
+});
+
+test('a transparent fill does not cancel a gradient', () => {
+  assert.equal(ops('text-content', [{ prop: 'gradient', value: 'r primary positive' }, { prop: 'clipText', value: 'on' }, { prop: 'bg', value: 'transparent' }]), 'bg-gradient-to-r from-primary to-positive bg-clip-text text-transparent bg-transparent');
+});

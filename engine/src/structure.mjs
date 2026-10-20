@@ -207,6 +207,17 @@ export function structureEdit(code, line, col, op, ctx) {
       else s.appendLeft(el.end, `\n${ind}${op.jsx}`);
     }
     label = `Added ${comps.length ? comps.join(', ') : (op.jsx.match(/^<([a-z0-9]+)/i) || [])[1] || 'element'} ${pos} <${name}>${note}`;
+  } else if (op.type === 'replace') {
+    // Swap the whole element for new JSX in one step (safe anywhere an element can be).
+    const comps = checkSnippet(op.jsx, (nm) => !!ctx.library.findIcon(nm) || ctx.library.componentList().has(nm));
+    for (const c of comps) {
+      const comp = ctx.library.componentList().get(c);
+      imports.push([c, comp ? ctx.library.importPath(ctx.file, comp.file) : ctx.library.findIcon(c)]);
+    }
+    if (!/^\s*<[\s\S]*>\s*$/.test(op.jsx) || /^\s*<>/.test(op.jsx)) throw new KerfError('The replacement must be a single element.');
+    s.overwrite(el.start, el.end, op.jsx.trim());
+    removedNames = componentNames(el);
+    label = `Replaced <${name}>`;
   } else if (op.type === 'image') {
     if (name !== 'img') throw new KerfError('Select an image to change it.');
     const attr = (k) => el.openingElement.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === k);

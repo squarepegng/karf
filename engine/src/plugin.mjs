@@ -106,7 +106,13 @@ export default function kerf() {
             // Apply from the bottom of each file up, structure last per element, so positions stay valid.
             const lineOf = (e) => Number(String(e.loc).split(':').slice(-2)[0]) || 0;
             const rank = (e) => (!e.structure ? 0 : e.structure.type === 'delete' ? 2 : 1);
-            const ordered = (body.edits || []).slice().sort((a, b) => String(a.loc).split(':')[0].localeCompare(String(b.loc).split(':')[0]) || lineOf(b) - lineOf(a) || rank(a) - rank(b));
+            // "Add the new one, delete the old one" on the same element is a replace: do it in one step.
+            let edits = (body.edits || []).slice();
+            for (const del of edits.filter((e) => e.structure?.type === 'delete')) {
+              const ins = edits.find((e) => e.loc === del.loc && e.structure?.type === 'insert' && e.structure.position !== 'inside');
+              if (ins) { ins.structure = { type: 'replace', jsx: ins.structure.jsx }; edits = edits.filter((e) => e !== del); }
+            }
+            const ordered = edits.sort((a, b) => String(a.loc).split(':')[0].localeCompare(String(b.loc).split(':')[0]) || lineOf(b) - lineOf(a) || rank(a) - rank(b));
             const results = ordered.map((e) => {
               try {
                 if (e.structure) return { loc: e.loc, ok: true, ...editor.structure(e.loc, e.structure, 'ai') };
