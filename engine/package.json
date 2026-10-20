@@ -1,0 +1,17 @@
+{
+  "name": "kerf-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kerf Phase 1: tag rendered elements with their source, and edit Tailwind classes in that source safely.",
+  "bin": { "kerf": "./bin/kerf.mjs" },
+  "scripts": {
+    "dev": "node bin/kerf.mjs",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.26.3",
+    "magic-string": "^0.30.17"
+  },
+  "engines": { "node": ">=20" }
+}

@@ -1,0 +1,63 @@
+// The Vite plugin: tags elements while the app runs in dev, and exposes a
+// small local API the Kerf editor calls to read and change source files.
+import path from 'node:path';
+import { tagSource } from './ast.mjs';
+import { loadTheme } from './tailwind.mjs';
+import { createEditor, KerfError } from './edit.mjs';
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (c) => (data += c));
+    req.on('end', () => {
+      try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(e); }
+    });
+    req.on('error', reject);
+  });
+}
+
+export default function kerf() {
+  let webRoot;
+  let srcDir;
+  let theme;
+  let editor;
+
+  return {
+    name: 'kerf',
+    apply: 'serve',
+    enforce: 'pre',
+    async configResolved(config) {
+      webRoot = config.root;
+      srcDir = path.join(webRoot, 'src') + path.sep;
+      theme = await loadTheme(webRoot);
+      editor = createEditor(webRoot, () => theme);
+    },
+    transform(code, id) {
+      const file = id.split('?')[0];
+      if (!/\.[jt]sx$/.test(file) || !file.startsWith(srcDir)) return null;
+      return tagSource(code, file, webRoot);
+    },
+    configureServer(server) {
+      server.middlewares.use('/__kerf', async (req, res) => {
+        const send = (status, body) => {
+          res.statusCode = status;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(body));
+        };
+        try {
+          const route = req.url.split('?')[0];
+          if (req.method === 'GET' && route === '/theme') return send(200, theme);
+          if (req.method === 'GET' && route === '/changes') return send(200, editor.history.map(({ rel, loc, change, summary, at }) => ({ file: rel, loc, change, summary, at })));
+          if (req.method !== 'POST') return send(404, { error: 'Not found' });
+          const body = await readBody(req);
+          if (route === '/inspect') return send(200, editor.describe(body.loc));
+          if (route === '/edit') return send(200, editor.edit(body.loc, { ops: body.ops, text: body.text }));
+          if (route === '/undo') return send(200, editor.undo());
+          return send(404, { error: 'Not found' });
+        } catch (e) {
+          send(e instanceof KerfError ? 422 : 500, { error: e.message });
+        }
+      });
+    },
+  };
+}
