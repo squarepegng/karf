@@ -13,7 +13,7 @@ const cases = [
   ['CardContent: horizontal padding 24 (splits p-5)', '/edit', { loc: 'src/components/ui/card.tsx:42:4', ops: [{ prop: 'padX', value: 24 }] }],
   ['NotFound heading: retype text', '/edit', { loc: 'src/features/NotFoundPage.tsx:7:6', text: 'Nothing here yet' }],
   ['NotFound heading: off-scale size 30px', '/edit', { loc: 'src/features/NotFoundPage.tsx:7:6', ops: [{ prop: 'fontSize', value: 30 }] }],
-  ['Inspect a component usage', '/inspect', { loc: 'src/features/deck/CardGrid.tsx:75:14' }],
+  ['Inspect a component usage', '/inspect', { loc: 'src/features/deck/CardGrid.tsx:77:6' }],
 ];
 let fail = 0;
 for (const [name, route, body] of cases) {
