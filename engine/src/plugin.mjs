@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { tagSource } from './ast.mjs';
 import { loadTheme } from './tailwind.mjs';
 import { createEditor, KerfError } from './edit.mjs';
+import { propose } from './ai.mjs';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -65,6 +66,28 @@ export default function kerf() {
           if (route === '/inspect') return send(200, editor.describe(body.loc));
           if (route === '/edit') return send(200, editor.edit(body.loc, { ops: body.ops, text: body.text }));
           if (route === '/undo') return send(200, editor.undo());
+          if (route === '/ai') {
+            // Add what only the source knows: real tag, classes, whether text is editable.
+            const targets = (body.targets || []).slice(0, 80).map((t) => {
+              try {
+                const d = editor.describe(t.loc);
+                return { ...t, tag: d.tag, classes: d.classes, classKind: d.classKind, textEditable: d.text.editable, text: d.text.editable ? d.text.value : t.text };
+              } catch {
+                return null;
+              }
+            }).filter(Boolean);
+            return send(200, await propose({ request: body.request, targets }, theme));
+          }
+          if (route === '/ai/apply') {
+            const results = (body.edits || []).map((e) => {
+              try {
+                return { loc: e.loc, ok: true, ...editor.edit(e.loc, { ops: e.ops, text: e.text || undefined }) };
+              } catch (err) {
+                return { loc: e.loc, ok: false, error: err.message };
+              }
+            });
+            return send(200, { results, n: editor.history.length });
+          }
           return send(404, { error: 'Not found' });
         } catch (e) {
           send(e instanceof KerfError ? 422 : 500, { error: e.message });

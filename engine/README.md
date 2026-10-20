@@ -35,7 +35,7 @@ the repo into `~/Kerf/projects/`, finds the React + Tailwind app inside it
 it with Kerf attached and opens it. Edits change Kerf’s copy, not your
 original folder or GitHub, until a PR is made.
 
-In the app: **E** to edit, **P** to preview. Click to select, double-click text
+In the app: **E** to edit, **P** to preview, **⌘K** to ask Kerf (Preview) or chat about the selection (Edit), **A** to annotate. Click to select, double-click text
 to retype, drag a field’s icon to scrub, **⌘Z** to undo.
 
 ## Run one app directly
@@ -69,9 +69,22 @@ npm test                                   # unit tests
 node scripts/live-check.mjs http://localhost:5173   # real edits against a running app
 ```
 
+## AI
+
+Paste your Anthropic key on the start page once (it is saved to `engine/.env`,
+git-ignored). Then:
+
+- **Ask bar (Preview, ⌘K):** describe a change; Kerf sends the visible elements’ code to Claude.
+- **Chat (Edit, ⌘K):** the same, scoped to the selected element, its parents and children.
+- **Annotations (A):** draw a pin, box, circle or arrow, write a note; **Apply all** sends every note with the code under it.
+
+Claude (`claude-opus-5-5`, with server-side refusal fallback on) answers with the
+same property edits the panel makes. Kerf highlights the targets in amber and
+writes nothing until you click **Apply**; every applied change can be undone.
+Requests about behavior or data are answered as developer work, with no edits.
+
 ## Next
 
-1. AI: a request plus the selected element’s code goes to Claude, and the edits come back for approval.
-2. Create a branch and PR from a session’s edits.
-3. Reorder (moving JSX between siblings) and “only here” edits on shared components.
-4. Next.js support.
+1. Create a branch and PR from a session’s edits.
+2. Reorder (moving JSX between siblings), margins and sizes.
+3. Next.js support.

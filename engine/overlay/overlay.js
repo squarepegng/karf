@@ -211,6 +211,13 @@
     <div class="box hov" id="hov"><span class="tag"></span></div>
     <div id="sibs"></div>
     <div class="box sel" id="sel"><span class="tag"></span></div>
+    <div id="amb"></div>
+    <svg class="marks" id="marks" width="100%" height="100%"><g id="marksG"></g></svg>
+    <div class="annoCap" id="annoCap" hidden></div>
+    <div class="ask" id="ask" hidden></div>
+    <div class="notePop" id="notePop" hidden></div>
+    <div class="notesChip" id="notesChip" hidden></div>
+    <div class="noteRes" id="noteRes" hidden></div>
     <aside class="panel" id="panel" hidden></aside>
     <div class="bar" id="bar"></div>
     <div class="pop" id="changes" hidden></div>
@@ -244,6 +251,12 @@
     sw: '<path d="M3 4.5h10" stroke="currentColor" stroke-width="1"/><path d="M3 8h10" stroke="currentColor" stroke-width="1.8"/><path d="M3 11.5h10" stroke="currentColor" stroke-width="2.6"/>',
     comp: '<path d="M8 1.8l2.4 2.4L8 6.6 5.6 4.2zM4.2 5.6L6.6 8 4.2 10.4 1.8 8zM11.8 5.6L14.2 8l-2.4 2.4L9.4 8zM8 9.4l2.4 2.4L8 14.2l-2.4-2.4z" fill="none" stroke="currentColor" stroke-width="1.1"/>',
     frame: '<rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>',
+    spark: '<path d="M8 1.7l1.5 4.2 4.2 1.5-4.2 1.5L8 13.1 6.5 8.9 2.3 7.4l4.2-1.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>',
+    pen: '<path d="M3.4 10.9c-1.7-2.9.6-8 5.1-8 3.4 0 5.1 2.3 4.9 4.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M6.9 13.7l.45-2 5-5a1.15 1.15 0 0 1 1.6 1.6l-5 5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>',
+    pin: '<path d="M8 14s4.5-4 4.5-7.5a4.5 4.5 0 0 0-9 0C3.5 10 8 14 8 14z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="6.5" r="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>',
+    box: '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>',
+    circle: '<ellipse cx="8" cy="8" rx="5.5" ry="5" fill="none" stroke="currentColor" stroke-width="1.3"/>',
+    arrow: '<path d="M3 13L13 3M7 3h6v6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
   };
   const ico = (n, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16" aria-hidden="true">${IC[n]}</svg>`;
   const cornerIco = (deg) => `<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><g transform="rotate(${deg} 8 8)">${IC.rad}</g></svg>`;
@@ -255,6 +268,12 @@
         <button class="tb${S.mode === 'preview' ? ' on' : ''}" data-act="mode" data-v="preview" title="Preview · P">${ico('play', 16)}</button>
         <button class="tb${S.mode === 'edit' ? ' on' : ''}" data-act="mode" data-v="edit" title="Edit · E">${ico('edit', 16)}</button>
       </div>
+      <span class="div"></span>
+      ${S.mode === 'preview'
+        ? `<button class="tb${S.askOpen ? ' on' : ''}" data-act="ask" title="Ask Kerf · ⌘K">${ico('spark', 16)}</button>`
+        : `<button class="tb${S.tab === 'chat' ? ' on' : ''}" data-act="tab" data-v="${S.tab === 'chat' ? 'design' : 'chat'}" title="Chat with Kerf · ⌘K">${ico('spark', 16)}</button>`}
+      <button class="tb${S.tool === 'annotate' ? ' on' : ''}" data-act="tool" data-v="annotate" title="Annotate · A">${ico('pen', 16)}</button>
+      ${S.tool === 'annotate' ? `<div class="shapes">${['pin', 'box', 'circle', 'arrow'].map((k, i) => `<button class="tb sm${S.shape === k ? ' on' : ''}" data-act="shape" data-v="${k}" title="${k[0].toUpperCase() + k.slice(1)} · ${i + 1}">${ico(k, 14)}</button>`).join('')}</div>` : ''}
       <span class="div"></span>
       <button class="tb" data-act="undo" title="Undo last change · ⌘Z" ${S.count ? '' : 'disabled'}>${ico('undo', 16)}</button>
       <button class="tb wide" data-act="changes" title="Changes in this session">${ico('list', 16)}<span>${S.count}</span>${S.count ? '<i class="dot"></i>' : ''}</button>`;
@@ -281,9 +300,17 @@
     const p = $('panel');
     p.hidden = S.mode !== 'edit';
     if (p.hidden) return;
+    const tabs = `<div class="ptabs"><button data-act="tab" data-v="design" class="${S.tab === 'design' ? 'on' : ''}">Design</button><button data-act="tab" data-v="chat" class="${S.tab === 'chat' ? 'on' : ''}">Chat <span class="kbd">⌘K</span></button></div>`;
+    if (S.tab === 'chat') {
+      const draft = root.getElementById('chatIn')?.value || '';
+      p.innerHTML = tabs + chatHTML();
+      const cs = root.getElementById('chatScroll'); if (cs) cs.scrollTop = cs.scrollHeight;
+      const ci = root.getElementById('chatIn'); if (ci) { ci.value = draft; ci.focus(); }
+      return;
+    }
     const s = S.sel;
     if (!s) {
-      p.innerHTML = `<div class="empty"><b>Nothing selected</b><span>Click anything in your app to select it. Double-click text to retype it. Changes are written to your code.</span></div>`;
+      p.innerHTML = tabs + `<div class="empty"><b>Nothing selected</b><span>Click anything in your app to select it. Double-click text to retype it. Changes are written to your code.</span></div>`;
       return;
     }
     const el = s.el, inf = info();
@@ -319,7 +346,7 @@
       h += sec('Effects', sh !== 'none' ? `<div class="cr"><label class="inp"><select data-sel="shadow">${keys.map((k) => `<option value="${esc(k)}"${k === sh ? ' selected' : ''}>Shadow · ${k === 'DEFAULT' ? 'default' : esc(k)}</option>`).join('')}</select>${ico('chev', 12)}</label><button class="ib" data-act="set" data-p="shadow" data-v="none" title="Remove">${ico('minus')}</button></div>` : '', sh !== 'none' ? '' : hb('set', 'plus', 'Add shadow', 'sm').replace('data-act="set"', 'data-act="set" data-p="shadow"'));
     }
     const st = p.querySelector('.scroll')?.scrollTop || 0;
-    p.innerHTML = `<div class="scroll">${h}</div>`;
+    p.innerHTML = tabs + `<div class="scroll">${h}</div>`;
     p.querySelector('.scroll').scrollTop = st;
   }
 
@@ -346,8 +373,10 @@
   function setMode(m) {
     S.mode = m;
     if (m === 'preview') { S.sel = null; S.hover = null; S.changesOpen = false; renderChanges(); }
+    if (m === 'edit') { S.askOpen = false; S.proposal = null; }
     renderBar();
     renderPanel();
+    renderAsk();
   }
 
   /* ---------- outlines follow the page ---------- */
@@ -369,6 +398,12 @@
     const list = edit && S.sel && S.sel.repeat > 1 ? [...sameLoc(S.sel.el)].filter((x) => x !== S.sel.el).slice(0, 60) : [];
     while (sibs.children.length < list.length) { const d = document.createElement('div'); d.className = 'box sib'; d.innerHTML = '<span class="tag"></span>'; sibs.appendChild(d); }
     [...sibs.children].forEach((b, i) => place(b, list[i] || null, null));
+    const amb = $('amb');
+    const aEls = (S.amber || []).flatMap((loc) => [...document.querySelectorAll(`[data-kerf="${CSS.escape(loc)}"],[data-kerf-use="${CSS.escape(loc)}"]`)]).slice(0, 60);
+    while (amb.children.length < aEls.length) { const d = document.createElement('div'); d.className = 'box amber'; d.innerHTML = '<span class="tag"></span>'; amb.appendChild(d); }
+    [...amb.children].forEach((b, i) => place(b, aEls[i] || null, null));
+    $('marksG').setAttribute('transform', `translate(${-scrollX} ${-scrollY})`);
+    if (S.noteDraft && !$('notePop').hidden) renderMarks();
     requestAnimationFrame(loop);
   }
   const labelOf = (el) => {
@@ -407,7 +442,19 @@
     const t = e.composedPath()[0];
     const typing = t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
     if (typing) return;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (S.mode === 'edit') { S.tab = 'chat'; renderPanel(); renderBar(); } else { S.askOpen = true; S.proposal = null; renderAsk(); renderBar(); }
+      return;
+    }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && S.mode === 'edit') { e.preventDefault(); undo(); return; }
+    if (e.key === 'Escape' && (S.noteDraft || S.tool === 'annotate' || S.askOpen)) {
+      e.preventDefault();
+      if (S.noteDraft) { S.noteDraft = null; renderMarks(); } else if (S.tool === 'annotate') setTool('select'); else { S.askOpen = false; S.proposal = null; S.amber = []; renderAsk(); renderBar(); }
+      return;
+    }
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setTool(S.tool === 'annotate' ? 'select' : 'annotate'); return; }
+    if (S.tool === 'annotate' && ['1', '2', '3', '4'].includes(e.key)) { S.shape = ['pin', 'box', 'circle', 'arrow'][+e.key - 1]; renderBar(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.key === 'e' || e.key === 'E') setMode('edit');
     else if (e.key === 'p' || e.key === 'P') setMode('preview');
@@ -502,6 +549,235 @@
     if (s.n != null && s.n !== s.v) commit({ ops: [{ prop: s.p, value: s.n }] });
   });
 
+  /* ---------- AI: Ask bar, chat, annotations ---------- */
+  const PROP_NAMES = { bg: 'Fill', color: 'Text color', borderC: 'Stroke color', fontSize: 'Size', fontWeight: 'Weight', lineHeight: 'Line height', letterSpacing: 'Letter spacing', align: 'Align', radius: 'Radius', rTL: 'Top-left corner', rTR: 'Top-right corner', rBR: 'Bottom-right corner', rBL: 'Bottom-left corner', padX: 'Padding X', padY: 'Padding Y', gap: 'Gap', borderW: 'Stroke', opacity: 'Opacity', shadow: 'Shadow' };
+  const UNIT = { fontSize: 'px', lineHeight: 'px', radius: 'px', rTL: 'px', rTR: 'px', rBR: 'px', rBL: 'px', padX: 'px', padY: 'px', gap: 'px', borderW: 'px', opacity: '%', letterSpacing: '%' };
+  const opLabel = (o) => `${PROP_NAMES[o.prop] || o.prop} ${o.value}${UNIT[o.prop] || ''}`;
+
+  Object.assign(S, { tab: 'design', chat: [], tool: 'select', shape: 'box', notes: [], noteDraft: null, amber: [], askOpen: false, askBusy: false, proposal: null, proposalWhere: null });
+
+  function measure(el) {
+    const cs = getComputedStyle(el);
+    return { fontSize: cs.fontSize, color: rgbHex(cs.color), fill: rgbHex(cs.backgroundColor), radius: cs.borderTopLeftRadius, padding: cs.padding, display: cs.display };
+  }
+  function targetOf(el, note) {
+    const def = defOf(el), use = useOf(el);
+    return { loc: def || use, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note };
+  }
+  function uniq(list) {
+    const seen = new Set(), out = [];
+    for (const t of list) if (t.loc && !seen.has(t.loc)) { seen.add(t.loc); out.push(t); }
+    return out;
+  }
+  const tagged = (root = document) => [...root.querySelectorAll('[data-kerf],[data-kerf-use]')];
+  const onScreen = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; };
+  const visibleTargets = () => uniq(tagged().filter(onScreen).map((el) => targetOf(el))).slice(0, 80);
+  function selectionTargets() {
+    const el = S.sel.el, out = [targetOf(el)];
+    let p = el.parentElement;
+    for (let i = 0; p && i < 2; p = p.parentElement) { const q = pick(p); if (q) { out.push(targetOf(q)); p = q; i++; } }
+    tagged(el).slice(0, 30).forEach((c) => out.push(targetOf(c)));
+    return uniq(out);
+  }
+  // Elements under a note's mark: what's at the point, plus what sits inside a box or circle.
+  function noteTargets(n, i) {
+    const pts = n.shape === 'pin' ? [[n.x, n.y]] : n.shape === 'arrow' ? [[n.x2, n.y2]] : [[n.x + n.w / 2, n.y + n.h / 2]];
+    const els = [];
+    for (const [px, py] of pts) {
+      document.elementsFromPoint(px - scrollX, py - scrollY).map(pick).filter(Boolean).slice(0, 3).forEach((e) => els.push(e));
+    }
+    if (n.shape === 'box' || n.shape === 'circle') {
+      tagged().forEach((el) => {
+        const r = el.getBoundingClientRect(), cx = r.left + r.width / 2 + scrollX, cy = r.top + r.height / 2 + scrollY;
+        if (cx >= n.x && cx <= n.x + n.w && cy >= n.y && cy <= n.y + n.h) els.push(el);
+      });
+    }
+    return uniq(els.map((el) => targetOf(el, i + 1))).slice(0, 15);
+  }
+
+  async function askAI(request, targets, where) {
+    const r = await api('/ai', { request, targets });
+    S.amber = r.edits.map((e) => e.loc);
+    return r;
+  }
+  async function applyEdits(edits) {
+    const r = await api('/ai/apply', { edits });
+    const ok = r.results.filter((x) => x.ok && x.changed).length, bad = r.results.filter((x) => !x.ok);
+    S.count = r.n;
+    S.amber = [];
+    toast(`Applied ${ok} change${ok === 1 ? '' : 's'}`, bad.length ? `${bad.length} skipped: ${bad[0].error}` : '', !!bad.length && !ok);
+    afterEdit();
+    renderBar();
+    return ok;
+  }
+  const proposalHTML = (p, act, i) => `<div class="prop"><div class="kerfSays"><i class="dotA"></i><span>${esc(p.message)}</span></div>
+    ${p.edits.length ? `<div class="edits">${p.edits.map((e) => `<div class="ed"><b>${esc(e.tag)}</b><span>${esc(e.why)}</span><span class="mono">${esc(e.ops.map(opLabel).join(' · '))}${e.text ? ` · “${esc(e.text)}”` : ''}</span></div>`).join('')}</div>` : ''}
+    ${act ? `<div class="acts">${p.edits.length ? `<button class="ghostBtn" data-act="${act}" data-i="${i ?? ''}" data-v="discard">Discard</button><button class="amberBtn" data-act="${act}" data-i="${i ?? ''}" data-v="apply">Apply ${p.edits.length} change${p.edits.length === 1 ? '' : 's'}</button>` : `<button class="ghostBtn" data-act="${act}" data-i="${i ?? ''}" data-v="discard">OK</button>`}</div>` : ''}</div>`;
+
+  /* Ask bar (Preview) */
+  function renderAsk() {
+    const a = $('ask');
+    a.hidden = !(S.askOpen && S.mode === 'preview');
+    if (a.hidden) return;
+    a.innerHTML = S.proposal && S.proposalWhere === 'ask'
+      ? proposalHTML(S.proposal, 'askP')
+      : `<form class="askF" data-form="ask"><span class="spark">${ico('spark', 16)}</span><input id="askIn" placeholder="${S.askBusy ? 'Kerf is thinking…' : 'Ask Kerf to change something on this screen'}" ${S.askBusy ? 'disabled' : ''} autocomplete="off" aria-label="Ask Kerf"><button class="sendB" ${S.askBusy ? 'disabled' : ''} aria-label="Send">${S.askBusy ? '<i class="spin"></i>' : ico('up', 14)}</button></form>
+        <div class="askHints">${['Make this page feel more premium', 'Make the text easier to read', 'Tighten the spacing'].map((s) => `<button data-act="askHint" data-v="${s}">${s}</button>`).join('')}</div>`;
+    if (!S.askBusy && !S.proposal) setTimeout(() => root.getElementById('askIn')?.focus(), 0);
+  }
+  async function sendAsk(text) {
+    if (!text.trim() || S.askBusy) return;
+    S.askBusy = true; renderAsk();
+    try { S.proposal = await askAI(text, visibleTargets(), 'ask'); S.proposalWhere = 'ask'; }
+    catch (e) { toast(e.message, '', true); }
+    S.askBusy = false; renderAsk();
+  }
+
+  /* Chat (Edit, ⌘K) */
+  function chatHTML() {
+    const ctx = S.sel ? `${esc((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || S.sel.el.tagName.toLowerCase())} · ${esc(fileName(activeLoc()))}` : 'Whole screen';
+    const msgs = S.chat.map((m, i) => m.role === 'user'
+      ? `<div class="uMsg"><span class="ctx">${esc(m.ctx)}</span><div class="bub">${esc(m.text)}</div></div>`
+      : m.busy ? `<div class="kMsg"><i class="spin"></i><span class="note">Kerf is reading the code…</span></div>`
+      : m.error ? `<div class="kMsg"><span class="note warn">${esc(m.error)}</span></div>`
+      : `<div class="kMsg">${proposalHTML(m.proposal, m.status === 'pending' ? 'chatP' : '', i)}${m.status !== 'pending' ? `<span class="note">${m.status === 'applied' ? 'Applied' : 'Discarded'}</span>` : ''}</div>`).join('');
+    return `<div class="chatScroll" id="chatScroll">${msgs || `<div class="empty"><b>Ask Kerf about what you selected</b><span>Select an element, then describe the change, like “make this card feel lighter”. Kerf reads its code and proposes edits for you to approve.</span></div>`}</div>
+      <form class="comp" data-form="chat"><span class="ctx">${ctx}</span><textarea id="chatIn" rows="2" placeholder="Describe a change…" aria-label="Message Kerf"></textarea><button class="sendB" aria-label="Send">${ico('up', 14)}</button></form>`;
+  }
+  async function sendChat(text) {
+    if (!text.trim()) return;
+    const ctx = S.sel ? ((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || S.sel.el.tagName.toLowerCase()) : 'Whole screen';
+    S.chat.push({ role: 'user', text, ctx });
+    const ci = root.getElementById('chatIn'); if (ci) ci.value = '';
+    const m = { role: 'kerf', busy: true, status: 'pending' };
+    S.chat.push(m);
+    renderPanel();
+    try { m.proposal = await askAI(text, S.sel ? selectionTargets() : visibleTargets(), 'chat'); }
+    catch (e) { m.error = e.message; }
+    m.busy = false;
+    renderPanel();
+  }
+
+  /* Annotations */
+  function shapeSVG(n, i, draft) {
+    const st = `stroke="#2B66D9" stroke-width="2" fill="${draft ? 'none' : 'rgba(43,102,217,.06)'}"`;
+    let s = '';
+    if (n.shape === 'box') s = `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6" ${st}/>`;
+    else if (n.shape === 'circle') s = `<ellipse cx="${n.x + n.w / 2}" cy="${n.y + n.h / 2}" rx="${n.w / 2}" ry="${n.h / 2}" ${st}/>`;
+    else if (n.shape === 'arrow') { const a = Math.atan2(n.y2 - n.y, n.x2 - n.x), L = 12; s = `<path d="M${n.x} ${n.y}L${n.x2} ${n.y2}M${n.x2} ${n.y2}L${n.x2 - L * Math.cos(a - 0.5)} ${n.y2 - L * Math.sin(a - 0.5)}M${n.x2} ${n.y2}L${n.x2 - L * Math.cos(a + 0.5)} ${n.y2 - L * Math.sin(a + 0.5)}" stroke="#2B66D9" stroke-width="2.5" fill="none" stroke-linecap="round"/>`; }
+    const [bx, by] = n.shape === 'pin' ? [n.x, n.y] : n.shape === 'arrow' ? [n.x, n.y] : [n.x + n.w, n.y];
+    if (i != null) s += `<g transform="translate(${bx} ${by})"><path d="M0 0h12a12 12 0 0 1 0 24h-0a12 12 0 0 1-12-12z" transform="translate(-4 -20)" fill="#2B66D9"/><text x="8" y="-3" fill="#fff" font-size="11" font-weight="600" font-family="Geist,system-ui,sans-serif" text-anchor="middle">${i + 1}</text></g>`;
+    else if (n.shape === 'pin') s += `<circle cx="${n.x}" cy="${n.y}" r="6" fill="#2B66D9"/>`;
+    return s;
+  }
+  function renderMarks() {
+    const g = $('marksG');
+    g.innerHTML = S.notes.map((n, i) => shapeSVG(n, i)).join('') + (S.noteDraft ? shapeSVG(S.noteDraft, null, true) : '');
+    $('annoCap').hidden = S.tool !== 'annotate';
+    const chip = $('notesChip');
+    chip.hidden = !S.notes.length || !!S.noteDraft;
+    if (!chip.hidden) chip.innerHTML = `<span>${S.notes.length} note${S.notes.length === 1 ? '' : 's'}</span><button class="ghostBtn" data-act="notesClear">Clear</button><button class="lightBtn" data-act="notesApply" ${S.askBusy ? 'disabled' : ''}>${S.askBusy ? '<i class="spin dark"></i>Reading…' : `${ico('spark', 14)}Apply ${S.notes.length > 1 ? 'all ' + S.notes.length : 'note'}`}</button>`;
+    const pop = $('notePop');
+    pop.hidden = !S.noteDraft;
+    if (S.noteDraft) {
+      const n = S.noteDraft, x = Math.min(innerWidth - 340, Math.max(12, (n.shape === 'arrow' ? n.x2 : n.x + (n.w || 0)) - scrollX + 12)), y = Math.min(innerHeight - 200, Math.max(12, (n.shape === 'arrow' ? n.y2 : n.y) - scrollY));
+      pop.style.transform = `translate(${x}px,${y}px)`;
+      if (!pop.dataset.open) {
+        pop.innerHTML = `<div class="secH"><span>Note ${S.notes.length + 1}</span>${hb('noteDiscard', 'x', 'Discard')}</div><textarea id="noteIn" rows="3" placeholder="What should change here?"></textarea><div class="acts"><span class="note">Kerf will read the code under this mark.</span><button class="lightBtn" data-act="noteAdd">Add note</button></div>`;
+        pop.dataset.open = '1';
+        setTimeout(() => root.getElementById('noteIn')?.focus(), 0);
+      }
+    } else delete pop.dataset.open;
+    const res = $('noteRes');
+    res.hidden = !(S.proposal && S.proposalWhere === 'notes');
+    if (!res.hidden) res.innerHTML = proposalHTML(S.proposal, 'notesP');
+  }
+  async function applyNotes() {
+    if (!S.notes.length || S.askBusy) return;
+    S.askBusy = true; renderMarks();
+    const targets = uniq(S.notes.flatMap((n, i) => noteTargets(n, i)));
+    const request = S.notes.map((n, i) => `Note ${i + 1}: ${n.text}`).join('\n') + '\nEach element is tagged with the note it sits under.';
+    try { S.proposal = await askAI(request, targets, 'notes'); S.proposalWhere = 'notes'; }
+    catch (e) { toast(e.message, '', true); }
+    S.askBusy = false; renderMarks();
+  }
+  let draw = null;
+  root.addEventListener('pointerdown', (e) => {
+    if (S.tool !== 'annotate' || e.target.id !== 'annoCap') return;
+    e.preventDefault();
+    S.noteDraft = null;
+    draw = { x: e.clientX + scrollX, y: e.clientY + scrollY };
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!draw) return;
+    const x2 = e.clientX + scrollX, y2 = e.clientY + scrollY;
+    S.noteDraft = S.shape === 'arrow' ? { shape: 'arrow', x: draw.x, y: draw.y, x2, y2 } : { shape: S.shape === 'pin' ? 'pin' : S.shape, x: Math.min(draw.x, x2), y: Math.min(draw.y, y2), w: Math.abs(x2 - draw.x), h: Math.abs(y2 - draw.y) };
+    if (S.shape === 'pin') S.noteDraft = { shape: 'pin', x: x2, y: y2 };
+    renderMarks();
+  });
+  window.addEventListener('pointerup', (e) => {
+    if (!draw) return;
+    const d = S.noteDraft;
+    if (!d || (d.shape !== 'pin' && d.shape !== 'arrow' && d.w < 8 && d.h < 8) || (d.shape === 'arrow' && Math.hypot(d.x2 - d.x, d.y2 - d.y) < 8)) S.noteDraft = { shape: 'pin', x: draw.x, y: draw.y };
+    draw = null;
+    renderMarks();
+  });
+  function addNote() {
+    const v = (root.getElementById('noteIn')?.value || '').trim();
+    if (!v) return;
+    S.notes.push({ ...S.noteDraft, text: v });
+    S.noteDraft = null;
+    renderMarks();
+  }
+  function setTool(t) {
+    S.tool = t;
+    S.noteDraft = null;
+    if (t === 'annotate') { S.hover = null; S.askOpen = false; }
+    renderBar(); renderMarks(); renderAsk();
+  }
+
+  /* AI-specific clicks, forms and keys */
+  root.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-act]');
+    if (!a) return;
+    const act = a.dataset.act, v = a.dataset.v;
+    if (act === 'ask') { S.askOpen = !S.askOpen; S.proposal = null; renderAsk(); }
+    else if (act === 'askHint') sendAsk(v);
+    else if (act === 'askP' || act === 'notesP') {
+      const p = S.proposal;
+      S.proposal = null; S.amber = [];
+      if (v === 'apply' && p) applyEdits(p.edits).then((ok) => { if (act === 'notesP' && ok) S.notes = []; renderMarks(); });
+      if (act === 'askP' && v === 'apply') S.askOpen = false;
+      renderAsk(); renderMarks();
+    }
+    else if (act === 'chatP') {
+      const m = S.chat[+a.dataset.i];
+      if (!m) return;
+      m.status = v === 'apply' ? 'applied' : 'discarded';
+      S.amber = [];
+      if (v === 'apply') applyEdits(m.proposal.edits);
+      renderPanel();
+    }
+    else if (act === 'tab') { S.tab = v; renderPanel(); }
+    else if (act === 'tool') setTool(S.tool === v ? 'select' : v);
+    else if (act === 'shape') { S.shape = v; renderBar(); }
+    else if (act === 'noteAdd') addNote();
+    else if (act === 'noteDiscard') { S.noteDraft = null; renderMarks(); }
+    else if (act === 'notesClear') { S.notes = []; S.proposal = null; S.amber = []; renderMarks(); }
+    else if (act === 'notesApply') applyNotes();
+  });
+  root.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.target.dataset.form;
+    if (f === 'ask') sendAsk(root.getElementById('askIn').value);
+    if (f === 'chat') { const t = root.getElementById('chatIn'); sendChat(t.value); }
+  });
+  root.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    if (e.target.id === 'chatIn') { e.preventDefault(); sendChat(e.target.value); }
+    if (e.target.id === 'noteIn') { e.preventDefault(); addNote(); }
+  });
+
   /* ---------- start ---------- */
   api('/theme').then((t) => { S.theme = t; renderPanel(); }).catch(() => {});
   api('/changes').then((c) => { S.count = c.length; renderBar(); }).catch(() => {});
@@ -589,6 +865,62 @@ button{font:inherit;color:inherit;cursor:pointer}
 .chg{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-top:1px solid #3A3A40}
 .chg span:last-child{color:#B0B0BA;font:400 11px/16px 'Geist Mono',ui-monospace,monospace}
 .probe{display:none}
+.amber{outline:1.5px dashed #E9B547;outline-offset:2px}
+.amber .tag{display:none}
+.marks{position:fixed;inset:0;pointer-events:none;overflow:visible}
+.annoCap{position:fixed;inset:0;pointer-events:auto;cursor:crosshair}
+.annoCap[hidden],.ask[hidden],.notePop[hidden],.notesChip[hidden],.noteRes[hidden]{display:none}
+.ask,.notePop,.notesChip,.noteRes{pointer-events:auto;font:400 12px/16px Geist,ui-sans-serif,system-ui,-apple-system,sans-serif;color:#EDEDF0;-webkit-font-smoothing:antialiased}
+.ask{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);width:min(520px,calc(100vw - 32px));display:flex;flex-direction:column;gap:8px}
+.askF{display:flex;align-items:center;gap:8px;height:48px;padding:0 6px 0 14px;background:#2D2D32;border:1px solid #3A3A40;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.askF:focus-within{border-color:#2B66D9}
+.askF input{flex:1;min-width:0;height:100%;background:transparent;border:0;outline:none;color:#EDEDF0;font:400 13px/18px Geist,system-ui,sans-serif}
+.spark{color:#E9B547;display:grid;place-items:center}
+.sendB{display:grid;place-items:center;width:32px;height:32px;border:0;border-radius:8px;background:#EDEDF0;color:#1B1B1E;flex:0 0 auto}
+.sendB[disabled]{opacity:.5}
+.askHints{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.askHints button{height:26px;padding:0 10px;border:1px solid #3A3A40;border-radius:999px;background:#232327;color:#B0B0BA}
+.askHints button:hover{color:#EDEDF0;background:#2D2D32}
+.prop{display:flex;flex-direction:column;gap:10px;padding:12px;background:#232327;border:1px solid rgba(233,181,71,.45);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.kMsg .prop{box-shadow:none}
+.kerfSays{display:flex;gap:8px;line-height:18px}
+.dotA{flex:0 0 auto;width:6px;height:6px;margin-top:6px;border-radius:3px;background:#E9B547}
+.edits{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow:auto}
+.ed{display:flex;flex-direction:column;gap:2px;padding:8px;background:rgba(233,181,71,.08);border-radius:6px}
+.ed b{font-weight:600}
+.ed span{color:#B0B0BA}
+.ed .mono{color:#E9B547}
+.acts{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.acts .note{margin-right:auto}
+.amberBtn{height:28px;padding:0 12px;border:0;border-radius:6px;background:#E9B547;color:#1B1B1E;font-weight:500}
+.ghostBtn{height:28px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#B0B0BA;font-weight:500}
+.ghostBtn:hover{background:#2D2D32;color:#EDEDF0}
+.lightBtn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:0;border-radius:8px;background:#EDEDF0;color:#1B1B1E;font-weight:500}
+.lightBtn[disabled]{opacity:.6}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid #3A3A40;border-top-color:#EDEDF0;border-radius:50%;animation:kspin 1s linear infinite}
+.spin.dark{border-color:#B0B0BA;border-top-color:#1B1B1E}
+@keyframes kspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.shapes{display:flex;gap:2px;padding:2px;margin-left:2px;background:#1B1B1E;border-radius:10px}
+.tb.sm{width:30px;height:32px}
+.notePop{position:fixed;left:0;top:0;width:320px;display:flex;flex-direction:column;gap:10px;padding:12px;background:#232327;border:1px solid #3A3A40;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.notePop textarea,.comp textarea{width:100%;padding:8px 10px;background:#2D2D32;border:1px solid transparent;border-radius:6px;outline:none;resize:none;color:#EDEDF0;font:400 13px/18px Geist,system-ui,sans-serif}
+.notePop textarea:focus,.comp textarea:focus{border-color:#2B66D9}
+.notesChip{position:fixed;left:20px;bottom:20px;display:flex;align-items:center;gap:6px;height:52px;padding:0 8px 0 14px;background:#2D2D32;border:1px solid #3A3A40;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.noteRes{position:fixed;left:20px;bottom:84px;width:380px;max-width:calc(100vw - 40px)}
+.ptabs{display:flex;gap:16px;padding:12px 12px 0;border-bottom:1px solid #3A3A40;flex:0 0 auto}
+.ptabs button{padding:0 0 10px;border:0;background:none;color:#8B8B95;font:500 13px/18px Geist,system-ui,sans-serif;display:flex;gap:6px;align-items:center}
+.ptabs button.on{color:#EDEDF0;font-weight:600;box-shadow:inset 0 -2px 0 #EDEDF0}
+.kbd{padding:0 4px;border-radius:4px;background:#2D2D32;color:#B0B0BA;font:400 10px/16px 'Geist Mono',ui-monospace,monospace}
+.chatScroll{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:14px 12px}
+.uMsg{align-self:flex-end;max-width:220px;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.bub{padding:8px 10px;background:#2D2D32;border-radius:10px 10px 4px 10px;line-height:18px}
+.ctx{display:inline-flex;align-self:flex-start;padding:2px 6px;border:1px solid #2B66D9;border-radius:4px;font:500 11px/14px Geist,system-ui,sans-serif;color:#EDEDF0}
+.uMsg .ctx{align-self:flex-end}
+.kMsg{display:flex;flex-direction:column;gap:6px}
+.comp{display:flex;flex-direction:column;gap:8px;padding:12px;border-top:1px solid #3A3A40;position:relative}
+.comp .sendB{position:absolute;right:20px;bottom:20px;width:28px;height:28px}
+.comp textarea{padding-right:44px}
 `;
   }
 })();
