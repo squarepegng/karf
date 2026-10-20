@@ -4,7 +4,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { openProject, PROJECTS_DIR, projects, stopAll } from '../src/project.mjs';
+
+const ENV = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env');
 
 const PORT = Number(process.env.KERF_PORT || 4100);
 let job = null;
@@ -31,6 +34,19 @@ const send = (res, status, body, type = 'application/json') => {
 http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/') return send(res, 200, PAGE, 'text/html; charset=utf-8');
   if (req.method === 'GET' && req.url === '/api/job') return send(res, 200, job && { ...job, repoRoot: undefined });
+  if (req.method === 'GET' && req.url === '/api/key-status') {
+    const set = fs.existsSync(ENV) && /^ANTHROPIC_API_KEY=sk-ant-\S+/m.test(fs.readFileSync(ENV, 'utf8'));
+    return send(res, 200, { set });
+  }
+  if (req.method === 'POST' && req.url === '/api/key') {
+    let body = '';
+    for await (const c of req) body += c;
+    const key = String(JSON.parse(body || '{}').key || '').trim();
+    if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) return send(res, 400, { error: 'That does not look like an Anthropic key. It starts with sk-ant-.' });
+    fs.writeFileSync(ENV, 'ANTHROPIC_API_KEY=' + key + '\n');
+    fs.chmodSync(ENV, 0o600);
+    return send(res, 200, { ok: true });
+  }
   if (req.method === 'GET' && req.url === '/api/recent') return send(res, 200, recent());
   if (req.method === 'POST' && req.url === '/api/open') {
     let body = '';
@@ -90,6 +106,7 @@ a.open{display:inline-flex;align-items:center;justify-content:center;height:36px
 <div><h1>Open a project</h1><p>Paste a GitHub link or a folder on this computer. Kerf runs your app and opens it with the editor on top. Your code only changes when you edit.</p></div>
 <form id="f"><input id="src" placeholder="github.com/team/app  or  ~/code/app" autocomplete="off" spellcheck="false" aria-label="GitHub link or folder"><button id="go">Open</button></form>
 <span class="hint">Works today with React + Tailwind apps built with Vite. Private repos use your existing GitHub sign-in on this Mac.</span>
+<div class="card" id="keycard"><div class="status" id="keystat"></div><span class="hint">For the AI step. It is saved only on this Mac, in a git-ignored file.</span><form id="kf" style="display:flex;gap:8px"><input id="kin" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" aria-label="Anthropic API key"><button id="ksave">Save key</button></form><span class="err" id="kerr"></span></div>
 <div id="job"></div>
 <div class="recent" id="recent"></div>
 </main>
@@ -121,5 +138,7 @@ async function loadRecent(){
 }
 $('f').addEventListener('submit',e=>{e.preventDefault();const v=$('src').value.trim();if(v)open(v)});
 $('recent').addEventListener('click',e=>{const b=e.target.closest('[data-src]');if(b){$('src').value=b.dataset.src;open(b.dataset.src)}});
-loadRecent();poll();
+async function loadKey(){const s=await (await fetch('/api/key-status')).json();$('keystat').textContent=s.set?'Anthropic key saved on this Mac':'No Anthropic key yet';}
+$('kf').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('kin').value})});const j=await r.json();if(!r.ok){$('kerr').textContent=j.error;return}$('kin').value='';$('kerr').textContent='';loadKey()});
+loadKey();loadRecent();poll();
 </script></body></html>`;
