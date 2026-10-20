@@ -71,6 +71,18 @@ npm test                                   # unit tests
 node scripts/live-check.mjs http://localhost:5173   # real edits against a running app
 ```
 
+## Structure: like Figma
+
+Select anything, then use the action row in the Design panel (or keys):
+
+- **Move up/down** (⌥↑ ⌥↓), or **drag** the selected element over its siblings
+- **Duplicate** (⌘D) and **Delete** (⌫)
+- **Swap** an icon (searchable picker with previews, from the same icon library) or a component for another of yours
+- **Add** (I): text, heading, button (your Button if you have one), image (upload), icon, frame, or any of your components, before, after or inside the selection
+- **Images**: replace by upload or link, alt text, cover/contain/fill. Uploads go to `public/kerf/`.
+
+Imports are added and removed for you, every change is re-parsed before it is written, and if a change still breaks the page Kerf undoes it automatically. Elements shown by a condition or repeated by a list are protected: Kerf explains and points you to the parent.
+
 ## AI
 
 Paste your Anthropic key on the start page once (it is saved to `engine/.env`,
@@ -81,7 +93,8 @@ git-ignored). Then:
 - **Annotations (A):** draw a pin, box, circle or arrow, write a note; **Apply all** sends every note with the code under it.
 
 Claude (`claude-opus-5-5`, with server-side refusal fallback on) answers with the
-same property edits the panel makes. Kerf highlights the targets in amber and
+same edits the panel makes: styles, properties, text, and structure (delete,
+duplicate, move, swap icons and components, insert new elements, change images). Kerf highlights the targets in amber and
 writes nothing until you click **Apply**; every applied change can be undone.
 Requests about behavior or data are answered as developer work, with no edits.
 
@@ -92,6 +105,6 @@ Requests about behavior or data are answered as developer work, with no edits.
 
 ## Next
 
-1. Layout tools: margins, width and height, direction, reorder, add and remove elements, swap icons.
+1. Layout tools: margins, width and height, direction and alignment.
 2. Code-edit mode for anything the tools can’t express, with a diff preview and a compile check.
 3. Next.js support.

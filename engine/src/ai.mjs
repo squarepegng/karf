@@ -9,11 +9,12 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
 import { KerfError } from './edit.mjs';
 import { checkProp } from './props.mjs';
+import { checkSnippet } from './structure.mjs';
 
 const ENV = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env');
 const MODEL = 'claude-opus-5-5';
 
-export const PROPS = ['bg', 'color', 'borderC', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'align', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity', 'shadow'];
+export const PROPS = ['bg', 'color', 'borderC', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'align', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity', 'shadow', 'fit'];
 const NUMERIC = new Set(['fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity']);
 const COLOR = new Set(['bg', 'color', 'borderC']);
 
@@ -36,6 +37,13 @@ const Proposal = z.object({
       ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
       text: z.string().nullable().describe('New text, only when the element’s text is editable and the request asks to change wording; otherwise null'),
       props: z.array(z.object({ name: z.string(), value: z.string() })).describe('Component property changes, only names listed as editable for that element, with one of its allowed values; [] if none'),
+      action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'image']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit.'),
+      moveDir: z.enum(['up', 'down']).nullable().describe('For move: one place earlier or later among its siblings'),
+      swapTo: z.string().nullable().describe('For swap: exact name of an icon from the project’s icon library or one of its components'),
+      insertPosition: z.enum(['before', 'after', 'inside']).nullable().describe('For insert: relative to this element; inside puts it at the end of its children'),
+      insertJsx: z.string().nullable().describe('For insert: the new JSX. Plain tags (div, p, h2, span, img, button, ul/li…) or the project’s components and icons, Tailwind classes using the project’s tokens, fixed text only. No handlers, no expressions.'),
+      imageSrc: z.string().nullable().describe('For image: one of the uploaded images, or a URL the designer gave'),
+      imageAlt: z.string().nullable().describe('For image: alt text describing the image'),
       why: z.string().describe('A few words, e.g. "warmer, more premium card"'),
     }),
   ),
@@ -50,6 +58,8 @@ How to work:
 - Each element shows its source tag, its current classes and a few measured values. An element marked "shared component" is used in many places; editing it changes all of them, so mention that in your message.
 - Text is editable only where marked editable. Never invent product data.
 - Components can also have editable properties, like Figma component properties (an icon's weight or stroke, a button's variant). Use them: they are often the right tool for "more refined", "lighter", "bolder" icons and controls. Only use property names and values listed for that element.
+- You can also change structure, like a designer in Figma: delete an element, duplicate it, move it up or down among its siblings, swap an icon or component for another (use the exact icon names from the project's library, e.g. "replace the bookmark with a heart" is a swap to Heart), insert new elements before, after or inside an element, and change an image's source or alt text. To replace a plain element with something different, insert the new one before it, then delete the old one. Elements shown by a condition or repeated by a list can't be deleted or moved; edit their parent or their style instead.
+- New elements must fit the design: reuse the project's components where one fits, and use the project's tokens and scales in their classes.
 - Always do what you can. If part of a request needs something not in your toolset yet (swapping to a different icon, margins, element sizes, moving things), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
 - needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Kerf cannot make them yet; use not_yet for those.
 - This can be a conversation: earlier turns are included. Read follow-ups ("smaller", "undo that", "try again but warmer") against what you proposed before and whether it was applied.
@@ -67,8 +77,21 @@ function themeSummary(theme) {
   ].join('\n');
 }
 
+function libSummary(library) {
+  if (!library) return '';
+  const comps = [...library.componentList().keys()].sort();
+  const libs = Object.entries(library.iconLibs()).map(([k, v]) => `${k} (${v.size} icons; use exact names like ${[...v].slice(0, 3).join(', ')})`);
+  const ups = library.uploads();
+  return [
+    comps.length ? `Components you can insert or swap to: ${comps.join(', ')}` : '',
+    libs.length ? `Icon libraries: ${libs.join('; ')}` : '',
+    ups.length ? `Uploaded images: ${ups.join(', ')}` : 'No uploaded images yet.',
+  ].filter(Boolean).join('\n');
+}
+
 function describeTarget(t, i) {
-  const lines = [`[${t.loc}] <${t.tag}>${t.shared ? ' (shared component)' : ''}${t.note != null ? ` (note ${t.note})` : ''}`];
+  if (t.imgSrc) t = { ...t, text: `image: ${t.imgSrc}${t.alt ? ` (alt: ${t.alt})` : ''}` };
+  const lines = [`[${t.loc}] <${t.tag}>${t.shared ? ' (component definition: editing it changes every place it’s used)' : ''}${t.instance ? ' (this one use of the component: delete, move or restyle just this one here)' : ''}${t.note != null ? ` (note ${t.note})` : ''}`];
   if (t.text) lines.push(`  text: ${JSON.stringify(t.text.slice(0, 100))}${t.textEditable ? ' (editable)' : ' (not editable)'}`);
   if (t.classes?.length) lines.push(`  classes: ${t.classes.join(' ')}`);
   if (t.measured) lines.push(`  measured: ${Object.entries(t.measured).map(([k, v]) => `${k} ${v}`).join(', ')}`);
@@ -93,6 +116,8 @@ export function cleanOps(ops, theme) {
       else if (/^#?[0-9a-f]{6}$/i.test(v)) out.push({ prop, value: '#' + v.replace('#', '').toUpperCase() });
     } else if (prop === 'shadow') {
       if (v === 'none' || theme.shadow.includes(v)) out.push({ prop, value: v });
+    } else if (prop === 'fit') {
+      if (['cover', 'contain', 'fill', 'none', 'scale-down'].includes(v)) out.push({ prop, value: v });
     } else if (prop === 'align') {
       if (['left', 'center', 'right', 'justify'].includes(v)) out.push({ prop, value: v });
     }
@@ -100,7 +125,7 @@ export function cleanOps(ops, theme) {
   return out;
 }
 
-export async function propose({ request, targets, history = [] }, theme) {
+export async function propose({ request, targets, history = [] }, theme, library) {
   const key = apiKey();
   if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
   if (!request || !String(request).trim()) throw new KerfError('Say or type what should change.');
@@ -116,7 +141,7 @@ export async function propose({ request, targets, history = [] }, theme) {
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'medium', format: betaZodOutputFormat(Proposal) },
-      system: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}`,
+      system: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}\n${libSummary(library)}`,
       messages: [
         ...history.slice(-8).map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.text).slice(0, 2000) })),
         { role: 'user', content: `Elements on screen:\n${targets.map(describeTarget).join('\n')}\n\nRequest:\n${request}` },
@@ -133,9 +158,30 @@ export async function propose({ request, targets, history = [] }, theme) {
   if (!p) throw new KerfError('Claude’s answer couldn’t be read. Try again.');
 
   const edits = [];
+  const known = (nm) => !!library.findIcon(nm) || library.componentList().has(nm);
+  const urls = new Set([...String(request).matchAll(/https?:\/\/\S+/g)].map((m) => m[0].replace(/[).,]+$/, '')));
+  const uploads = new Set(library.uploads());
   for (const e of p.edits || []) {
     const t = allowed.get(e.loc);
-    if (!t || t.classKind === 'dynamic') continue;
+    if (!t) continue;
+    if (e.action && e.action !== 'style') {
+      const st = { type: e.action };
+      if (e.action === 'move') st.dir = e.moveDir || 'down';
+      if (e.action === 'swap') { if (!known(e.swapTo)) continue; st.to = e.swapTo; }
+      if (e.action === 'insert') {
+        try { checkSnippet(e.insertJsx || '', known); } catch { continue; }
+        st.jsx = e.insertJsx; st.position = e.insertPosition || 'after';
+      }
+      if (e.action === 'image') {
+        if (e.imageSrc && !uploads.has(e.imageSrc) && !urls.has(e.imageSrc)) e.imageSrc = null;
+        if (!e.imageSrc && e.imageAlt == null) continue;
+        if (e.imageSrc) st.src = e.imageSrc;
+        if (e.imageAlt != null) st.alt = e.imageAlt;
+      }
+      edits.push({ loc: e.loc, tag: t.tag, ops: [], props: [], text: null, structure: st, why: e.why });
+      continue;
+    }
+    if (t.classKind === 'dynamic') continue;
     const ops = cleanOps(e.ops || [], theme);
     const text = e.text && t.textEditable ? e.text : null;
     const props = [];

@@ -6,6 +6,7 @@ import MagicString from 'magic-string';
 import { parseCode, walk } from './ast.mjs';
 import { applyOps, isOffScale } from './tailwind.mjs';
 import { propsInfo, applyProps } from './props.mjs';
+import { structureEdit } from './structure.mjs';
 
 export class KerfError extends Error {}
 
@@ -148,10 +149,23 @@ export function editElement(code, line, col, { ops = [], text, props = [] } = {}
 }
 
 // File-level wrapper with an undo history, used by the dev server.
-export function createEditor(webRoot, getTheme) {
+export function createEditor(webRoot, getTheme, library) {
   const history = [];
+  const record = (file, rel, before, code, loc, change, summary) => {
+    fs.writeFileSync(file, code);
+    history.push({ file, rel, before, after: code, loc, change, summary, source: change.source || 'hand', at: Date.now() });
+    return { file: rel, changed: true, summary, n: history.length };
+  };
   return {
     history,
+    // Delete, duplicate, move, swap, insert, image.
+    structure(loc, op, source) {
+      const { rel, file, line, col } = parseLoc(loc, webRoot);
+      const before = fs.readFileSync(file, 'utf8');
+      const { code, summary } = structureEdit(before, line, col, op, { file, library });
+      if (code === before) return { file: rel, changed: false, summary };
+      return record(file, rel, before, code, loc, { structure: op, source }, summary);
+    },
     describe(loc) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);
       return { file: rel, line, ...describe(fs.readFileSync(file, 'utf8'), line, col) };
@@ -161,9 +175,7 @@ export function createEditor(webRoot, getTheme) {
       const before = fs.readFileSync(file, 'utf8');
       const { code, summary } = editElement(before, line, col, change, getTheme());
       if (code === before) return { file: rel, changed: false, summary };
-      fs.writeFileSync(file, code);
-      history.push({ file, rel, before, after: code, loc, change, summary, source: change.source || "hand", at: Date.now() });
-      return { file: rel, changed: true, summary, n: history.length };
+      return record(file, rel, before, code, loc, change, summary);
     },
     undo() {
       const h = history.pop();

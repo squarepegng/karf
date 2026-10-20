@@ -8,6 +8,7 @@ import { loadTheme } from './tailwind.mjs';
 import { createEditor, KerfError } from './edit.mjs';
 import { propose } from './ai.mjs';
 import { createSession } from './session.mjs';
+import { createLibrary } from './library.mjs';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -29,6 +30,7 @@ export default function kerf() {
   let theme;
   let editor;
   let session;
+  let library;
 
   return {
     name: 'kerf',
@@ -38,7 +40,8 @@ export default function kerf() {
       webRoot = config.root;
       srcDir = path.join(webRoot, 'src') + path.sep;
       theme = await loadTheme(webRoot);
-      editor = createEditor(webRoot, () => theme);
+      library = createLibrary(webRoot);
+      editor = createEditor(webRoot, () => theme, library);
       session = createSession(webRoot, editor);
     },
     transform(code, id) {
@@ -66,11 +69,14 @@ export default function kerf() {
             return send(200, { name: g.repo || pkg.name || path.basename(webRoot), branch: g.git ? g.branch : null, repo: g.repo, gh: g.gh, files: g.files || [] });
           }
           if (req.method === 'GET' && route === '/versions') return send(200, session.list());
+          if (req.method === 'GET' && route === '/icons') return send(200, library.searchIcons(new URL(req.url, 'http://x').searchParams.get('q'), 80, new URL(req.url, 'http://x').searchParams.get('lib') || undefined));
+          if (req.method === 'GET' && route === '/components') return send(200, [...library.componentList().values()].map((c) => ({ name: c.name, file: c.rel })).sort((a, b) => a.name.localeCompare(b.name)));
+          if (req.method === 'GET' && route === '/uploads') return send(200, library.uploads());
           if (req.method === 'GET' && route === '/theme') return send(200, theme);
           if (req.method === 'GET' && route === '/changes') return send(200, editor.history.map(({ rel, loc, change, summary, at }) => ({ file: rel, loc, change, summary, at })));
           if (req.method !== 'POST') return send(404, { error: 'Not found' });
           const body = await readBody(req);
-          const writes = ['/edit', '/undo', '/ai/apply'];
+          const writes = ['/edit', '/undo', '/ai/apply', '/structure'];
           if (writes.includes(route) && session.isPeeking()) return send(409, { error: 'You’re looking at an earlier version. Close it to keep editing.' });
           if (route === '/version') return send(200, session.snapshot());
           if (route === '/restore') return send(200, session.restore(Number(body.n)));
@@ -80,6 +86,10 @@ export default function kerf() {
           if (route === '/inspect') return send(200, editor.describe(body.loc));
           if (route === '/edit') return send(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props }));
           if (route === '/undo') return send(200, editor.undo());
+          if (route === '/structure') return send(200, editor.structure(body.loc, body.op));
+          if (route === '/upload') {
+            try { return send(200, library.saveUpload(body.name, body.data)); } catch (e) { throw new KerfError(e.message); }
+          }
           if (route === '/ai') {
             // Add what only the source knows: real tag, classes, whether text is editable.
             const targets = (body.targets || []).slice(0, 80).map((t) => {
@@ -90,11 +100,16 @@ export default function kerf() {
                 return null;
               }
             }).filter(Boolean);
-            return send(200, await propose({ request: body.request, targets, history: body.history }, theme));
+            return send(200, await propose({ request: body.request, targets, history: body.history }, theme, library));
           }
           if (route === '/ai/apply') {
-            const results = (body.edits || []).map((e) => {
+            // Apply from the bottom of each file up, structure last per element, so positions stay valid.
+            const lineOf = (e) => Number(String(e.loc).split(':').slice(-2)[0]) || 0;
+            const rank = (e) => (!e.structure ? 0 : e.structure.type === 'delete' ? 2 : 1);
+            const ordered = (body.edits || []).slice().sort((a, b) => String(a.loc).split(':')[0].localeCompare(String(b.loc).split(':')[0]) || lineOf(b) - lineOf(a) || rank(a) - rank(b));
+            const results = ordered.map((e) => {
               try {
+                if (e.structure) return { loc: e.loc, ok: true, ...editor.structure(e.loc, e.structure, 'ai') };
                 return { loc: e.loc, ok: true, ...editor.edit(e.loc, { ops: e.ops, text: e.text || undefined, props: e.props, source: 'ai' }) };
               } catch (err) {
                 return { loc: e.loc, ok: false, error: err.message };

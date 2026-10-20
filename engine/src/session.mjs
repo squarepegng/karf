@@ -16,6 +16,7 @@ export function createSession(webRoot, editor) {
     if (s.removed.length || s.added.length) parts.push(`${s.removed.join(' ') || '—'} → ${s.added.join(' ')}`);
     if (s.text) parts.push(`“${s.text.to}”`);
     (s.props || []).forEach((p) => parts.push(`${p.name}: ${p.from ?? 'default'} → ${p.to}`));
+    if (s.action) parts.unshift(s.action);
     return { file: h.rel, loc: h.loc, label: parts.join(' · '), source: h.source || 'hand' };
   };
 

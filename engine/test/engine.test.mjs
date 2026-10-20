@@ -119,3 +119,59 @@ test('component properties: refuses bad values, computed props and behavior prop
   assert.throws(() => editElement(ICONS, 5, 23, { props: [{ name: 'onClick', value: 'x' }] }, th), /isn’t a property/);
   assert.match(editElement(ICONS, 5, 23, { props: [{ name: 'variant', value: 'outline' }] }, th).code, /variant="outline"/);
 });
+
+import { structureEdit } from '../src/structure.mjs';
+const lib = {
+  findIcon: (n) => (['Heart', 'Star', 'Bookmark'].includes(n) ? 'lucide-react' : null),
+  componentList: () => new Map([['Badge', { name: 'Badge', file: '/app/src/components/ui/badge.tsx' }]]),
+  importPath: () => '@/components/ui/badge',
+};
+const ctx = { file: '/app/src/Page.tsx', library: lib };
+const PAGE = `import { Bookmark } from 'lucide-react';
+import logo from '@/assets/logo.svg';
+export const Page = ({ ok }) => (
+  <div className="flex">
+    <h1 className="text-xl">Title</h1>
+    <p>Body</p>
+    <Bookmark className="h-4 w-4" />
+    <img src={logo} alt="Logo" />
+    {ok && <span>Shown</span>}
+  </div>
+);
+`;
+const at = (n) => { const l = PAGE.split('\n')[n - 1]; return [n, l.search(/</)]; };
+
+test('delete removes the element and its now-unused import', () => {
+  const { code } = structureEdit(PAGE, ...at(7), { type: 'delete' }, ctx);
+  assert.doesNotMatch(code, /Bookmark/);
+  assert.match(code, /<p>Body<\/p>\n    <img/);
+});
+test('swap an icon updates the tag and the import', () => {
+  const { code, summary } = structureEdit(PAGE, ...at(7), { type: 'swap', to: 'Heart' }, ctx);
+  assert.match(code, /import \{ Heart \} from 'lucide-react';/);
+  assert.match(code, /<Heart className="h-4 w-4" \/>/);
+  assert.equal(summary.action, 'Swapped Bookmark → Heart');
+  assert.throws(() => structureEdit(PAGE, ...at(7), { type: 'swap', to: 'Unicorn' }, ctx), /isn’t an icon/);
+});
+test('move and duplicate keep sibling order and indentation', () => {
+  const moved = structureEdit(PAGE, ...at(6), { type: 'move', dir: 'up' }, ctx).code;
+  assert.match(moved, /<p>Body<\/p>\n    <h1/);
+  const dup = structureEdit(PAGE, ...at(5), { type: 'duplicate' }, ctx).code;
+  assert.equal((dup.match(/<h1/g) || []).length, 2);
+});
+test('insert adds a component with its import, and refuses code', () => {
+  const { code } = structureEdit(PAGE, ...at(5), { type: 'insert', position: 'after', jsx: '<Badge>New</Badge>' }, ctx);
+  assert.match(code, /import \{ Badge \} from '@\/components\/ui\/badge';/);
+  assert.match(code, /<\/h1>\n    <Badge>New<\/Badge>/);
+  assert.throws(() => structureEdit(PAGE, ...at(5), { type: 'insert', jsx: '<button onClick={go}>x</button>' }, ctx), /behavior|code/);
+  assert.match(structureEdit(PAGE, ...at(4), { type: 'insert', position: 'inside', jsx: '<p>End</p>' }, ctx).code, /<p>End<\/p>\n  <\/div>/);
+});
+test('image: new src replaces an imported image and drops the import; alt text', () => {
+  const { code } = structureEdit(PAGE, ...at(8), { type: 'image', src: '/kerf/hero.png', alt: 'Hero' }, ctx);
+  assert.match(code, /<img src="\/kerf\/hero.png" alt="Hero" \/>/);
+  assert.doesNotMatch(code, /import logo/);
+});
+test('refuses to delete elements shown by code or a component root', () => {
+  assert.throws(() => structureEdit(PAGE, 9, PAGE.split('\n')[8].indexOf('<span'), { type: 'delete' }, ctx), /condition/);
+  assert.throws(() => structureEdit(PAGE, ...at(4), { type: 'delete' }, ctx), /outer element/);
+});

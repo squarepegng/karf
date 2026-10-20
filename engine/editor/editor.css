@@ -221,3 +221,27 @@ aside[hidden]{display:none!important}
 .secT{font-size:11px;line-height:14px;font-weight:500;color:var(--ink2)}
 a{color:#7FA6F2}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* structure */
+.acts2{display:flex;gap:2px;padding:2px;background:var(--raised);border-radius:6px}
+.acts2 .ib{flex:1;width:auto;height:24px;border-radius:4px}
+.acts2 .ib:hover{background:var(--line)}
+.ib.danger:hover{color:var(--danger)}
+.thumb{height:120px;border-radius:6px;background:repeating-conic-gradient(#2D2D32 0 25%,#26262B 0 50%) 0 0/16px 16px;display:grid;place-items:center;overflow:hidden}
+.thumb img{max-width:100%;max-height:100%;object-fit:contain}
+.ibs.txt .ib{color:var(--ink2);font-weight:500}
+.ibs.txt .ib.on{color:var(--ink)}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:76px;border:1px solid var(--line);border-radius:8px;background:var(--raised);color:var(--ink);text-align:center;padding:6px}
+.tile:hover{border-color:var(--select)}
+.tile span{font-size:12px;line-height:14px}
+.clist{display:flex;flex-direction:column;max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px}
+.crow{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border:0;border-radius:4px;background:transparent;color:var(--ink);text-align:left}
+.crow:hover{background:var(--raised)}
+.crow .note{margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:55%}
+.igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;max-height:340px;overflow:auto}
+.icell{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;border:1px solid transparent;border-radius:8px;background:var(--raised);color:var(--ink2)}
+.icell:hover{border-color:var(--select);color:var(--ink)}
+.icell img{width:22px;height:22px;filter:invert(1)}
+.icell span{font-size:10px;line-height:12px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dropLine{position:absolute;background:var(--select);border-radius:2px;pointer-events:none;z-index:5}

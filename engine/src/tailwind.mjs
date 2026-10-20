@@ -100,6 +100,7 @@ export function matcher(prop, th) {
     case 'padX': return (c) => /^(px|pl|pr|ps|pe)-/.test(c);
     case 'padY': return (c) => /^(py|pt|pb)-/.test(c);
     case 'radius': return (c) => c === 'rounded' || c.startsWith('rounded-');
+    case 'fit': return (c) => /^object-(cover|contain|fill|none|scale-down)$/.test(c);
     case 'rTL': return corner('tl');
     case 'rTR': return corner('tr');
     case 'rBR': return corner('br');
@@ -132,6 +133,7 @@ export function classFor(prop, v, th) {
     case 'fontWeight': { const k = th.fontWeight[String(v)]; return k ? `font-${k}` : `font-[${v}]`; }
     case 'opacity': { const k = th.opacity[v]; return k != null ? `opacity-${k}` : `opacity-[${v / 100}]`; }
     case 'align': return `text-${v}`;
+    case 'fit': return `object-${v}`;
     case 'shadow': return v === 'none' ? 'shadow-none' : v === 'DEFAULT' ? 'shadow' : `shadow-${v}`;
     case 'bg': case 'color': case 'borderC': {
       const pre = { bg: 'bg', color: 'text', borderC: 'border' }[prop];

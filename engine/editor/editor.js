@@ -268,6 +268,10 @@
     check: '<path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
     eye: '<path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.2"/>',
     sidebar: '<rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M6 3v10" stroke="currentColor" stroke-width="1.25"/>',
+    trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>',
+    dup: '<rect x="5" y="5" width="8.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>',
+    swap: '<path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
+    image: '<rect x="2.5" y="3" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="6" cy="6.5" r="1.2" fill="currentColor"/><path d="M3 12l3.5-3.5 2.5 2.5 2-2 2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>',
     reload: '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v3h-3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
   };
   const ico = (n, s = 14) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16" aria-hidden="true">${IC[n]}</svg>`;
@@ -309,6 +313,7 @@
       ${S.mode === 'preview'
         ? `<button class="tb${S.askOpen ? ' on' : ''}" data-act="ask" aria-label="Ask Kerf">${ico('spark', 16)}${tip('Ask Kerf', '⌘K')}</button>`
         : `<button class="tb${S.tab === 'chat' ? ' on' : ''}" data-act="chatToggle" aria-label="Chat with Kerf">${ico('spark', 16)}${tip('Chat with Kerf', '⌘K')}</button>`}
+      ${S.mode === 'edit' ? `<button class="tb" data-act="insertMenu" aria-label="Add element">${ico('plus', 16)}${tip('Add element', 'I')}</button>` : ''}
       <button class="tb${S.tool === 'annotate' ? ' on' : ''}" data-act="tool" data-v="annotate" aria-label="Annotate">${ico('pen', 16)}${tip('Annotate', 'A')}</button>
       ${S.tool === 'annotate' ? `<div class="shapes">${['pin', 'box', 'circle', 'arrow'].map((k, i) => `<button class="tb sm${S.shape === k ? ' on' : ''}" data-act="shape" data-v="${k}" aria-label="${k}">${ico(k, 14)}${tip(k[0].toUpperCase() + k.slice(1), String(i + 1))}</button>`).join('')}</div>` : ''}
       <span class="div"></span>
@@ -425,11 +430,13 @@
     let h = `<div class="sec head"><div class="secH"><span class="nm">${ico(s.use ? 'comp' : 'frame')}${esc(name)}</span>${hb('parent', 'up', 'Select parent')}</div>
       <span class="path">${esc(loc.replace(/:(\d+):\d+$/, ':$1'))}</span>
       ${s.def && s.use ? `<div class="seg"><button data-act="scope" data-v="all" class="${S.scope === 'all' ? 'on' : ''}" title="Change the component itself, everywhere it's used">Everywhere</button><button data-act="scope" data-v="here" class="${S.scope === 'here' ? 'on' : ''}" title="Change only this use of the component">Only here</button></div>` : ''}
-      ${s.repeat > 1 ? `<span class="note">Repeated ×${s.repeat} by the same code: edits apply to all of them.</span>` : ''}</div>`;
+      ${s.repeat > 1 ? `<span class="note">Repeated ×${s.repeat} by the same code: edits apply to all of them.</span>` : ''}
+      ${actionsHTML()}</div>`;
     if (!inf) h += `<div class="sec"><span class="note">Reading code…</span></div>`;
     else if (inf.error) h += `<div class="sec"><span class="note warn">${esc(inf.error)}</span></div>`;
     else if (!el.isConnected) h += `<div class="sec"><span class="note">This element isn’t on screen right now.</span></div>`;
     else {
+      h += imageSection(el);
       h += propsSection(inf);
       if (inf.classKind === 'dynamic') h += `<div class="sec"><span class="note warn">${esc(inf.classReason)}</span></div>`;
       if (inf.text?.editable) h += sec('Content', `<label class="inp"><input type="text" data-text="1" value="${esc(inf.text.value)}" aria-label="Text"></label>`);
@@ -567,7 +574,7 @@
     const block = (e) => {
       if (S.mode !== 'edit' && S.tool !== 'annotate') return;
       if (S.editing && S.editing.contains(e.target)) return;
-      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      e.preventDefault(); e.stopPropagation();
     };
     ['pointerdown', 'mousedown', 'mouseup', 'pointerup', 'touchstart', 'submit', 'contextmenu', 'auxclick'].forEach((t) => W.addEventListener(t, block, true));
     let lastClick = null;
@@ -618,7 +625,8 @@
     if (e.key === 'Escape') {
       if (S.editing) return;
       e.preventDefault();
-      if (S.cpick) { S.cpick = null; renderPanel(); }
+      if (!$('modal').hidden) { $('modal').hidden = true; }
+      else if (S.cpick) { S.cpick = null; renderPanel(); }
       else if (S.noteDraft) { S.noteDraft = null; renderMarks(); }
       else if (S.card && !S.card.busy && S.card.where !== 'chat') { S.card = null; S.amber = []; renderAll(); }
       else if (S.askOpen) { S.askOpen = false; S.amber = []; renderAsk(); renderBar(); }
@@ -832,15 +840,24 @@
   const PROP_NAMES = { bg: 'Fill', color: 'Text color', borderC: 'Stroke color', fontSize: 'Size', fontWeight: 'Weight', lineHeight: 'Line height', letterSpacing: 'Letter spacing', align: 'Align', radius: 'Radius', rTL: 'Top-left corner', rTR: 'Top-right corner', rBR: 'Bottom-right corner', rBL: 'Bottom-left corner', padX: 'Padding X', padY: 'Padding Y', gap: 'Gap', borderW: 'Stroke', opacity: 'Opacity', shadow: 'Shadow' };
   const UNIT = { fontSize: 'px', lineHeight: 'px', radius: 'px', rTL: 'px', rTR: 'px', rBR: 'px', rBL: 'px', padX: 'px', padY: 'px', gap: 'px', borderW: 'px', opacity: '%', letterSpacing: '%' };
   const opLabel = (o) => `${PROP_NAMES[o.prop] || o.prop} ${o.value}${UNIT[o.prop] || ''}`;
-  const editLabel = (e) => [...e.ops.map(opLabel), ...(e.props || []).map((p) => `${p.name}: ${p.value}`), ...(e.text ? [`“${e.text}”`] : [])].join(' · ');
+  const structLabel = (st) => ({ delete: 'Delete', duplicate: 'Duplicate', move: `Move ${st.dir || 'to ' + st.index}`, swap: `Swap → ${st.to}`, insert: `Add ${st.position}: ${(st.jsx || '').slice(0, 60)}`, image: [st.src && `Image → ${st.src}`, st.alt != null && `Alt “${st.alt}”`].filter(Boolean).join(' · ') })[st.type];
+  const editLabel = (e) => e.structure ? structLabel(e.structure) : [...e.ops.map(opLabel), ...(e.props || []).map((p) => `${p.name}: ${p.value}`), ...(e.text ? [`“${e.text}”`] : [])].join(' · ');
   function measure(el) {
     const c = cs(el);
     return { fontSize: c.fontSize, color: rgbHex(c.color), fill: rgbHex(c.backgroundColor), radius: c.borderTopLeftRadius, padding: c.padding, display: c.display };
   }
+  function targetsOf(el, note) {
+    const def = defOf(el), use = useOf(el);
+    const base = targetOf(el, note);
+    if (!(def && use && el.getAttribute('data-kerf-n'))) return [base];
+    // A component instance: the use site (just this one) and the definition (every use).
+    return [{ ...base, loc: use, instance: true, shared: false }, { ...base, loc: def, shared: true, instance: false }];
+  }
   function targetOf(el, note) {
     const def = defOf(el), use = useOf(el);
-    const loc = use && (!def || el.tagName.toLowerCase() === 'svg') ? use : def || use;
-    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note };
+    const loc = use && (!def || el.tagName.toLowerCase() === 'svg' || el.getAttribute('data-kerf-n')) ? use : def || use;
+    const img = el.tagName.toLowerCase() === 'img' ? { imgSrc: el.getAttribute('src'), alt: el.getAttribute('alt') } : {};
+    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note, ...img };
   }
   function uniq(list) {
     const seen = new Set(), out = [];
@@ -849,13 +866,13 @@
   }
   const tagged = (root) => (root || D ? [...(root || D).querySelectorAll('[data-kerf],[data-kerf-use]')] : []);
   const onScreen = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < W.innerHeight && r.right > 0 && r.left < W.innerWidth; };
-  const visibleTargets = () => (D ? uniq(tagged().filter(onScreen).map((el) => targetOf(el))).slice(0, 80) : []);
+  const visibleTargets = () => (D ? uniq(tagged().filter(onScreen).flatMap((el) => targetsOf(el))).slice(0, 90) : []);
   function selectionTargets() {
-    const el = S.sel.el, out = [targetOf(el)];
+    const el = S.sel.el, out = [...targetsOf(el)];
     if (activeLoc() !== out[0].loc) out.unshift({ ...out[0], loc: activeLoc() });
     let p = el.parentElement;
     for (let i = 0; p && i < 2; p = p.parentElement) { const t = pick(p); if (t) { out.push(targetOf(t)); p = t; i++; } }
-    tagged(el).slice(0, 30).forEach((c) => out.push(targetOf(c)));
+    tagged(el).slice(0, 30).forEach((c) => out.push(...targetsOf(c)));
     return uniq(out);
   }
   function noteTargets(n, i) {
@@ -868,7 +885,7 @@
         if (r.width && cx >= n.x && cx <= n.x + n.w && cy >= n.y && cy <= n.y + n.h) els.push(el);
       });
     }
-    return uniq(els.map((el) => targetOf(el, i + 1))).slice(0, 20);
+    return uniq(els.flatMap((el) => targetsOf(el, i + 1))).slice(0, 24);
   }
 
   // One conversation shared by the Ask bar, notes and chat.
@@ -1057,6 +1074,233 @@
     const t = e.target.closest('[data-act="tool"],[data-act="shape"]');
     if (t) { if (t.dataset.act === 'tool') setTool(S.tool === t.dataset.v ? 'select' : t.dataset.v); else { S.shape = t.dataset.v; renderBar(); } }
   });
+
+  /* ---------- structure: delete, duplicate, move, swap, insert, images ---------- */
+  const kebab = (n) => n.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Za-z])([0-9])/g, '$1-$2').toLowerCase();
+  const iconSrc = (i) => i.lib === 'lucide-react' ? `https://unpkg.com/lucide-static@0.468.0/icons/${kebab(i.name)}.svg` : `https://unpkg.com/@phosphor-icons/core@2.1.1/assets/regular/${kebab(i.name)}.svg`;
+  // Structural edits go to where an element is used (the instance), unless it's a plain element.
+  const structLoc = () => (S.sel ? (S.sel.use && (S.scope === 'here' || !S.sel.def || nameOf(S.sel.el) !== S.sel.el.tagName.toLowerCase()) ? S.sel.use : S.sel.def || S.sel.use) : null);
+  async function structure(op, { keepSel } = {}) {
+    const loc = structLoc();
+    if (!loc) { toast('Select an element first.', '', true); return false; }
+    const before = D?.querySelector('vite-error-overlay');
+    try {
+      const r = await api('/structure', { loc, op });
+      if (!r.changed) return false;
+      S.count = r.n;
+      toast(`${fileName(r.file)} · ${r.summary.action}`, '', false, true);
+      if (!keepSel) { S.sel = null; renderPanel(); }
+      afterEdit();
+      guard(before);
+      return true;
+    } catch (e) { toast(e.message, '', true); return false; }
+  }
+  // If a change makes the page fail to build, undo it straight away.
+  function guard(hadError) {
+    if (hadError) return;
+    setTimeout(async () => {
+      if (!D?.querySelector('vite-error-overlay')) return;
+      await api('/undo', {}).catch(() => {});
+      toast('That change broke the page, so Kerf undid it.', '', true);
+      afterEdit();
+      setTimeout(() => D?.querySelector('vite-error-overlay')?.remove(), 1500);
+    }, 1500);
+  }
+  function actionsHTML() {
+    const isComp = S.sel && /^[A-Z]/.test(nameOf(S.sel.el)) || S.sel?.el.tagName.toLowerCase() === 'svg';
+    return `<div class="acts2">
+      <button class="ib" data-act="sMove" data-v="up" title="Move up · ⌥↑" aria-label="Move up">${ico('up')}</button>
+      <button class="ib" data-act="sMove" data-v="down" title="Move down · ⌥↓" aria-label="Move down"><span style="display:inline-block;transform:rotate(180deg)">${ico('up')}</span></button>
+      <button class="ib" data-act="sDup" title="Duplicate · ⌘D" aria-label="Duplicate">${ico('dup')}</button>
+      ${isComp ? `<button class="ib" data-act="sSwap" title="Swap for another icon or component" aria-label="Swap">${ico('swap')}</button>` : ''}
+      <button class="ib" data-act="insertMenu" title="Add an element here · I" aria-label="Add">${ico('plus')}</button>
+      <button class="ib danger" data-act="sDel" title="Delete · ⌫" aria-label="Delete">${ico('trash')}</button>
+    </div>`;
+  }
+  function imageSection(el) {
+    if (!el || el.tagName.toLowerCase() !== 'img') return '';
+    const src = el.getAttribute('src') || '', alt = el.getAttribute('alt') || '';
+    const fit = cs(el).objectFit;
+    return sec('Image', `<div class="thumb"><img src="${esc(el.currentSrc || src)}" alt=""></div>
+      <div class="r2"><button class="outline" data-act="imgUpload">Replace…</button><button class="outline" data-act="imgLink">Use a link</button></div>
+      <label class="inp" title="Alt text"><span class="u">Alt</span><input type="text" data-alt="1" value="${esc(alt)}" placeholder="Describe the image"></label>
+      <div class="ibs txt">${['cover', 'contain', 'fill'].map((v) => `<button class="ib${fit === v ? ' on' : ''}" data-act="set" data-p="fit" data-v="${v}" title="${v === 'cover' ? 'Fill the box, crop the edges' : v === 'contain' ? 'Fit inside the box' : 'Stretch to the box'}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('')}</div>`);
+  }
+  function pickFile() {
+    return new Promise((resolve) => {
+      const i = document.createElement('input');
+      i.type = 'file';
+      i.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/avif';
+      i.onchange = () => resolve(i.files[0] || null);
+      i.click();
+    });
+  }
+  async function upload(file) {
+    if (!file) return null;
+    if (file.size > 10 * 1024 * 1024) { toast('Images must be under 10 MB.', '', true); return null; }
+    const data = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(file); });
+    try { return (await api('/upload', { name: file.name, data })).src; } catch (e) { toast(e.message, '', true); return null; }
+  }
+
+  /* insert menu */
+  function tokenClass(pre, wanted, fallback) {
+    const t = tokens().map(([n]) => n);
+    const hit = wanted.find((w) => t.includes(w));
+    return hit ? `${pre}-${hit}` : fallback;
+  }
+  async function templates() {
+    if (!S.components) S.components = await api('/components').catch(() => []);
+    const has = (n) => S.components.some((c) => c.name === n);
+    const ink = tokenClass('text', ['content', 'foreground', 'text'], 'text-gray-900');
+    const muted = tokenClass('text', ['muted', 'muted-foreground', 'faint'], 'text-gray-500');
+    return [
+      { k: 'text', label: 'Text', icon: 'text', jsx: `<p className="text-sm ${muted}">New text</p>` },
+      { k: 'heading', label: 'Heading', icon: 'text', jsx: `<h2 className="text-2xl font-semibold ${ink}">New heading</h2>` },
+      { k: 'button', label: has('Button') ? 'Button (your component)' : 'Button', icon: 'frame', jsx: has('Button') ? '<Button>Button</Button>' : `<button className="rounded-md px-4 py-2 text-sm font-medium ${tokenClass('bg', ['primary'], 'bg-gray-900')} ${tokenClass('text', ['primary-fg', 'primary-foreground'], 'text-white')}">Button</button>` },
+      { k: 'image', label: 'Image…', icon: 'image', image: true },
+      { k: 'icon', label: 'Icon…', icon: 'spark', iconPick: true },
+      { k: 'frame', label: 'Frame', icon: 'frame', jsx: `<div className="flex flex-col gap-3 rounded-lg ${tokenClass('border', ['border'], 'border-gray-200')} border p-4"><p className="text-sm ${muted}">New frame</p></div>` },
+    ];
+  }
+  async function openInsert() {
+    if (!S.sel) { toast('Select where the new element should go, then add it.', '', true); return; }
+    const list = await templates();
+    const comps = (S.components || []).filter((c) => !['Button'].includes(c.name));
+    const m = $('modal');
+    m.hidden = false;
+    m.innerHTML = `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="insT" style="width:440px">
+      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="insT">Add an element</h2><span class="note">It goes ${S.insertPos === 'inside' ? 'inside' : S.insertPos === 'before' ? 'before' : 'after'} <b>${esc(nameOf(S.sel.el))}</b>.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <div class="db">
+        <div class="seg">${['before', 'after', 'inside'].map((p) => `<button data-act="insPos" data-v="${p}" class="${(S.insertPos || 'after') === p ? 'on' : ''}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div>
+        <div class="grid3">${list.map((t, i) => `<button class="tile" data-act="insTpl" data-v="${i}">${ico(t.icon, 18)}<span>${esc(t.label)}</span></button>`).join('')}</div>
+        ${comps.length ? `<div class="secT">Your components</div><label class="inp"><input id="compQ" placeholder="Search components" autocomplete="off"></label><div class="clist" id="compList">${compRows(comps, '')}</div>` : ''}
+      </div></section>`;
+    S._tpls = list;
+  }
+  const compRows = (comps, q) => comps.filter((c) => c.name.toLowerCase().includes(q.toLowerCase())).slice(0, 60).map((c) => `<button class="crow" data-act="insComp" data-v="${esc(c.name)}">${ico('comp', 12)}<span>${esc(c.name)}</span><span class="note mono">${esc(c.file.replace(/^src\//, ''))}</span></button>`).join('');
+  const CHILD_TEXT = /^(Button|Badge|Label|CardTitle|CardDescription|Tag|Chip|Link|Heading|Title|Text)$/;
+  async function insertJsx(jsx) {
+    $('modal').hidden = true;
+    await structure({ type: 'insert', position: S.insertPos || 'after', jsx });
+  }
+
+  /* icon picker (swap or insert) */
+  function openIcons(mode) {
+    const m = $('modal');
+    m.hidden = false;
+    m.innerHTML = `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="icT" style="width:520px">
+      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="icT">${mode === 'swap' ? 'Swap icon' : 'Add an icon'}</h2><span class="note">From your project’s icon library.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <div class="db"><label class="inp"><input id="iconQ" placeholder="Search icons, e.g. heart" autocomplete="off" data-mode="${mode}"></label><div class="igrid" id="iconGrid"><span class="note">Type to search…</span></div></div></section>`;
+    setTimeout(() => $('iconQ').focus(), 0);
+    searchIcons('', mode);
+  }
+  let iconT;
+  function searchIcons(q, mode) {
+    clearTimeout(iconT);
+    iconT = setTimeout(async () => {
+      const only = mode === 'swap' ? (S.sel?.useInfo?.lib || '') : '';
+      const list = await api('/icons?q=' + encodeURIComponent(q) + (only ? '&lib=' + encodeURIComponent(only) : '')).catch(() => []);
+      const g = $('iconGrid');
+      if (!g) return;
+      g.innerHTML = list.length ? list.map((i) => `<button class="icell" data-act="pickIcon" data-v="${esc(i.name)}" data-mode="${mode}" title="${esc(i.name)} · ${esc(i.lib)}"><img src="${iconSrc(i)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span>${esc(i.name)}</span></button>`).join('') : '<span class="note">No icons match.</span>';
+    }, 120);
+  }
+  document.addEventListener('input', (e) => {
+    if (e.target.id === 'iconQ') searchIcons(e.target.value, e.target.dataset.mode);
+    if (e.target.id === 'compQ') $('compList').innerHTML = compRows((S.components || []).filter((c) => c.name !== 'Button'), e.target.value);
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.dataset.alt) structure({ type: 'image', alt: e.target.value }, { keepSel: true });
+  });
+  document.addEventListener('click', async (e) => {
+    const a = e.target.closest('[data-act]');
+    if (!a) return;
+    const act = a.dataset.act, v = a.dataset.v;
+    if (act === 'sDel') structure({ type: 'delete' });
+    else if (act === 'sDup') structure({ type: 'duplicate' });
+    else if (act === 'sMove') structure({ type: 'move', dir: v });
+    else if (act === 'sSwap') {
+      if (S.sel.el.tagName.toLowerCase() === 'svg') openIcons('swap');
+      else { S.insertPos = 'after'; openSwapComponent(); }
+    }
+    else if (act === 'insertMenu') openInsert();
+    else if (act === 'insPos') { S.insertPos = v; openInsert(); }
+    else if (act === 'insTpl') {
+      const t = S._tpls[+v];
+      if (t.iconPick) openIcons('insert');
+      else if (t.image) { $('modal').hidden = true; const src = await upload(await pickFile()); if (src) insertJsx(`<img src="${src}" alt="" className="h-auto w-full rounded-lg object-cover" />`); }
+      else insertJsx(t.jsx);
+    }
+    else if (act === 'insComp') insertJsx(CHILD_TEXT.test(v) ? `<${v}>${v}</${v}>` : `<${v} />`);
+    else if (act === 'pickIcon') {
+      if (a.dataset.mode === 'swap') { $('modal').hidden = true; structure({ type: 'swap', to: v }, { keepSel: true }); }
+      else insertJsx(`<${v} className="h-5 w-5" />`);
+    }
+    else if (act === 'swapComp') { $('modal').hidden = true; structure({ type: 'swap', to: v }, { keepSel: true }); }
+    else if (act === 'imgUpload') { const src = await upload(await pickFile()); if (src) structure({ type: 'image', src }, { keepSel: true }); }
+    else if (act === 'imgLink') { const u = prompt('Image link (https://…)'); if (u && /^https?:\/\//.test(u)) structure({ type: 'image', src: u.trim() }, { keepSel: true }); }
+  });
+  async function openSwapComponent() {
+    if (!S.components) S.components = await api('/components').catch(() => []);
+    const m = $('modal');
+    m.hidden = false;
+    m.innerHTML = `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="swT" style="width:440px">
+      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="swT">Swap ${esc(nameOf(S.sel.el))}</h2><span class="note">Replace it with another of your components. Its properties are kept.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <div class="db"><div class="clist">${S.components.map((c) => `<button class="crow" data-act="swapComp" data-v="${esc(c.name)}">${ico('comp', 12)}<span>${esc(c.name)}</span><span class="note mono">${esc(c.file.replace(/^src\//, ''))}</span></button>`).join('')}</div></div></section>`;
+  }
+  // Keyboard: delete, duplicate, move, insert.
+  window.addEventListener('keydown', structKeys, true);
+  function structKeys(e) {
+    const t = e.target;
+    if (S.mode !== 'edit' || !S.sel || S.editing || (t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName)))) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'delete' }); }
+    else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'duplicate' }); }
+    else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'move', dir: e.key === 'ArrowUp' ? 'up' : 'down' }); }
+    else if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'i') { e.preventDefault(); e.stopImmediatePropagation(); openInsert(); }
+  }
+
+  /* drag to reorder on the canvas: drag the selected element over a sibling */
+  let drag = null;
+  function bindDrag() {
+    if (!W) return;
+    W.addEventListener('keydown', structKeys, true);
+    W.addEventListener('pointerdown', (e) => {
+      if (S.mode !== 'edit' || S.tool === 'annotate' || !S.sel || !S.sel.el.contains(e.target) || S.editing) return;
+      const el = S.sel.el, parent = el.parentElement;
+      if (!parent) return;
+      const sibs = [...parent.children].filter((c) => c.matches('[data-kerf],[data-kerf-use]'));
+      if (sibs.length < 2) return;
+      drag = { el, sibs, x: e.clientX, y: e.clientY, on: false, idx: sibs.indexOf(el) };
+    }, true);
+    W.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      if (!drag.on && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+      drag.on = true;
+      const flow = cs(drag.el.parentElement);
+      const horiz = /row/.test(flow.flexDirection) && /flex/.test(flow.display) || /grid/.test(flow.display);
+      let best = 0, bd = 1e9, after = false;
+      drag.sibs.forEach((s, k) => {
+        const r = s.getBoundingClientRect(), c = horiz ? r.left + r.width / 2 : r.top + r.height / 2;
+        const d = Math.abs((horiz ? e.clientX : e.clientY) - c);
+        if (d < bd) { bd = d; best = k; after = (horiz ? e.clientX : e.clientY) > c; }
+      });
+      let to = best + (after ? 1 : 0);
+      if (to > drag.idx) to -= 1;
+      drag.to = to;
+      const r = drag.sibs[best].getBoundingClientRect(), line = $('dropLine');
+      line.hidden = false;
+      line.style.cssText = horiz ? `left:${(after ? r.right : r.left) - 1}px;top:${r.top}px;width:3px;height:${r.height}px` : `left:${r.left}px;top:${(after ? r.bottom : r.top) - 1}px;width:${r.width}px;height:3px`;
+    }, true);
+    W.addEventListener('pointerup', () => {
+      if (!drag) return;
+      const d = drag;
+      drag = null;
+      $('dropLine').hidden = true;
+      if (d.on && d.to != null && d.to !== d.idx) structure({ type: 'move', index: d.to });
+    }, true);
+  }
+  frame.addEventListener('load', bindDrag);
+  if (frame.contentDocument?.readyState === 'complete') setTimeout(bindDrag, 0);
 
   /* ---------- start ---------- */
   api('/theme').then((t) => { S.theme = t; renderPanel(); }).catch(() => {});
