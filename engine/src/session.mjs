@@ -8,16 +8,44 @@ import { KerfError } from './edit.mjs';
 export function createSession(webRoot, editor) {
   const versions = []; // { n, at, from, to } — indices into editor.history
   let peek = null; // { n, current: Map(file → content) }
+  let chat = { messages: [], notes: [] };
+
+  /* ---------- kept on disk, so a restart loses nothing ---------- */
+  const DIR = path.join(webRoot, '.kerf');
+  const FILE = path.join(DIR, 'session.json');
+  function save() {
+    try {
+      fs.mkdirSync(DIR, { recursive: true });
+      fs.writeFileSync(FILE, JSON.stringify({ v: 1, history: editor.history, versions, chat, peek: peek ? { n: peek.n, current: [...peek.current] } : null }));
+    } catch {}
+  }
+  function load() {
+    let d;
+    try { d = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { return; }
+    // A restart while showing "before": put the real files back first.
+    if (d.peek) for (const [file, content] of d.peek.current) { try { fs.writeFileSync(file, content); } catch {} }
+    editor.history.push(...(d.history || []).filter((h) => fs.existsSync(h.file)));
+    versions.push(...(d.versions || []).filter((v) => v.to <= editor.history.length));
+    chat = d.chat || chat;
+    save();
+  }
+  // Never commit Kerf's own folder.
+  function ignoreInGit() {
+    try {
+      const root = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd: webRoot, encoding: 'utf8' }).stdout.trim();
+      if (!root) return;
+      const ex = path.resolve(webRoot, root, 'info', 'exclude');
+      const cur = fs.existsSync(ex) ? fs.readFileSync(ex, 'utf8') : '';
+      if (!cur.includes('.kerf/')) { fs.mkdirSync(path.dirname(ex), { recursive: true }); fs.appendFileSync(ex, (cur.endsWith('\n') || !cur ? '' : '\n') + '# Kerf session data\n**/.kerf/\n'); }
+    } catch {}
+  }
 
   const end = () => (versions.length ? versions[versions.length - 1].to : 0);
   const entries = (from, to) => editor.history.slice(from, to);
   const describe = (h) => {
-    const s = h.summary, parts = [];
-    if (s.removed.length || s.added.length) parts.push(`${s.removed.join(' ') || '—'} → ${s.added.join(' ')}`);
-    if (s.text) parts.push(`“${s.text.to}”`);
-    (s.props || []).forEach((p) => parts.push(`${p.name}: ${p.from ?? 'default'} → ${p.to}`));
-    if (s.action) parts.unshift(s.action);
-    return { file: h.rel, loc: h.loc, label: parts.join(' · '), source: h.source || 'hand' };
+    const s = h.summary;
+    const code = [s.removed.length || s.added.length ? `${s.removed.join(' ') || '—'} → ${s.added.join(' ')}` : '', ...(s.props || []).map((p) => `${p.name}=${p.to}`)].filter(Boolean).join(' · ');
+    return { file: h.rel, loc: h.loc, label: (s.labels || []).join(' · ') || code, code, source: h.source || 'hand' };
   };
 
   function snapshot() {
@@ -76,7 +104,18 @@ export function createSession(webRoot, editor) {
     // Porcelain lines start with a status column that can be a space, so don't trim them.
     const st = spawnSync('git', ['status', '--porcelain', '--', ...(files.length ? files : ['.'])], { cwd: root, encoding: 'utf8' }).stdout || '';
     const dirty = st.split('\n').filter((l) => l.length > 3).map((l) => l.slice(3));
-    return { git: true, root, branch, remote, repo: m ? `${m[1]}/${m[2]}` : null, files: files.filter((f) => dirty.includes(f)), gh: hasGh() };
+    // Images uploaded through Kerf and used in the changed files ship with the PR.
+    const ups = new Set();
+    for (const h of editor.history) {
+      let content = '';
+      try { content = fs.readFileSync(h.file, 'utf8'); } catch {}
+      for (const m of content.matchAll(/["'(]\/kerf\/([\w.-]+\.(?:png|jpe?g|gif|webp|svg|avif))/gi)) {
+        const p = path.join(webRoot, 'public', 'kerf', m[1]);
+        if (fs.existsSync(p)) ups.add(path.relative(root, p));
+      }
+    }
+    const upDirty = ups.size ? spawnSync('git', ['status', '--porcelain', '--', ...ups], { cwd: root, encoding: 'utf8' }).stdout.split('\n').filter((l) => l.length > 3).map((l) => l.slice(3)) : [];
+    return { git: true, root, branch, remote, repo: m ? `${m[1]}/${m[2]}` : null, files: [...files.filter((f) => dirty.includes(f)), ...upDirty], gh: hasGh() };
   }
   const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'design-updates';
   const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
@@ -116,5 +155,7 @@ export function createSession(webRoot, editor) {
     return { ...plan, url, updated, needsGitHubStep: !viaGh };
   }
 
-  return { snapshot, list, restore, peekBefore, unpeek: () => { unpeekNow(); return list(); }, isPeeking: () => !!peek, repoInfo, pullRequest };
+  ignoreInGit();
+  load();
+  return { save, chat: () => chat, setChat: (c) => { chat = { messages: (c.messages || []).slice(-200), notes: c.notes || [] }; save(); }, snapshot, list, restore, peekBefore, unpeek: () => { unpeekNow(); return list(); }, isPeeking: () => !!peek, repoInfo, pullRequest };
 }

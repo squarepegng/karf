@@ -14,7 +14,7 @@ import { checkSnippet } from './structure.mjs';
 const ENV = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env');
 const MODEL = 'claude-opus-5-5';
 
-export const PROPS = ['bg', 'color', 'borderC', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'align', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity', 'shadow', 'fit', 'gradient', 'clipText'];
+export const PROPS = ['bg', 'color', 'borderC', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'align', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity', 'shadow', 'fit', 'gradient', 'clipText', 'mX', 'mY', 'w', 'h', 'layout', 'alignItems', 'justify', 'wrap'];
 const NUMERIC = new Set(['fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'radius', 'rTL', 'rTR', 'rBR', 'rBL', 'padX', 'padY', 'gap', 'borderW', 'opacity']);
 const COLOR = new Set(['bg', 'color', 'borderC']);
 
@@ -34,14 +34,16 @@ const Proposal = z.object({
   edits: z.array(
     z.object({
       loc: z.string().describe('Exactly one of the element ids you were given'),
-      ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
+      ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('For w/h: hug, fill or px. For layout: row, col or none. A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
       text: z.string().nullable().describe('New text, only when the element’s text is editable and the request asks to change wording; otherwise null'),
       props: z.array(z.object({ name: z.string(), value: z.string() })).describe('Component property changes, only names listed as editable for that element, with one of its allowed values; [] if none'),
-      action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'replace', 'image']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit.'),
+      action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'replace', 'group', 'ungroup', 'image']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit.'),
       moveDir: z.enum(['up', 'down']).nullable().describe('For move: one place earlier or later among its siblings'),
       swapTo: z.string().nullable().describe('For swap: exact name of an icon from the project’s icon library or one of its components'),
       insertPosition: z.enum(['before', 'after', 'inside']).nullable().describe('For insert: relative to this element; inside puts it at the end of its children'),
       insertJsx: z.string().nullable().describe('For insert or replace: the new JSX. Plain tags (div, p, h2, span, img, button, ul/li…) or the project’s components and icons, Tailwind classes using the project’s tokens, fixed text only. No handlers, no expressions.'),
+      groupWith: z.array(z.string()).nullable().describe('For group: ids of the neighboring siblings to wrap together with this element, in the same parent'),
+      groupClass: z.string().nullable().describe('For group: Tailwind classes for the new frame, e.g. "flex flex-row items-center gap-3"'),
       imageSrc: z.string().nullable().describe('For image: one of the uploaded images, or a URL the designer gave'),
       imageAlt: z.string().nullable().describe('For image: alt text describing the image'),
       why: z.string().describe('A few words, e.g. "warmer, more premium card"'),
@@ -60,8 +62,10 @@ How to work:
 - Components can also have editable properties, like Figma component properties (an icon's weight or stroke, a button's variant). Use them: they are often the right tool for "more refined", "lighter", "bolder" icons and controls. Only use property names and values listed for that element.
 - You can also change structure, like a designer in Figma: delete an element, duplicate it, move it up or down among its siblings, swap an icon or component for another (use the exact icon names from the project's library, e.g. "replace the bookmark with a heart" is a swap to Heart), insert new elements before, after or inside an element, and change an image's source or alt text. To replace an element with something different, use replace with the new JSX (never insert plus delete).
 - Gradients are a style: set the gradient property to "<direction> <from> <to>" or "<direction> <from> <via> <to>" with directions t, tr, r, br, b, bl, l, tl and project color tokens (e.g. "r primary positive"); "none" removes it. For gradient text, also set clipText to "on". Don't also set a fill: the gradient is the fill. Never rebuild an element just to restyle it. Elements shown by a condition or repeated by a list can't be deleted or moved; edit their parent or their style instead.
+- To arrange some siblings differently from the rest (e.g. put an input and a button side by side while the label stays above), group them: action group on the first one, groupWith the others, and groupClass for the new frame's layout. Then set Fill width on the child that should take the remaining space. Ungroup removes a plain wrapper and keeps its children.
 - New elements must fit the design: reuse the project's components where one fits, and use the project's tokens and scales in their classes.
-- Always do what you can. If part of a request needs something not in your toolset yet (swapping to a different icon, margins, element sizes, moving things), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
+- Layout works like Figma auto layout: layout row/col/none (direction), alignItems start/center/end/stretch, justify start/center/end/between, wrap wrap/nowrap, gap, padX/padY, margins mX/mY (px or auto), and width/height w/h as hug, fill or a px size.
+- Always do what you can. If part of a request needs something not in your toolset yet (free positioning, animation, hover states, new pages), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
 - needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Kerf cannot make them yet; use not_yet for those.
 - This can be a conversation: earlier turns are included. Read follow-ups ("smaller", "undo that", "try again but warmer") against what you proposed before and whether it was applied.
 - The message must describe only the edits you actually return. Write it for a designer, not a developer: plain words, no class names.`;
@@ -117,6 +121,20 @@ export function cleanOps(ops, theme) {
       else if (/^#?[0-9a-f]{6}$/i.test(v)) out.push({ prop, value: '#' + v.replace('#', '').toUpperCase() });
     } else if (prop === 'shadow') {
       if (v === 'none' || theme.shadow.includes(v)) out.push({ prop, value: v });
+    } else if (prop === 'mX' || prop === 'mY') {
+      if (v === 'auto') out.push({ prop, value: 'auto' });
+      else if (isFinite(parseFloat(v))) out.push({ prop, value: Math.round(parseFloat(v)) });
+    } else if (prop === 'w' || prop === 'h') {
+      if (['hug', 'fill', 'auto'].includes(v)) out.push({ prop, value: v });
+      else if (isFinite(parseFloat(v))) out.push({ prop, value: Math.round(parseFloat(v)) });
+    } else if (prop === 'layout') {
+      if (['row', 'col', 'none'].includes(v)) out.push({ prop, value: v });
+    } else if (prop === 'alignItems') {
+      if (['start', 'center', 'end', 'stretch', 'baseline'].includes(v)) out.push({ prop, value: v });
+    } else if (prop === 'justify') {
+      if (['start', 'center', 'end', 'between', 'around', 'evenly'].includes(v)) out.push({ prop, value: v });
+    } else if (prop === 'wrap') {
+      if (['wrap', 'nowrap'].includes(v)) out.push({ prop, value: v });
     } else if (prop === 'gradient') {
       const parts = v.split(/\s+/);
       const ok = (c) => c in theme.colors || /^#[0-9a-f]{6}$/i.test(c);
@@ -180,6 +198,10 @@ export async function propose({ request, targets, history = [] }, theme, library
         try { checkSnippet(e.insertJsx || '', known); } catch { continue; }
         st.jsx = e.insertJsx;
         if (e.action === 'insert') st.position = e.insertPosition || 'after';
+      }
+      if (e.action === 'group') {
+        st.others = (e.groupWith || []).filter((l) => allowed.has(l) && l.split(':')[0] === e.loc.split(':')[0]);
+        st.className = (e.groupClass || 'flex flex-row items-center gap-2').replace(/[^\w\s:/.[\]#-]/g, '');
       }
       if (e.action === 'image') {
         if (e.imageSrc && !uploads.has(e.imageSrc) && !urls.has(e.imageSrc)) e.imageSrc = null;

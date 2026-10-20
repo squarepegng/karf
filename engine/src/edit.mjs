@@ -4,9 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import MagicString from 'magic-string';
 import { parseCode, walk } from './ast.mjs';
-import { applyOps, isOffScale } from './tailwind.mjs';
+import { applyOps, isOffScale, matcher } from './tailwind.mjs';
+import { findCvas, cvaIn, cvaTargets } from './cva.mjs';
 import { propsInfo, applyProps } from './props.mjs';
 import { structureEdit } from './structure.mjs';
+import { summaryLabels } from './labels.mjs';
 
 export class KerfError extends Error {}
 
@@ -31,6 +33,24 @@ export function findElement(code, line, col) {
   return found;
 }
 
+// The JSX element directly around this one, if it is in the same file.
+function parentElement(code, el) {
+  let parent = null;
+  walk(parseCode(code).program, (n) => {
+    if (n.type === 'JSXElement' && n.children.some((c) => c.start === el.start && c.end === el.end)) parent = n;
+  });
+  return parent;
+}
+// Figma’s "Fill" along a flex parent’s direction means “take the remaining space”.
+function fillFor(code, el, ops, cvas) {
+  if (!ops.some((o) => (o.prop === 'w' || o.prop === 'h') && o.value === 'fill')) return ops;
+  const p = parentElement(code, el);
+  const pc = p ? classInfo(p, cvas).classes : [];
+  const flex = pc.includes('flex') || pc.includes('inline-flex');
+  const col = pc.includes('flex-col') || pc.includes('flex-col-reverse');
+  return ops.map((o) => (o.value === 'fill' && flex && ((o.prop === 'w' && !col) || (o.prop === 'h' && col)) ? { ...o, value: 'grow' } : o));
+}
+
 function literal(n) {
   if (!n) return null;
   if (n.type === 'StringLiteral') return { start: n.start + 1, end: n.end - 1, value: n.value };
@@ -42,7 +62,7 @@ function literal(n) {
 }
 
 // Where this element's classes live, and whether Kerf can safely rewrite them.
-export function classInfo(el) {
+export function classInfo(el, cvas) {
   const open = el.openingElement;
   const attr = open.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === 'className');
   if (!attr) return { kind: 'none', insertAt: open.name.end, classes: [] };
@@ -51,6 +71,12 @@ export function classInfo(el) {
   if (direct) return { kind: 'string', ...direct, classes: split(direct.value) };
   if (v.type === 'JSXExpressionContainer') {
     const e = v.expression;
+    // Variant components: the styles live in a cva() call in this file.
+    const cv = cvas && cvaIn(e, cvas);
+    if (cv) {
+      const classes = [cv.base?.value || '', ...Object.entries(cv.groups).map(([g, vals]) => vals[cv.defaults[g]]?.value || '')].join(' ');
+      return { kind: 'cva', entry: cv, classes: split(classes) };
+    }
     if (e.type === 'CallExpression' && e.callee.type === 'Identifier' && CLASS_FNS.has(e.callee.name)) {
       const s = e.arguments.map(literal).find(Boolean);
       if (s) return { kind: 'call', fn: e.callee.name, ...s, classes: split(s.value) };
@@ -80,7 +106,7 @@ export function textInfo(el) {
 export function describe(code, line, col) {
   const el = findElement(code, line, col);
   if (!el) throw new KerfError('Element not found. The file may have changed; reload and try again.');
-  const ci = classInfo(el);
+  const ci = classInfo(el, findCvas(code));
   const ti = textInfo(el);
   const name = el.openingElement.name;
   const tag = name.type === 'JSXIdentifier' ? name.name : code.slice(name.start, name.end);
@@ -90,13 +116,14 @@ export function describe(code, line, col) {
     classes: ci.classes,
     classKind: ci.kind,
     classReason: ci.reason,
+    cva: ci.kind === 'cva' ? { name: ci.entry.name, groups: Object.fromEntries(Object.entries(ci.entry.groups).map(([g, v]) => [g, Object.keys(v)])), defaults: ci.entry.defaults } : undefined,
     text: ti.editable ? { editable: true, value: ti.value } : { editable: false, reason: ti.reason },
     ...propsInfo(code, el),
   };
 }
 
 // Apply class ops and/or a text change to one element. Returns the new code and a summary.
-export function editElement(code, line, col, { ops = [], text, props = [] } = {}, theme) {
+export function editElement(code, line, col, { ops = [], text, props = [], cva } = {}, theme) {
   const el = findElement(code, line, col);
   if (!el) throw new KerfError('Element not found. The file may have changed; reload and try again.');
   const s = new MagicString(code);
@@ -111,9 +138,50 @@ export function editElement(code, line, col, { ops = [], text, props = [] } = {}
   }
 
   if (ops.length) {
-    const ci = classInfo(el);
+    const ci = classInfo(el, findCvas(code));
     if (ci.kind === 'dynamic') throw new KerfError(ci.reason);
-    const r = applyOps(ci.classes, ops, theme);
+    ops = fillFor(code, el, ops, findCvas(code));
+    if (ci.kind === 'cva') {
+      // Edit the base string (every variant) or the active variant's string.
+      const strings = new Map();
+      const changes = [];
+      for (const op of ops) {
+        const targets = cvaTargets(ci.entry, op.prop, cva?.mode === 'variant' ? 'variant' : 'all', cva?.active, matcher(op.prop, theme));
+        targets.forEach((l, i) => {
+          const id = l.compound ? `compound:${l.group}:${l.key}` : l.start;
+          const cur = strings.get(id) || { l, classes: l.compound ? [] : split(l.value) };
+          const r = applyOps(cur.classes, [op], theme);
+          cur.classes = r.classes;
+          strings.set(id, cur);
+          summary.added.push(...r.added);
+          summary.removed.push(...r.removed);
+          if (i === 0) changes.push(...r.changes);
+        });
+      }
+      for (const { l, classes } of strings.values()) {
+        if (!l.compound) { s.overwrite(l.start, l.end, classes.join(' ')); continue; }
+        // Add a compound variant: { variant: 'ghost', class: '…' }.
+        const item = `{ ${l.group}: '${l.key}', class: '${classes.join(' ')}' }`;
+        const arr = l.entry.compoundArr, cfg = l.entry.cfg;
+        if (arr) {
+          const last = arr.elements[arr.elements.length - 1];
+          if (last) s.appendLeft(last.end, `, ${item}`); else s.appendLeft(arr.start + 1, item);
+        } else if (cfg) {
+          const lastProp = cfg.properties[cfg.properties.length - 1];
+          const ind = (code.slice(code.lastIndexOf('\n', lastProp.start) + 1, lastProp.start).match(/^\s*/) || [''])[0];
+          // After the trailing comma if there is one, otherwise add the comma ourselves.
+          const ci = code.indexOf(',', lastProp.end);
+          const hasComma = ci > -1 && ci < cfg.end - 1 && !code.slice(lastProp.end, ci).trim();
+          if (hasComma) s.appendLeft(ci + 1, `\n${ind}compoundVariants: [${item}],`);
+          else s.appendLeft(lastProp.end, `,\n${ind}compoundVariants: [${item}]`);
+        }
+      }
+      summary.changes = changes;
+      summary.offScale = summary.added.filter(isOffScale);
+      summary.scope = cva?.mode === 'variant' ? 'variant' : 'all';
+    }
+    const r = ci.kind === 'cva' ? null : applyOps(ci.classes, ops, theme);
+    if (r) {
     const next = r.classes.join(' ');
     if (ci.kind === 'string' || ci.kind === 'call') {
       if (ci.start === ci.end) s.appendLeft(ci.start, next);
@@ -122,7 +190,9 @@ export function editElement(code, line, col, { ops = [], text, props = [] } = {}
     else if (ci.kind === 'call-empty') s.appendLeft(ci.insertAt, ci.hasArgs ? `'${next}', ` : `'${next}'`);
     summary.added = r.added;
     summary.removed = r.removed;
+    summary.changes = r.changes;
     summary.offScale = r.added.filter(isOffScale);
+    }
   }
 
   if (text != null) {
@@ -152,6 +222,7 @@ export function editElement(code, line, col, { ops = [], text, props = [] } = {}
 export function createEditor(webRoot, getTheme, library) {
   const history = [];
   const record = (file, rel, before, code, loc, change, summary) => {
+    summary.labels = summaryLabels(summary);
     fs.writeFileSync(file, code);
     history.push({ file, rel, before, after: code, loc, change, summary, source: change.source || 'hand', at: Date.now() });
     return { file: rel, changed: true, summary, n: history.length };
@@ -162,9 +233,9 @@ export function createEditor(webRoot, getTheme, library) {
     structure(loc, op, source) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);
       const before = fs.readFileSync(file, 'utf8');
-      const { code, summary } = structureEdit(before, line, col, op, { file, library });
+      const { code, summary, moved, shift } = structureEdit(before, line, col, op, { file, library });
       if (code === before) return { file: rel, changed: false, summary };
-      return record(file, rel, before, code, loc, { structure: op, source }, summary);
+      return { ...record(file, rel, before, code, loc, { structure: op, source }, summary), moved: (moved || []).map(([a, b]) => [`${rel}:${a}`, `${rel}:${b}`]), shift: shift ? { file: rel, ...shift } : null };
     },
     describe(loc) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);

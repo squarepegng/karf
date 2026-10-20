@@ -134,7 +134,7 @@ export function structureEdit(code, line, col, op, ctx) {
   const { el, parent } = locate(code, line, col);
   const name = tagName(el, code);
   const s = new MagicString(code);
-  let label, removedNames = [], imports = [];
+  let label, removedNames = [], imports = [], moved = [], shift = null;
 
   if (op.type === 'delete') {
     inJSX(parent, 'delete');
@@ -207,6 +207,43 @@ export function structureEdit(code, line, col, op, ctx) {
       else s.appendLeft(el.end, `\n${ind}${op.jsx}`);
     }
     label = `Added ${comps.length ? comps.join(', ') : (op.jsx.match(/^<([a-z0-9]+)/i) || [])[1] || 'element'} ${pos} <${name}>${note}`;
+  } else if (op.type === 'group') {
+    // Wrap this element and its selected neighbors in a new auto-layout frame (Figma: ⌘⌥G).
+    inJSX(parent, 'group');
+    const kids = parent.children.filter((c) => c.type === 'JSXElement');
+    const want = new Set([el.start]);
+    for (const loc of op.others || []) {
+      const m = String(loc).match(/:(\d+):(\d+)$/);
+      const other = m && kids.find((k) => k.openingElement.loc.start.line === +m[1] && k.openingElement.loc.start.column === +m[2]);
+      if (!other) throw new KerfError('Elements can only be grouped with their neighbors inside the same parent.');
+      want.add(other.start);
+    }
+    const idx = kids.map((k, i) => (want.has(k.start) ? i : -1)).filter((i) => i > -1);
+    if (idx[idx.length - 1] - idx[0] + 1 !== idx.length) throw new KerfError('Grouped elements must sit next to each other. Select a continuous run of siblings.');
+    const first = kids[idx[0]], last = kids[idx[idx.length - 1]];
+    const ind = indentAt(code, first.start);
+    const inner = code.slice(first.start, last.end).split('\n').map((l, i) => (i === 0 ? l : l.startsWith(ind) ? '  ' + l : l)).join('\n');
+    const cls = String(op.className || 'flex flex-row items-center gap-2').replace(/"/g, '');
+    checkSnippet(`<div className="${cls}"></div>`, () => false);
+    s.overwrite(first.start, last.end, `<div className="${cls}">\n${ind}  ${inner}\n${ind}</div>`);
+    label = `Grouped ${idx.length} element${idx.length === 1 ? '' : 's'} into a frame`;
+    // Every grouped element moves one line down and two columns in: report where, so later edits follow.
+    // Everything below the group moves down two lines (its opening and closing lines).
+    shift = { after: last.loc.end.line, delta: 2 };
+    moved = kids.slice(idx[0], idx[idx.length - 1] + 1).map((k) => {
+      const l = k.openingElement.loc.start;
+      return [`${l.line}:${l.column}`, `${l.line + 1}:${l.column + 2}`];
+    });
+  } else if (op.type === 'ungroup') {
+    // Remove a plain wrapper and keep what's inside it (Figma: ⇧⌘G).
+    inJSX(parent, 'ungroup');
+    if (!/^[a-z]/.test(name)) throw new KerfError('Only plain frames can be ungrouped, not components.');
+    const inner = el.children.filter((c) => !(c.type === 'JSXText' && !c.value.trim()));
+    if (!inner.length) throw new KerfError('This frame is empty. Delete it instead.');
+    const ind = indentAt(code, el.start);
+    const text = code.slice(inner[0].start, inner[inner.length - 1].end).split('\n').map((l, i) => (i === 0 ? l : l.replace(new RegExp(`^${ind}  `), ind))).join('\n');
+    s.overwrite(el.start, el.end, text);
+    label = `Ungrouped <${name}>`;
   } else if (op.type === 'replace') {
     // Swap the whole element for new JSX in one step (safe anywhere an element can be).
     const comps = checkSnippet(op.jsx, (nm) => !!ctx.library.findIcon(nm) || ctx.library.componentList().has(nm));
@@ -252,5 +289,5 @@ export function structureEdit(code, line, col, op, ctx) {
   out = pruneImports(out, removedNames.filter((n) => !imports.some(([i]) => i === n)));
   try { parseCode(out, { strict: true }); }
   catch (e) { throw new KerfError(`Kerf stopped: the change would break the file (${e.message}).`); }
-  return { code: out, summary: { added: [], removed: [], offScale: [], text: null, props: [], action: label } };
+  return { code: out, summary: { added: [], removed: [], offScale: [], text: null, props: [], action: label }, moved, shift };
 }

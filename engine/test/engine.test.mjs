@@ -199,3 +199,95 @@ test('replace swaps an element for new JSX in one step', () => {
 test('a transparent fill does not cancel a gradient', () => {
   assert.equal(ops('text-content', [{ prop: 'gradient', value: 'r primary positive' }, { prop: 'clipText', value: 'on' }, { prop: 'bg', value: 'transparent' }]), 'bg-gradient-to-r from-primary to-positive bg-clip-text text-transparent bg-transparent');
 });
+
+test('layout: margin, size, direction, alignment, wrap', () => {
+  assert.equal(ops('m-4 text-sm', [{ prop: 'mY', value: 24 }]), 'mx-4 text-sm my-6');
+  assert.equal(ops('block w-64', [{ prop: 'layout', value: 'row' }, { prop: 'w', value: 'fill' }]), 'flex flex-row w-full');
+  assert.equal(ops('flex flex-col items-start', [{ prop: 'alignItems', value: 'center' }, { prop: 'justify', value: 'between' }, { prop: 'wrap', value: 'wrap' }]), 'flex flex-col items-center justify-between flex-wrap');
+  assert.equal(ops('flex flex-row gap-2', [{ prop: 'layout', value: 'none' }]), 'gap-2');
+  assert.equal(ops('h-10', [{ prop: 'h', value: 'hug' }]), 'h-fit');
+  assert.equal(ops('w-full', [{ prop: 'w', value: 16 }]), 'w-4');
+});
+
+const BTN = `import { cva } from 'class-variance-authority';
+const buttonVariants = cva('inline-flex rounded-full text-sm', {
+  variants: {
+    variant: { default: 'bg-ink text-ink-fg', ghost: 'border bg-surface text-content' },
+    size: { default: 'px-5 py-2', sm: 'px-3.5 py-1.5 text-xs' },
+  },
+  defaultVariants: { variant: 'default', size: 'default' },
+});
+const Button = ({ className, variant, size, ...props }) => (
+  <button className={cn(buttonVariants({ variant, size, className }))} {...props} />
+);
+`;
+test('variant components: edit one variant, or every button', () => {
+  const d = describe(BTN, 10, 2);
+  assert.equal(d.classKind, 'cva');
+  assert.deepEqual(d.cva.groups.variant, ['default', 'ghost']);
+  const ghost = editElement(BTN, 10, 2, { ops: [{ prop: 'bg', value: 'primary' }], cva: { mode: 'variant', active: { variant: 'ghost', size: 'default' } } }, th).code;
+  assert.match(ghost, /ghost: 'border bg-primary text-content'/);
+  assert.match(ghost, /default: 'bg-ink text-ink-fg'/);
+  const all = editElement(BTN, 10, 2, { ops: [{ prop: 'radius', value: 8 }, { prop: 'padX', value: 24 }], cva: { mode: 'all' } }, th).code;
+  assert.match(all, /cva\('inline-flex rounded-lg text-sm/);
+  assert.match(all, /default: 'px-6 py-2', sm: 'px-6 py-1.5 text-xs'/);
+  // Size owns padding, so a padding change for the default variant only becomes a compound variant.
+  const small = editElement(BTN, 10, 2, { ops: [{ prop: 'padY', value: 8 }], cva: { mode: 'variant', active: { size: 'sm' } } }, th).code;
+  assert.match(small, /compoundVariants: \[\{ variant: 'default', class: 'py-2' \}\]/);
+});
+
+test('variant-only overrides of a size-owned property use a compound variant', () => {
+  const r = editElement(BTN, 10, 2, { ops: [{ prop: 'padX', value: 24 }], cva: { mode: 'variant', active: { variant: 'ghost', size: 'default' } } }, th).code;
+  assert.match(r, /compoundVariants: \[\{ variant: 'ghost', class: 'px-6' \}\]/);
+  const L = r.split('\n').findIndex((l) => l.includes('<button')) + 1;
+  const r2 = editElement(r, L, 2, { ops: [{ prop: 'padY', value: 12 }], cva: { mode: 'variant', active: { variant: 'ghost', size: 'default' } } }, th).code;
+  assert.match(r2, /class: 'px-6 py-3'/);
+});
+
+test('Fill inside a horizontal row takes the remaining space; elsewhere it fills the width', () => {
+  const ROW = `export const A = () => (
+  <div className="flex flex-row gap-2">
+    <input className="input" />
+    <button className="btn">Go</button>
+  </div>
+);
+export const B = () => <div className="flex flex-col"><input className="input" /></div>;
+`;
+  assert.match(editElement(ROW, 3, 4, { ops: [{ prop: 'w', value: 'fill' }] }, th).code, /<input className="input flex-1" \/>/);
+  assert.match(editElement(ROW, 7, ROW.split('\n')[6].indexOf('<input'), { ops: [{ prop: 'w', value: 'fill' }] }, th).code, /<input className="input w-full" \/>/);
+});
+
+test('group neighbors into a frame, and ungroup it again', () => {
+  const FORM = `export const F = () => (
+  <form className="flex flex-col gap-3">
+    <label>Code</label>
+    <input className="input" />
+    <button className="btn">Enter</button>
+  </form>
+);
+`;
+  const g = structureEdit(FORM, 4, 4, { type: 'group', others: ['src/F.tsx:5:4'], className: 'flex flex-row items-center gap-2' }, ctx);
+  assert.match(g.code, /<label>Code<\/label>\n    <div className="flex flex-row items-center gap-2">\n      <input className="input" \/>\n      <button className="btn">Enter<\/button>\n    <\/div>/);
+  assert.equal(g.summary.action, 'Grouped 2 elements into a frame');
+  assert.throws(() => structureEdit(FORM, 3, 4, { type: 'group', others: ['src/F.tsx:5:4'] }, ctx), /next to each other/);
+  const u = structureEdit(g.code, 4, 4, { type: 'ungroup' }, ctx).code;
+  assert.equal(u, FORM);
+});
+
+test('grouping reports where each element moved', () => {
+  const FORM = `export const F = () => (
+  <form className="flex flex-col gap-3">
+    <input className="input" />
+    <button className="btn">
+      Enter
+    </button>
+    <p>Below</p>
+  </form>
+);
+`;
+  const g = structureEdit(FORM, 3, 4, { type: 'group', others: ['src/F.tsx:4:4'] }, ctx);
+  assert.deepEqual(g.moved, [['3:4', '4:6'], ['4:4', '5:6']]);
+  assert.deepEqual(g.shift, { after: 6, delta: 2 });
+  assert.ok(editElement(g.code, 5, 6, { ops: [{ prop: 'w', value: 'hug' }] }, th).code.includes('<button className="btn w-fit">'));
+  assert.ok(editElement(g.code, 9, 4, { ops: [{ prop: 'padX', value: 16 }] }, th).code.includes('<p className="px-4">Below</p>'));
+});

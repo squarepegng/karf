@@ -16,7 +16,7 @@
     sel: null, hover: null, theme: null, project: null, scope: 'all',
     count: 0, corners: false, cpick: null, editing: null, changesOpen: false,
     chat: [], card: null, askOpen: false, shape: 'box', notes: [], noteDraft: null, amber: [],
-    versions: { versions: [], draft: [], peeking: null }, open: {}, path: '/', hintSeen: false, layersOpen: innerWidth >= 1180,
+    versions: { versions: [], draft: [], peeking: null }, open: {}, multi: [], alt: false, handleDrag: null, path: '/', hintSeen: false, layersOpen: innerWidth >= 1180,
   };
   const $ = (id) => document.getElementById(id);
   const frame = $('frame');
@@ -44,9 +44,14 @@
     borderW: { max: 20, css: (v) => ({ 'border-width': v + 'px', 'border-style': 'solid' }) },
     opacity: { max: 100, css: (v) => ({ opacity: v / 100 }) },
     shadow: { css: () => ({}) },
+    mX: { min: -400, max: 400, css: (v) => ({ 'margin-left': v + 'px', 'margin-right': v + 'px' }) },
+    mY: { min: -400, max: 400, css: (v) => ({ 'margin-top': v + 'px', 'margin-bottom': v + 'px' }) },
+    w: { max: 4000, css: PX('width') },
+    h: { max: 4000, css: PX('height') },
   };
   const clamp = (p, v) => Math.max(PROPS[p].min ?? 0, Math.min(PROPS[p].max ?? 9999, v));
-  const cs = (el) => el.ownerDocument.defaultView.getComputedStyle(el);
+  // An element from a page that has since reloaded has no window: fall back to the current one.
+  const cs = (el) => (el.ownerDocument?.defaultView || W || window).getComputedStyle(el);
   const rgbHex = (c) => {
     const m = String(c).match(/[\d.]+/g);
     if (!m) return '';
@@ -74,6 +79,10 @@
       case 'gap': return Math.round(parseFloat(c.columnGap)) || 0;
       case 'borderW': return Math.round(parseFloat(c.borderTopWidth));
       case 'opacity': return Math.round(Number(c.opacity) * 100);
+      case 'mX': return Math.round(parseFloat(c.marginLeft)) || 0;
+      case 'mY': return Math.round(parseFloat(c.marginTop)) || 0;
+      case 'w': return Math.round(el.getBoundingClientRect().width);
+      case 'h': return Math.round(el.getBoundingClientRect().height);
     }
     return '';
   }
@@ -110,12 +119,13 @@
   const nameOf = (el) => el.getAttribute('data-kerf-n') || el.tagName.toLowerCase();
   const fileName = (loc) => (loc || '').split(':')[0].split('/').pop();
   const activeLoc = () => (S.sel ? (S.scope === 'here' ? S.sel.use || S.sel.def : S.sel.def || S.sel.use) : null);
+  const cvaParam = () => (S.sel?.defInfo?.cva && activeLoc() === S.sel.def ? { mode: S.scope === 'variant' ? 'variant' : 'all', active: activeVariant() } : undefined);
   const info = () => (S.sel ? (activeLoc() === S.sel.def ? S.sel.defInfo : S.sel.useInfo) : null);
   const q = (loc) => `[data-kerf="${CSS.escape(loc)}"],[data-kerf-use="${CSS.escape(loc)}"]`;
   const sameLoc = (el) => (D ? D.querySelectorAll(defOf(el) ? `[data-kerf="${CSS.escape(defOf(el))}"]` : `[data-kerf-use="${CSS.escape(useOf(el))}"]`) : []);
 
   async function select(el) {
-    if (!el) { S.sel = null; S.cpick = null; renderPanel(); renderLayers(); return; }
+    if (!el) { S.multi = []; S.sel = null; S.cpick = null; renderPanel(); renderLayers(); return; }
     const list = [...sameLoc(el)];
     S.sel = { el, def: defOf(el), use: useOf(el), idx: Math.max(0, list.indexOf(el)), repeat: list.length, defInfo: null, useInfo: null };
     if (!S.sel.def) S.scope = 'here';
@@ -140,7 +150,7 @@
   // After an edit the app re-renders and the element may be a new node: find it again.
   function refind() {
     const s = S.sel;
-    if (!s || !D || s.el.isConnected) return;
+    if (!s || !D || (s.el.isConnected && s.el.ownerDocument === D)) return;
     const list = D.querySelectorAll(s.def ? `[data-kerf="${CSS.escape(s.def)}"]` : `[data-kerf-use="${CSS.escape(s.use)}"]`);
     if (list.length) { s.el = list[Math.min(s.idx, list.length - 1)]; s.repeat = list.length; }
   }
@@ -161,14 +171,22 @@
     const loc = activeLoc();
     if (!loc) return;
     try {
-      const r = await api('/edit', { loc, ...change });
-      if (r.changed) {
+      if (S.multi.length) {
+        // Several selected: apply the same change to each one, in a safe order.
+        const edits = [{ loc, ...change, cva: cvaParam() }, ...S.multi.map((m) => ({ loc: locOf(m), ...change }))];
+        const r = await api('/ai/apply', { edits: edits.map((e) => ({ loc: e.loc, ops: e.ops || [], props: e.props || [], text: e.text })) });
         S.count = r.n;
-        const sm = r.summary, parts = [];
-        if (sm.removed.length || sm.added.length) parts.push(`${sm.removed.join(' ') || '—'} → ${sm.added.join(' ')}`);
-        if (sm.text) parts.push(`“${sm.text.to}”`);
-        (sm.props || []).forEach((p) => parts.push(`${p.name}: ${p.from ?? 'default'} → ${p.to}`));
-        toast(`${fileName(r.file)} · ${parts.join(' · ')}`, sm.offScale.length ? `Off your scale: ${sm.offScale.join(', ')}` : '', false, true);
+        const ok = r.results.filter((x) => x.ok && x.changed).length;
+        toast(`${ok} element${ok === 1 ? '' : 's'} · ${(r.results.find((x) => x.summary)?.summary.labels || []).join(' · ')}`, r.results.some((x) => !x.ok) ? r.results.find((x) => !x.ok).error : '', false, true);
+      } else {
+        const r = await api('/edit', { loc, ...change, cva: cvaParam() });
+        if (r.changed) {
+          S.count = r.n;
+          const sm = r.summary;
+          const who = S.sel ? (S.sel.use && activeLoc() === S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || nameOf(S.sel.el) : '';
+          const where = sm.scope === 'variant' ? ` (all “${activeVariant()?.variant}”)` : sm.scope === 'all' ? ' (every one)' : '';
+          toast(`${who}${where} · ${(sm.labels || []).join(' · ')}`, sm.offScale.length ? 'Some values are off your design scale' : '', false, true, `${fileName(r.file)}: ${[sm.removed.join(' ') || '—', sm.added.join(' ')].join(' → ')}`);
+        }
       }
       afterEdit();
     } catch (e) {
@@ -366,7 +384,7 @@
     const changes = S.versions.draft;
     box.innerHTML = `<div class="lhead">Layers<span class="note" style="font-weight:400">${esc(S.path)}</span></div>
       <div class="tree">${rows.join('') || '<div class="empty">This page has no elements Kerf can edit yet.</div>'}</div>
-      <div class="lchanges"><span class="secT">Changes since last version</span>${changes.length ? changes.slice(-8).reverse().map((c) => `<div class="row"><span class="dot"></span><span><span class="mono">${esc(fileName(c.file))}</span> ${esc(c.label)}</span></div>`).join('') : '<span class="note">None yet</span>'}</div>`;
+      <div class="lchanges"><span class="secT">Changes since last version</span>${changes.length ? changes.slice(-8).reverse().map((c) => `<div class="row"><span class="dot"></span><span>${esc(c.label)}<br><span class="note mono">${esc(fileName(c.file))}</span></span></div>`).join('') : '<span class="note">None yet</span>'}</div>`;
     box.querySelector('.tree').scrollTop = st;
     const onRow = box.querySelector('.layer.on');
     if (onRow && layersScrollToSel) { onRow.scrollIntoView({ block: 'nearest' }); layersScrollToSel = false; }
@@ -447,6 +465,17 @@
     }).join('');
     return sec(`Properties${inf.lib ? ` <span class="note" style="font-weight:400">${esc(inf.lib.replace(/^@/, '').split('/')[0])}</span>` : ''}`, rows);
   }
+  function scopeHTML(s, name) {
+    const c = s.defInfo?.cva;
+    if (c) {
+      const av = activeVariant(), vname = av?.variant;
+      const opts = [...(s.use ? [['here', 'Only this one']] : []), ...(vname ? [['variant', `All “${vname}”`]] : []), ['all', `Every ${s.use ? (s.useInfo?.tag || name) : name}`]];
+      if (!opts.some(([v]) => v === S.scope)) S.scope = vname ? 'variant' : 'all';
+      return `<div class="seg">${opts.map(([v, n]) => `<button data-act="scope" data-v="${v}" class="${S.scope === v ? 'on' : ''}">${esc(n)}</button>`).join('')}</div>`;
+    }
+    if (s.def && s.use) return `<div class="seg"><button data-act="scope" data-v="all" class="${S.scope === 'all' ? 'on' : ''}" title="Change the component itself, everywhere it's used">Everywhere</button><button data-act="scope" data-v="here" class="${S.scope === 'here' ? 'on' : ''}" title="Change only this use of the component">Only here</button></div>`;
+    return '';
+  }
   function tabsHTML() {
     return `<div class="ptabs"><button data-act="tab" data-v="design" class="${S.tab === 'design' ? 'on' : ''}">Design</button><button data-act="tab" data-v="chat" class="${S.tab === 'chat' ? 'on' : ''}">Chat <span class="kbd">⌘K</span></button></div>`;
   }
@@ -473,7 +502,8 @@
     const loc = activeLoc();
     let h = `<div class="sec head"><div class="secH"><span class="nm">${ico(s.use ? 'comp' : 'frame')}${esc(name)}</span>${hb('parent', 'up', 'Select parent')}</div>
       <span class="path">${esc(loc.replace(/:(\d+):\d+$/, ':$1'))}</span>
-      ${s.def && s.use ? `<div class="seg"><button data-act="scope" data-v="all" class="${S.scope === 'all' ? 'on' : ''}" title="Change the component itself, everywhere it's used">Everywhere</button><button data-act="scope" data-v="here" class="${S.scope === 'here' ? 'on' : ''}" title="Change only this use of the component">Only here</button></div>` : ''}
+      ${scopeHTML(s, name)}
+      ${S.multi.length ? `<span class="note">+${S.multi.length} more selected: changes apply to all ${S.multi.length + 1}.</span>` : ''}
       ${s.repeat > 1 ? `<span class="note">Repeated ×${s.repeat} by the same code: edits apply to all of them.</span>` : ''}
       ${actionsHTML()}</div>`;
     if (!inf) h += `<div class="sec"><span class="note">Reading code…</span></div>`;
@@ -494,7 +524,7 @@
           <div class="r2"><div class="ibs">${[['left', 'alL'], ['center', 'alC'], ['right', 'alR']].map(([v, i]) => `<button class="ib${val('align') === v ? ' on' : ''}" data-act="set" data-p="align" data-v="${v}" title="Align ${v}">${ico(i)}</button>`).join('')}</div><span></span></div>`);
         h += sec('Text color', colorRow('color', 'Text color'));
       }
-      h += sec(isLayout(el) ? 'Auto layout' : 'Padding', `${isLayout(el) ? `<div class="r2">${nf('gap', 'gap', 'Gap')}<span></span></div>` : ''}<div class="r2">${nf('padX', 'padH', 'Horizontal padding')}${nf('padY', 'padV', 'Vertical padding')}</div>`);
+      h += layoutSections(el);
       const indep = S.corners;
       h += sec('Appearance', `<div class="r2c">${nf('opacity', 'opa', 'Opacity', '%')}${nf('radius', 'rad', 'Corner radius')}<button class="ib${indep ? ' on' : ''}" data-act="corners" title="Independent corners">${ico('corners')}</button></div>
         ${indep ? `<div class="r4">${nf('rTL', cornerIco(0), 'Top left')}${nf('rTR', cornerIco(90), 'Top right')}${nf('rBR', cornerIco(180), 'Bottom right')}${nf('rBL', cornerIco(270), 'Bottom left')}</div>` : ''}`);
@@ -546,15 +576,15 @@
     let list = [];
     try { list = await api('/changes'); } catch {}
     c.innerHTML = `<div class="secH"><span>Changes this session</span>${hb('changes', 'x', 'Close')}</div>` + (list.length
-      ? list.slice().reverse().map((x) => `<div class="chg"><span class="mono">${esc(x.file)}</span><span>${esc([x.summary.removed.join(' '), x.summary.added.join(' ')].filter(Boolean).join(' → '))}${x.summary.text ? ` “${esc(x.summary.text.to)}”` : ''}${(x.summary.props || []).map((p) => ` ${esc(p.name)}: ${esc(p.to)}`).join('')}</span></div>`).join('')
+      ? list.slice().reverse().map((x) => `<div class="chg"><span>${esc((x.summary.labels || []).join(' · '))}</span><span class="mono">${esc(x.file)}${x.summary.added?.length || x.summary.removed?.length ? ` · ${esc([x.summary.removed.join(' ') || '—', x.summary.added.join(' ')].join(' → '))}` : ''}</span></div>`).join('')
       : '<span class="note">No changes yet.</span>');
   }
   let toastT;
-  function toast(msg, sub, err, withUndo) {
+  function toast(msg, sub, err, withUndo, code) {
     const t = $('toast');
     t.hidden = false;
     t.className = 'toast' + (err ? ' err' : '');
-    t.innerHTML = `<div class="tx"><span class="mono">${esc(msg)}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</div>${withUndo ? '<button class="outline" data-act="undo">Undo</button>' : ''}<button class="ib" data-act="toastClose" aria-label="Dismiss">${ico('x')}</button>`;
+    t.innerHTML = `<div class="tx"><span>${esc(msg)}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ''}${code ? `<details class="code"><summary>Code</summary><span class="mono">${esc(code)}</span></details>` : ''}</div>${withUndo ? '<button class="outline" data-act="undo">Undo</button>' : ''}<button class="ib" data-act="toastClose" aria-label="Dismiss">${ico('x')}</button>`;
     clearTimeout(toastT);
     toastT = setTimeout(() => (t.hidden = true), err ? 6000 : 4000);
   }
@@ -594,6 +624,10 @@
     return [...container.children];
   }
   function loop() {
+    try { frameStep(); } catch (e) { if (!loop.warned) { console.warn('Kerf: drawing step failed', e); loop.warned = true; } }
+    requestAnimationFrame(loop);
+  }
+  function frameStep() {
     refind();
     const edit = S.mode === 'edit';
     place($('hov'), edit && S.tool !== 'annotate' && S.hover !== S.sel?.el ? S.hover : null, S.hover ? labelOf(S.hover) : '');
@@ -603,12 +637,12 @@
     const aEls = D ? (S.amber || []).flatMap((loc) => [...D.querySelectorAll(q(loc))]).slice(0, 60) : [];
     pool($('amb'), aEls.length, 'amber').forEach((b, i) => place(b, aEls[i] || null, null));
     if (W) $('marksG').setAttribute('transform', `translate(${-W.scrollX} ${-W.scrollY})`);
+    placeHandles(); placeMulti(); measureLines();
     if (W && W.location.pathname + W.location.search !== S.path) {
       S.path = W.location.pathname + W.location.search;
       if (document.activeElement?.id !== 'pathIn') { const pi = $('pathIn'); if (pi) pi.value = S.path; }
       layersSoon();
     }
-    requestAnimationFrame(loop);
   }
 
   /* ---------- app events ---------- */
@@ -634,7 +668,15 @@
       lastClick = { el: e.target, t: now };
       if (S.editing) S.editing.blur();
       layersScrollToSel = true;
-      select(pick(e.target));
+      const hit = pick(e.target);
+      if (e.shiftKey && S.sel && hit && hit !== S.sel.el) {
+        const i = S.multi.findIndex((m) => m.el === hit);
+        if (i > -1) S.multi.splice(i, 1); else S.multi.push({ el: hit, def: defOf(hit), use: useOf(hit) });
+        renderPanel();
+        return;
+      }
+      S.multi = [];
+      select(hit);
     }, true);
     W.addEventListener('dblclick', (e) => {
       if (S.mode !== 'edit') return;
@@ -679,6 +721,7 @@
       else if (S.tool === 'annotate') setTool('select');
       else if (S.mode === 'edit' && S.tab === 'chat') { S.tab = 'design'; renderPanel(); renderBar(); }
       else if (S.side === 'history') { S.side = 'design'; renderAll(); }
+      else if (S.mode === 'edit' && S.multi.length) { S.multi = []; renderPanel(); }
       else if (S.mode === 'edit' && S.sel) select(null);
       else if (S.mode === 'edit') setMode('preview');
       return;
@@ -846,7 +889,7 @@
     const all = [...S.versions.versions.flatMap((v) => v.changes), ...S.versions.draft];
     const files = [...new Set(all.map((c) => c.file))];
     const title = all.length === 1 ? `Design: ${all[0].label}`.slice(0, 72) : `Design updates on ${S.path === '/' ? 'the home screen' : S.path}`;
-    const body = `Changes made in Kerf, by hand and with Kerf's AI.\n\n${all.map((c) => `- ${c.file}: ${c.label}`).join('\n')}`;
+    const body = `Changes made in Kerf, by hand and with Kerf's AI.\n\n${all.map((c) => `- ${c.label} (${c.file.split('/').pop()})`).join('\n')}\n\n<details><summary>Code changes</summary>\n\n${all.map((c) => `- \`${c.file}\`: ${c.code || c.label}`).join('\n')}\n</details>`;
     const m = $('modal');
     m.hidden = false;
     m.innerHTML = `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="prT">
@@ -885,7 +928,7 @@
   const PROP_NAMES = { gradient: 'Gradient', clipText: 'Gradient text', fit: 'Image fit', bg: 'Fill', color: 'Text color', borderC: 'Stroke color', fontSize: 'Size', fontWeight: 'Weight', lineHeight: 'Line height', letterSpacing: 'Letter spacing', align: 'Align', radius: 'Radius', rTL: 'Top-left corner', rTR: 'Top-right corner', rBR: 'Bottom-right corner', rBL: 'Bottom-left corner', padX: 'Padding X', padY: 'Padding Y', gap: 'Gap', borderW: 'Stroke', opacity: 'Opacity', shadow: 'Shadow' };
   const UNIT = { fontSize: 'px', lineHeight: 'px', radius: 'px', rTL: 'px', rTR: 'px', rBR: 'px', rBL: 'px', padX: 'px', padY: 'px', gap: 'px', borderW: 'px', opacity: '%', letterSpacing: '%' };
   const opLabel = (o) => `${PROP_NAMES[o.prop] || o.prop} ${o.value}${UNIT[o.prop] || ''}`;
-  const structLabel = (st) => ({ replace: `Replace with: ${(st.jsx || '').slice(0, 60)}`, delete: 'Delete', duplicate: 'Duplicate', move: `Move ${st.dir || 'to ' + st.index}`, swap: `Swap → ${st.to}`, insert: `Add ${st.position}: ${(st.jsx || '').slice(0, 60)}`, image: [st.src && `Image → ${st.src}`, st.alt != null && `Alt “${st.alt}”`].filter(Boolean).join(' · ') })[st.type];
+  const structLabel = (st) => ({ group: `Group into a frame (${st.className || ''})`, ungroup: 'Ungroup', replace: `Replace with: ${(st.jsx || '').slice(0, 60)}`, delete: 'Delete', duplicate: 'Duplicate', move: `Move ${st.dir || 'to ' + st.index}`, swap: `Swap → ${st.to}`, insert: `Add ${st.position}: ${(st.jsx || '').slice(0, 60)}`, image: [st.src && `Image → ${st.src}`, st.alt != null && `Alt “${st.alt}”`].filter(Boolean).join(' · ') })[st.type];
   const editLabel = (e) => e.structure ? structLabel(e.structure) : [...e.ops.map(opLabel), ...(e.props || []).map((p) => `${p.name}: ${p.value}`), ...(e.text ? [`“${e.text}”`] : [])].join(' · ');
   function measure(el) {
     const c = cs(el);
@@ -910,7 +953,8 @@
     return out;
   }
   const tagged = (root) => (root || D ? [...(root || D).querySelectorAll('[data-kerf],[data-kerf-use]')] : []);
-  const onScreen = (el) => { const r = el.getBoundingClientRect(); return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < W.innerHeight && r.right > 0 && r.left < W.innerWidth; };
+  // If the frame reports no size (a hidden window), treat the whole page as visible.
+  const onScreen = (el) => { const r = el.getBoundingClientRect(); const vw = W.innerWidth || 1e5, vh = W.innerHeight || 1e5; return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw; };
   const visibleTargets = () => (D ? uniq(tagged().filter(onScreen).flatMap((el) => targetsOf(el))).slice(0, 90) : []);
   function selectionTargets() {
     const el = S.sel.el, out = [...targetsOf(el)];
@@ -943,6 +987,11 @@
     }
     return h.filter((x, i) => !(i > 0 && h[i - 1].role === x.role));
   }
+  let chatT;
+  function saveChat() {
+    clearTimeout(chatT);
+    chatT = setTimeout(() => api('/chat', { messages: S.chat.filter((m) => !m.busy).map(({ targets, ...m }) => m), notes: S.notes }).catch(() => {}), 300);
+  }
   async function runAI(text, targets, where, shown, followUp) {
     text = String(text || '').trim();
     if (!text || S.card?.busy) return;
@@ -961,6 +1010,7 @@
     } catch (e) { m.error = e.message; }
     m.busy = false;
     renderAI();
+    saveChat();
   }
   async function decide(m, v) {
     if (!m || m.status !== 'pending') return;
@@ -976,6 +1026,7 @@
       afterEdit();
     } else m.status = 'discarded';
     renderAI();
+    saveChat();
   }
   const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: '' };
   function kerfHTML(m, i) {
@@ -1125,6 +1176,23 @@
   const iconSrc = (i) => i.lib === 'lucide-react' ? `https://unpkg.com/lucide-static@0.468.0/icons/${kebab(i.name)}.svg` : `https://unpkg.com/@phosphor-icons/core@2.1.1/assets/regular/${kebab(i.name)}.svg`;
   // Structural edits go to where an element is used (the instance), unless it's a plain element.
   const structLoc = () => (S.sel ? (S.sel.use && (S.scope === 'here' || !S.sel.def || nameOf(S.sel.el) !== S.sel.el.tagName.toLowerCase()) ? S.sel.use : S.sel.def || S.sel.use) : null);
+  // Wrap the selection (and Shift-selected neighbors) in a new auto-layout frame.
+  async function groupSelected() {
+    const others = S.multi.map((m) => locOf(m));
+    const dir = S.multi.length && S.multi.every((m) => Math.abs(m.el.getBoundingClientRect().top - S.sel.el.getBoundingClientRect().top) < 8) ? 'flex-row items-center' : 'flex-col';
+    const ok = await structure({ type: 'group', others, className: `flex ${dir} gap-2` });
+    if (ok) S.multi = [];
+  }
+  async function deleteSelected() {
+    if (!S.multi.length) return structure({ type: 'delete' });
+    const edits = [{ loc: structLoc(), structure: { type: 'delete' } }, ...S.multi.map((m) => ({ loc: locOf(m), structure: { type: 'delete' } }))];
+    const r = await api('/ai/apply', { edits }).catch((e) => ({ error: e.message }));
+    if (r.error) return toast(r.error, '', true);
+    S.count = r.n; S.multi = []; S.sel = null;
+    const ok = r.results.filter((x) => x.ok && x.changed).length, bad = r.results.find((x) => !x.ok);
+    toast(`Deleted ${ok} element${ok === 1 ? '' : 's'}`, bad ? bad.error : '', false, true);
+    afterEdit(); renderPanel();
+  }
   async function structure(op, { keepSel } = {}) {
     const loc = structLoc();
     if (!loc) { toast('Select an element first.', '', true); return false; }
@@ -1133,7 +1201,7 @@
       const r = await api('/structure', { loc, op });
       if (!r.changed) return false;
       S.count = r.n;
-      toast(`${fileName(r.file)} · ${r.summary.action}`, '', false, true);
+      toast(r.summary.action, '', false, true, fileName(r.file));
       if (!keepSel) { S.sel = null; renderPanel(); }
       afterEdit();
       guard(before);
@@ -1157,6 +1225,8 @@
       <button class="ib" data-act="sMove" data-v="up" title="Move up · ⌥↑" aria-label="Move up">${ico('up')}</button>
       <button class="ib" data-act="sMove" data-v="down" title="Move down · ⌥↓" aria-label="Move down"><span style="display:inline-block;transform:rotate(180deg)">${ico('up')}</span></button>
       <button class="ib" data-act="sDup" title="Duplicate · ⌘D" aria-label="Duplicate">${ico('dup')}</button>
+      <button class="ib" data-act="sGroup" title="Group into a frame · ⌘⌥G" aria-label="Group">${ico('frame')}</button>
+      ${S.sel && /^(div|section|span)$/.test(S.sel.el.tagName.toLowerCase()) && !S.sel.el.getAttribute('data-kerf-n') ? `<button class="ib" data-act="sUngroup" title="Ungroup · ⇧⌘G" aria-label="Ungroup">${ico('corners')}</button>` : ''}
       ${isComp ? `<button class="ib" data-act="sSwap" title="Swap for another icon or component" aria-label="Swap">${ico('swap')}</button>` : ''}
       <button class="ib" data-act="insertMenu" title="Add an element here · I" aria-label="Add">${ico('plus')}</button>
       <button class="ib danger" data-act="sDel" title="Delete · ⌫" aria-label="Delete">${ico('trash')}</button>
@@ -1263,8 +1333,10 @@
     const a = e.target.closest('[data-act]');
     if (!a) return;
     const act = a.dataset.act, v = a.dataset.v;
-    if (act === 'sDel') structure({ type: 'delete' });
+    if (act === 'sDel') deleteSelected();
     else if (act === 'sDup') structure({ type: 'duplicate' });
+    else if (act === 'sGroup') groupSelected();
+    else if (act === 'sUngroup') structure({ type: 'ungroup' });
     else if (act === 'sMove') structure({ type: 'move', dir: v });
     else if (act === 'sSwap') {
       if (S.sel.el.tagName.toLowerCase() === 'svg') openIcons('swap');
@@ -1300,7 +1372,9 @@
   function structKeys(e) {
     const t = e.target;
     if (S.mode !== 'edit' || !S.sel || S.editing || (t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName)))) return;
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'delete' }); }
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopImmediatePropagation(); deleteSelected(); }
+    else if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === 'KeyG') { e.preventDefault(); e.stopImmediatePropagation(); groupSelected(); }
+    else if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyG') { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'ungroup' }); }
     else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'duplicate' }); }
     else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); e.stopImmediatePropagation(); structure({ type: 'move', dir: e.key === 'ArrowUp' ? 'up' : 'down' }); }
     else if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'i') { e.preventDefault(); e.stopImmediatePropagation(); S.insertPos = defaultPos(); openInsert(); }
@@ -1349,10 +1423,162 @@
   frame.addEventListener('load', bindDrag);
   if (frame.contentDocument?.readyState === 'complete') setTimeout(bindDrag, 0);
 
+  /* ---------- layout: auto layout, size, margin ---------- */
+  function layoutVal(el) {
+    const c = cs(el);
+    const flex = /flex/.test(c.display);
+    const dir = flex ? (/column/.test(c.flexDirection) ? 'col' : 'row') : 'none';
+    const norm = (v) => ({ 'flex-start': 'start', start: 'start', normal: 'start', left: 'start', 'flex-end': 'end', end: 'end', right: 'end', center: 'center', 'space-between': 'between', stretch: 'stretch', baseline: 'baseline' }[v] || 'start');
+    return { dir, items: norm(c.alignItems), justify: norm(c.justifyContent), wrap: c.flexWrap === 'wrap' };
+  }
+  function sizeMode(axis) {
+    const cls = (info()?.classes || []).filter((x) => !x.includes(':') && x.startsWith(axis + '-'));
+    if (cls.includes(axis + '-fit')) return 'hug';
+    if (cls.includes(axis + '-full') || (axis === 'w' && (info()?.classes || []).includes('flex-1'))) return 'fill';
+    if (cls.some((x) => /^[wh]-(\d|\[)/.test(x))) return 'fixed';
+    return 'auto';
+  }
+  function layoutSections(el) {
+    const L = layoutVal(el);
+    let h = '';
+    // Alignment matrix like Figma's: 3×3, mapped to justify/items by direction.
+    const pos = ['start', 'center', 'end'];
+    const cell = (r, c) => {
+      const main = L.dir === 'col' ? pos[r] : pos[c], cross = L.dir === 'col' ? pos[c] : pos[r];
+      const on = L.justify === main && (L.items === cross || (L.items === 'stretch' && cross === 'start'));
+      return `<button class="mx${on ? ' on' : ''}" data-act="align9" data-j="${main}" data-i="${cross}" title="Align ${cross}, ${main}" aria-label="Align ${cross} ${main}"><i></i></button>`;
+    };
+    const auto = L.dir !== 'none';
+    h += sec('Auto layout', `<div class="r2"><div class="ibs">${[['none', 'Off'], ['col', '↓'], ['row', '→']].map(([v, n]) => `<button class="ib${L.dir === v ? ' on' : ''}" data-act="set" data-p="layout" data-v="${v}" title="${v === 'none' ? 'No auto layout' : v === 'col' ? 'Vertical' : 'Horizontal'}">${n}</button>`).join('')}</div>${auto ? `<div class="ibs txt"><button class="ib${L.wrap ? ' on' : ''}" data-act="set" data-p="wrap" data-v="${L.wrap ? 'nowrap' : 'wrap'}" title="Wrap onto new lines">Wrap</button></div>` : '<span></span>'}</div>
+      ${auto ? `<div class="r2c" style="grid-template-columns:76px minmax(0,1fr)"><div class="m9">${[0, 1, 2].map((r) => [0, 1, 2].map((c) => cell(r, c)).join('')).join('')}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${nf('gap', 'gap', 'Gap')}<div class="ibs txt"><button class="ib${L.justify === 'between' ? ' on' : ''}" data-act="set" data-p="justify" data-v="${L.justify === 'between' ? 'start' : 'between'}" title="Space items out evenly">Space between</button></div></div></div>` : ''}
+      <div class="r2">${nf('padX', 'padH', 'Horizontal padding')}${nf('padY', 'padV', 'Vertical padding')}</div>`);
+    const modeSel = (axis) => `<label class="inp"><span class="u">${axis.toUpperCase()}</span><select data-size="${axis}" aria-label="${axis === 'w' ? 'Width' : 'Height'}">${[['auto', 'Auto'], ['hug', 'Hug'], ['fill', 'Fill'], ['fixed', 'Fixed']].map(([v, n]) => `<option value="${v}"${sizeMode(axis) === v ? ' selected' : ''}>${n}</option>`).join('')}</select>${ico('chev', 12)}</label>`;
+    const fixedField = (axis) => sizeMode(axis) === 'fixed' ? nf(axis, `<b class="tg">${axis.toUpperCase()}</b>`, axis === 'w' ? 'Width' : 'Height') : `<label class="inp lock"><input disabled value="${Math.round(axis === 'w' ? el.getBoundingClientRect().width : el.getBoundingClientRect().height)}"></label>`;
+    h += sec('Size', `<div class="r2">${modeSel('w')}${modeSel('h')}</div><div class="r2">${fixedField('w')}${fixedField('h')}</div>`);
+    h += sec('Margin', `<div class="r2">${nf('mX', 'padH', 'Horizontal margin')}${nf('mY', 'padV', 'Vertical margin')}</div>`);
+    return h;
+  }
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-act="align9"]');
+    if (!a || !S.sel) return;
+    const L = layoutVal(S.sel.el);
+    commit({ ops: [...(L.dir === 'none' ? [{ prop: 'layout', value: 'col' }] : []), { prop: 'justify', value: a.dataset.j }, { prop: 'alignItems', value: a.dataset.i }] });
+  });
+  document.addEventListener('change', (e) => {
+    const axis = e.target.dataset?.size;
+    if (!axis || !S.sel) return;
+    const v = e.target.value;
+    const r = S.sel.el.getBoundingClientRect();
+    commit({ ops: [{ prop: axis, value: v === 'fixed' ? Math.round(axis === 'w' ? r.width : r.height) : v === 'auto' ? null : v }] });
+  });
+
+  /* ---------- on-canvas handles: padding and size ---------- */
+  function placeHandles() {
+    const box = $('handles');
+    const el = S.sel?.el;
+    const show = S.mode === 'edit' && S.tool === 'select' && el && el.isConnected && !S.editing && !S.multi.length;
+    box.hidden = !show;
+    if (!show) return;
+    const r = el.getBoundingClientRect(), c = cs(el);
+    const pl = parseFloat(c.paddingLeft), pt = parseFloat(c.paddingTop);
+    const set = (id, x, y) => { const h = $(id); h.style.transform = `translate(${x}px,${y}px)`; };
+    set('hPadL', r.left + Math.max(2, pl / 2) - 4, r.top + r.height / 2 - 8);
+    set('hPadR', r.right - Math.max(2, pl / 2) - 4, r.top + r.height / 2 - 8);
+    set('hPadT', r.left + r.width / 2 - 8, r.top + Math.max(2, pt / 2) - 4);
+    set('hPadB', r.left + r.width / 2 - 8, r.bottom - Math.max(2, pt / 2) - 4);
+    set('hW', r.right - 4, r.top + r.height / 2 - 4);
+    set('hH', r.left + r.width / 2 - 4, r.bottom - 4);
+    const pad = $('padShade');
+    if (S.handleDrag?.kind === 'pad') {
+      pad.hidden = false;
+      pad.style.cssText = `transform:translate(${r.left}px,${r.top}px);width:${r.width}px;height:${r.height}px;border-style:solid;border-color:rgba(240,106,95,.28);border-width:${c.paddingTop} ${c.paddingRight} ${c.paddingBottom} ${c.paddingLeft}`;
+    } else pad.hidden = true;
+  }
+  document.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest('[data-handle]');
+    if (!h || !S.sel) return;
+    e.preventDefault();
+    h.setPointerCapture(e.pointerId);
+    const k = h.dataset.handle, el = S.sel.el, r = el.getBoundingClientRect(), c = cs(el);
+    S.handleDrag = { k, kind: k.startsWith('pad') ? 'pad' : 'size', x: e.clientX, y: e.clientY, padX: parseFloat(c.paddingLeft), padY: parseFloat(c.paddingTop), w: r.width, h: r.height, val: null };
+  });
+  document.addEventListener('pointermove', (e) => {
+    const d = S.handleDrag;
+    if (!d) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    const el = S.sel.el;
+    let prop, v;
+    if (d.k === 'padL') { prop = 'padX'; v = d.padX + dx; } else if (d.k === 'padR') { prop = 'padX'; v = d.padX - dx; }
+    else if (d.k === 'padT') { prop = 'padY'; v = d.padY + dy; } else if (d.k === 'padB') { prop = 'padY'; v = d.padY - dy; }
+    else if (d.k === 'w') { prop = 'w'; v = d.w + dx; } else { prop = 'h'; v = d.h + dy; }
+    v = Math.max(0, Math.round(v / (e.shiftKey ? 1 : 4)) * (e.shiftKey ? 1 : 4)); // snap to the 4px grid, Shift for 1px
+    d.prop = prop; d.val = v;
+    preview(el, prop, v);
+    showLabel(e.clientX, e.clientY, `${{ padX: 'Padding X', padY: 'Padding Y', w: 'W', h: 'H' }[prop]} ${v}`);
+  });
+  document.addEventListener('pointerup', () => {
+    const d = S.handleDrag;
+    if (!d) return;
+    S.handleDrag = null;
+    $('dragLabel').hidden = true;
+    if (d.val != null) commit({ ops: [{ prop: d.prop, value: d.val }] });
+  });
+  function showLabel(x, y, text) {
+    const l = $('dragLabel'), o = $('ov').getBoundingClientRect();
+    l.hidden = false;
+    l.textContent = text;
+    l.style.transform = `translate(${x - o.left + 12}px,${y - o.top + 12}px)`;
+  }
+
+  /* ---------- spacing measurements (hold Alt/Option) ---------- */
+  function measureLines() {
+    const g = $('measG');
+    const a = S.sel?.el, b = S.hover;
+    if (!S.alt || S.mode !== 'edit' || !a || !b || a === b || !a.isConnected || !b.isConnected) { g.innerHTML = ''; return; }
+    const A = a.getBoundingClientRect(), B = b.getBoundingClientRect();
+    const lines = [];
+    const line = (x1, y1, x2, y2) => { const d = Math.round(Math.hypot(x2 - x1, y2 - y1)); if (d > 0) lines.push({ x1, y1, x2, y2, d }); };
+    if (B.left <= A.left && B.right >= A.right && B.top <= A.top && B.bottom >= A.bottom) {
+      const cx = A.left + A.width / 2, cy = A.top + A.height / 2;
+      line(cx, B.top, cx, A.top); line(cx, A.bottom, cx, B.bottom); line(B.left, cy, A.left, cy); line(A.right, cy, B.right, cy);
+    } else {
+      const cy = (Math.max(A.top, B.top) + Math.min(A.bottom, B.bottom)) / 2, cx = (Math.max(A.left, B.left) + Math.min(A.right, B.right)) / 2;
+      const yMid = Math.max(A.top, B.top) < Math.min(A.bottom, B.bottom) ? cy : A.top + A.height / 2;
+      const xMid = Math.max(A.left, B.left) < Math.min(A.right, B.right) ? cx : A.left + A.width / 2;
+      if (B.left >= A.right) line(A.right, yMid, B.left, yMid); else if (B.right <= A.left) line(B.right, yMid, A.left, yMid);
+      if (B.top >= A.bottom) line(xMid, A.bottom, xMid, B.top); else if (B.bottom <= A.top) line(xMid, B.bottom, xMid, A.top);
+    }
+    g.innerHTML = lines.map((l) => `<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="#F06A5F" stroke-width="1"/><rect x="${(l.x1 + l.x2) / 2 - 14}" y="${(l.y1 + l.y2) / 2 - 9}" width="28" height="16" rx="3" fill="#F06A5F"/><text x="${(l.x1 + l.x2) / 2}" y="${(l.y1 + l.y2) / 2 + 3}" fill="#fff" font-size="10" font-weight="600" text-anchor="middle" font-family="Geist,system-ui,sans-serif">${l.d}</text>`).join('');
+  }
+  const altKey = (e) => { if (e.key === 'Alt') { S.alt = e.type === 'keydown'; } };
+  ['keydown', 'keyup'].forEach((t) => window.addEventListener(t, altKey, true));
+  window.addEventListener('blur', () => (S.alt = false));
+
+  /* ---------- multi-select (Shift-click) ---------- */
+  function placeMulti() {
+    const els = S.mode === 'edit' ? S.multi.map((m) => m.el).filter((x) => x.isConnected) : [];
+    pool($('multi'), els.length, 'sel').forEach((b, i) => place(b, els[i] || null, els[i] ? labelOf(els[i]) : null));
+  }
+  const locOf = (m) => (m.use && (!m.def || m.el.getAttribute('data-kerf-n')) ? m.use : m.def || m.use);
+
+  /* ---------- variant components ---------- */
+  function activeVariant() {
+    const c = S.sel?.defInfo?.cva;
+    if (!c) return null;
+    const out = {};
+    for (const g of Object.keys(c.groups)) {
+      const p = (S.sel.useInfo?.props || []).find((x) => x.name === g && x.value != null);
+      out[g] = p ? p.value : c.defaults[g];
+    }
+    return out;
+  }
+
   /* ---------- start ---------- */
   api('/theme').then((t) => { S.theme = t; renderPanel(); }).catch(() => {});
   api('/project').then((p) => { S.project = p; renderTop(); }).catch(() => {});
   api('/changes').then((c) => { S.count = c.length; renderBar(); }).catch(() => {});
+  api('/chat').then((c) => { S.chat = (c.messages || []).map((m) => (m.role === 'kerf' && m.status === 'pending' ? { ...m, status: 'discarded' } : m)); S.notes = c.notes || []; renderAI(); }).catch(() => {});
   refreshVersions();
   renderAll();
   if (frame.contentDocument?.readyState === 'complete') bindApp();

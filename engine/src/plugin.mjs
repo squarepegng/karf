@@ -69,6 +69,7 @@ export default function kerf() {
             return send(200, { name: g.repo || pkg.name || path.basename(webRoot), branch: g.git ? g.branch : null, repo: g.repo, gh: g.gh, files: g.files || [] });
           }
           if (req.method === 'GET' && route === '/versions') return send(200, session.list());
+          if (req.method === 'GET' && route === '/chat') return send(200, session.chat());
           if (req.method === 'GET' && route === '/icons') return send(200, library.searchIcons(new URL(req.url, 'http://x').searchParams.get('q'), 80, new URL(req.url, 'http://x').searchParams.get('lib') || undefined));
           if (req.method === 'GET' && route === '/components') return send(200, [...library.componentList().values()].map((c) => ({ name: c.name, file: c.rel })).sort((a, b) => a.name.localeCompare(b.name)));
           if (req.method === 'GET' && route === '/uploads') return send(200, library.uploads());
@@ -76,17 +77,21 @@ export default function kerf() {
           if (req.method === 'GET' && route === '/changes') return send(200, editor.history.map(({ rel, loc, change, summary, at }) => ({ file: rel, loc, change, summary, at })));
           if (req.method !== 'POST') return send(404, { error: 'Not found' });
           const body = await readBody(req);
+          if (route === '/chat') { session.setChat(body); return send(200, { ok: true }); }
+          // Every change is saved to .kerf/ so a restart keeps undo, versions and chat.
+          const s0 = send;
+          const send2 = (status, b) => { if (status === 200 && route !== '/inspect' && route !== '/ai') session.save(); return s0(status, b); };
           const writes = ['/edit', '/undo', '/ai/apply', '/structure'];
           if (writes.includes(route) && session.isPeeking()) return send(409, { error: 'You’re looking at an earlier version. Close it to keep editing.' });
-          if (route === '/version') return send(200, session.snapshot());
-          if (route === '/restore') return send(200, session.restore(Number(body.n)));
-          if (route === '/peek') return send(200, session.peekBefore(Number(body.n)));
-          if (route === '/unpeek') return send(200, session.unpeek());
-          if (route === '/pr') return send(200, session.pullRequest(body));
+          if (route === '/version') return send2(200, session.snapshot());
+          if (route === '/restore') return send2(200, session.restore(Number(body.n)));
+          if (route === '/peek') return send2(200, session.peekBefore(Number(body.n)));
+          if (route === '/unpeek') return send2(200, session.unpeek());
+          if (route === '/pr') return send2(200, session.pullRequest(body));
           if (route === '/inspect') return send(200, editor.describe(body.loc));
-          if (route === '/edit') return send(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props }));
-          if (route === '/undo') return send(200, editor.undo());
-          if (route === '/structure') return send(200, editor.structure(body.loc, body.op));
+          if (route === '/edit') return send2(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props, cva: body.cva }));
+          if (route === '/undo') return send2(200, editor.undo());
+          if (route === '/structure') return send2(200, editor.structure(body.loc, body.op));
           if (route === '/upload') {
             try { return send(200, library.saveUpload(body.name, body.data)); } catch (e) { throw new KerfError(e.message); }
           }
@@ -112,16 +117,35 @@ export default function kerf() {
               const ins = edits.find((e) => e.loc === del.loc && e.structure?.type === 'insert' && e.structure.position !== 'inside');
               if (ins) { ins.structure = { type: 'replace', jsx: ins.structure.jsx }; edits = edits.filter((e) => e !== del); }
             }
-            const ordered = edits.sort((a, b) => String(a.loc).split(':')[0].localeCompare(String(b.loc).split(':')[0]) || lineOf(b) - lineOf(a) || rank(a) - rank(b));
-            const results = ordered.map((e) => {
+            // Style edits never move lines: do them top-down so parents get their layout before children.
+            // Structural edits do move lines: do them bottom-up per file, deletes last.
+            const file = (e) => String(e.loc).split(':')[0];
+            const ordered = edits.sort((a, b) => (!!a.structure - !!b.structure) || (!a.structure ? file(a).localeCompare(file(b)) || lineOf(a) - lineOf(b) : file(a).localeCompare(file(b)) || lineOf(b) - lineOf(a) || rank(a) - rank(b)));
+            // Groups run first so the new frames exist; elements they move are followed by later edits.
+            const groups = ordered.filter((e) => e.structure?.type === 'group');
+            const final = [...groups, ...ordered.filter((e) => e.structure?.type !== 'group')];
+            const remap = new Map();
+            const shifts = [];
+            const results = final.map((e) => {
+              let loc = remap.get(e.loc) || e.loc;
+              if (!remap.has(e.loc)) for (const sh of shifts) {
+                const m = loc.match(/^(.+):(\d+):(\d+)$/);
+                if (m && m[1] === sh.file && +m[2] > sh.after) loc = `${m[1]}:${+m[2] + sh.delta}:${m[3]}`;
+              }
+              e = { ...e, loc };
               try {
-                if (e.structure) return { loc: e.loc, ok: true, ...editor.structure(e.loc, e.structure, 'ai') };
+                if (e.structure) {
+                  const r = editor.structure(e.loc, e.structure, 'ai');
+                  for (const [a, b] of r.moved || []) remap.set(a, b);
+                  if (r.shift) shifts.push(r.shift);
+                  return { loc: e.loc, ok: true, ...r };
+                }
                 return { loc: e.loc, ok: true, ...editor.edit(e.loc, { ops: e.ops, text: e.text || undefined, props: e.props, source: 'ai' }) };
               } catch (err) {
                 return { loc: e.loc, ok: false, error: err.message };
               }
             });
-            return send(200, { results, n: editor.history.length });
+            return send2(200, { results, n: editor.history.length });
           }
           return send(404, { error: 'Not found' });
         } catch (e) {
