@@ -22,7 +22,23 @@ code that made it, then change that code the way a careful developer would.
 - **Is safe.** Every change is re-parsed before it's written. There's an undo
   history, and undo refuses to overwrite a file changed outside Kerf.
 
-## Run it on an app
+## Open a project (start screen)
+
+```bash
+cd engine && npm install
+node bin/kerf-home.mjs        # then open http://localhost:4100
+```
+
+Paste a GitHub link (`github.com/team/app`) or a folder path. Kerf downloads
+the repo into `~/Kerf/projects/`, finds the React + Tailwind app inside it
+(monorepos included), installs it with the repo’s own package manager, starts
+it with Kerf attached and opens it. Edits change Kerf’s copy, not your
+original folder or GitHub, until a PR is made.
+
+In the app: **E** to edit, **P** to preview. Click to select, double-click text
+to retype, drag a field’s icon to scrub, **⌘Z** to undo.
+
+## Run one app directly
 
 ```bash
 cd engine && npm install
@@ -55,7 +71,7 @@ node scripts/live-check.mjs http://localhost:5173   # real edits against a runni
 
 ## Next
 
-1. The editor overlay in the running app (the Figma-style panel from the prototype).
-2. AI: a request plus the selected element's code goes to Claude, and the edits come back for approval.
-3. Reorder (moving JSX between siblings) and "only here" edits on shared components.
-4. Create a branch and PR from a session's edits.
+1. AI: a request plus the selected element’s code goes to Claude, and the edits come back for approval.
+2. Create a branch and PR from a session’s edits.
+3. Reorder (moving JSX between siblings) and “only here” edits on shared components.
+4. Next.js support.
