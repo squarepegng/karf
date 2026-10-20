@@ -18,7 +18,8 @@ const ICON_SOURCES = {
 };
 
 export function createLibrary(webRoot) {
-  const srcDir = path.join(webRoot, 'src');
+  // Most apps keep code in src/; Next.js apps often keep app/ and components/ at the root.
+  const srcDir = fs.existsSync(path.join(webRoot, 'src')) ? path.join(webRoot, 'src') : webRoot;
   let icons = null;
   let components = null;
 
@@ -51,7 +52,7 @@ export function createLibrary(webRoot) {
       for (const e of fs.readdirSync(d, { withFileTypes: true })) {
         if (usesAlias) return;
         const p = path.join(d, e.name);
-        if (e.isDirectory()) { if (e.name !== 'node_modules') walk(p); }
+        if (e.isDirectory()) { if (!['node_modules', 'public', 'dist', 'build', 'out'].includes(e.name) && !e.name.startsWith('.')) walk(p); }
         else if (/\.[jt]sx?$/.test(e.name) && /from ['"]@\//.test(fs.readFileSync(p, 'utf8'))) usesAlias = true;
       }
     };

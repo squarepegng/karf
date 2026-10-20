@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Run a React + Tailwind app's own Vite dev server with Kerf attached.
+// Run a React + Tailwind app with Kerf attached: Vite apps here, Next.js apps via kerf-next.mjs.
 // The app's repo and config are not modified.
 //   node bin/kerf.mjs /path/to/app/web
 import path from 'node:path';
@@ -9,6 +9,11 @@ import { pathToFileURL } from 'node:url';
 import kerf from '../src/plugin.mjs';
 
 const webRoot = path.resolve(process.argv[2] || '.');
+// Next.js apps get their own runner.
+const pkg = JSON.parse(fs.readFileSync(path.join(webRoot, 'package.json'), 'utf8'));
+if ({ ...pkg.dependencies, ...pkg.devDependencies }.next) {
+  await import('./kerf-next.mjs');
+} else {
 // Tools like Tailwind and PostCSS look for their config in the working directory.
 process.chdir(webRoot);
 const req = createRequire(path.join(webRoot, 'package.json'));
@@ -29,3 +34,4 @@ const server = await vite.createServer({
 await server.listen();
 server.printUrls();
 console.log(`  Kerf editor: ${server.resolvedUrls?.local?.[0] || "http://localhost:5173/"}__kerf/`);
+}

@@ -31,23 +31,48 @@ function run(cmd, args, cwd, log) {
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 const deps = (pkg) => ({ ...(pkg?.dependencies || {}), ...(pkg?.devDependencies || {}) });
 
-// Find folders that hold a React + Tailwind web app, up to three levels deep.
+const TW_CONFIGS = ['tailwind.config.js', 'tailwind.config.mjs', 'tailwind.config.cjs', 'tailwind.config.ts', 'tailwind.config.mts', 'tailwind.config.cts'];
+const major = (v) => { const m = String(v || '').match(/(\d+)/); return m ? +m[1] : null; };
+function installedMajor(dir, name) {
+  for (let d = dir; d; d = path.dirname(d) === d ? null : path.dirname(d)) {
+    const v = readJson(path.join(d, 'node_modules', name, 'package.json'))?.version;
+    if (v) return major(v);
+  }
+  return null;
+}
+
+// Can Kerf open this app? Returns null if yes, or a plain reason why not.
+export function appProblem(dir) {
+  const d = deps(readJson(path.join(dir, 'package.json')));
+  const tw = TW_CONFIGS.find((f) => fs.existsSync(path.join(dir, f)));
+  if (!d.react) return 'Kerf works with React apps, and this one doesn’t use React.';
+  if (d['react-scripts']) return 'This app uses Create React App. Kerf supports apps built with Vite or Next.js.';
+  if (Object.keys(d).some((k) => k.startsWith('@remix-run/'))) return 'This is a Remix app. Kerf supports apps built with Vite or Next.js; Remix is not supported yet.';
+  if (d.astro) return 'This is an Astro site. Kerf supports React apps built with Vite or Next.js.';
+  if (d.gatsby) return 'This is a Gatsby site. Kerf supports apps built with Vite or Next.js.';
+  if (!d.next && !d.vite) return 'Kerf supports apps built with Vite or Next.js, and couldn’t tell how this one is built.';
+  if (d.next && (installedMajor(dir, 'next') ?? major(d.next)) < 13) return 'This app uses Next.js 12 or older. Kerf needs Next.js 13 or newer.';
+  if (!d.tailwindcss && !tw) return 'This app isn’t styled with Tailwind CSS, which Kerf uses to change styles.';
+  if ((installedMajor(dir, 'tailwindcss') ?? major(d.tailwindcss)) >= 4) return 'This app uses Tailwind CSS v4. Kerf works with Tailwind v3 today; v4 support is coming.';
+  if (!tw) return 'Kerf couldn’t find this app’s tailwind.config file.';
+  return null;
+}
+
+// Find folders that hold a React web app, up to three levels deep, with whether Kerf can open each.
 export function findApps(repoRoot) {
   const found = [];
   const visit = (dir, depth) => {
     const pkg = readJson(path.join(dir, 'package.json'));
-    if (pkg) {
-      const d = deps(pkg);
-      const tw = ['tailwind.config.js', 'tailwind.config.mjs', 'tailwind.config.cjs', 'tailwind.config.ts'].find((f) => fs.existsSync(path.join(dir, f)));
-      if (d.react && (tw || d.tailwindcss)) {
-        found.push({
-          dir,
-          rel: path.relative(repoRoot, dir) || '.',
-          name: pkg.name || path.basename(dir),
-          framework: d.next ? 'next' : d.vite ? 'vite' : 'other',
-          tailwindConfig: tw || null,
-        });
-      }
+    const d = deps(pkg);
+    if (pkg && d.react) {
+      found.push({
+        dir,
+        rel: path.relative(repoRoot, dir) || '.',
+        name: pkg.name || path.basename(dir),
+        framework: d.next ? 'next' : d.vite ? 'vite' : 'other',
+        tailwindConfig: TW_CONFIGS.find((f) => fs.existsSync(path.join(dir, f))) || null,
+        problem: appProblem(dir),
+      });
     }
     if (depth >= 3) return;
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -96,12 +121,14 @@ export async function openProject(source, onUpdate = () => {}) {
 
     step('Looking for a React + Tailwind app');
     const apps = findApps(repoRoot);
-    job.apps = apps.map((a) => ({ rel: a.rel, name: a.name, framework: a.framework }));
-    if (!apps.length) throw new Error('No React + Tailwind app found in this project. Kerf v1 works with React apps styled with Tailwind.');
-    const app = apps.find((a) => a.framework === 'vite');
-    if (!app) throw new Error(apps.some((a) => a.framework === 'next') ? 'This is a Next.js app. Kerf supports Vite apps today; Next.js support is next on the roadmap.' : 'Kerf supports apps built with Vite today.');
-    if (!app.tailwindConfig || app.tailwindConfig.endsWith('.ts')) throw new Error(`Found ${app.rel}, but it has no tailwind.config.js Kerf can read yet.`);
-    log(`Found ${app.name} in ${app.rel}\n`);
+    job.apps = apps.map((a) => ({ rel: a.rel, name: a.name, framework: a.framework, problem: a.problem }));
+    if (!apps.length) throw new Error('Kerf didn’t find a React app in this project. It works with React apps built with Vite or Next.js and styled with Tailwind CSS.');
+    const app = apps.find((a) => !a.problem);
+    if (!app) {
+      const a = apps[0];
+      throw new Error(apps.length === 1 || a.rel === '.' ? a.problem : `${a.problem} (in ${a.rel})`);
+    }
+    log(`Found ${app.name} in ${app.rel} (${app.framework === 'next' ? 'Next.js' : 'Vite'})\n`);
 
     const pm = packageManager(repoRoot);
     if (!fs.existsSync(path.join(repoRoot, 'node_modules'))) {

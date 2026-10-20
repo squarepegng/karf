@@ -53,5 +53,6 @@ export function summaryLabels(summary) {
   (summary.changes || []).forEach((c) => out.push(changeLabel(c)));
   if (summary.text) out.push(`Text “${summary.text.to}”`);
   (summary.props || []).forEach((p) => out.push(`${p.name} ${p.from ?? 'default'} → ${p.to}`));
+  if (summary.size && out.length) out[out.length - 1] += ` (${summary.size.toLowerCase()})`;
   return out;
 }

@@ -202,18 +202,19 @@
       if (S.multi.length) {
         // Several selected: apply the same change to each one, in a safe order.
         const edits = [{ loc, ...change, cva: cvaParam(), name: dName(S.sel.el) }, ...S.multi.map((m) => ({ loc: locOf(m), ...change, name: dName(m.el) }))];
-        const r = await api('/ai/apply', { edits: edits.map((e) => ({ loc: e.loc, ops: e.ops || [], props: e.props || [], text: e.text, name: e.name })) });
+        const r = await api('/ai/apply', { edits: edits.map((e) => ({ loc: e.loc, ops: e.ops || [], props: e.props || [], text: e.text, name: e.name, bp: bpParam() })) });
         S.count = r.n;
         const ok = r.results.filter((x) => x.ok && x.changed).length;
         toast(`${ok} element${ok === 1 ? '' : 's'} · ${(r.results.find((x) => x.summary)?.summary.labels || []).join(' · ')}`, r.results.some((x) => !x.ok) ? r.results.find((x) => !x.ok).error : '', false, true);
       } else {
-        const r = await api('/edit', { loc, ...change, cva: cvaParam(), name: S.sel ? dName(S.sel.el) : null });
+        const r = await api('/edit', { loc, ...change, cva: cvaParam(), bp: bpParam(), name: S.sel ? dName(S.sel.el) : null });
         if (r.changed) {
           S.count = r.n;
           const sm = r.summary;
           const who = S.sel ? dName(S.sel.el) : '';
           const where = sm.scope === 'variant' ? ` (all “${activeVariant()?.variant}”)` : sm.scope === 'all' ? ' (every one)' : '';
-          toast(`${who}${where} · ${(sm.labels || []).join(' · ')}`, sm.offScale.length ? 'Some values are off your design scale' : '', false, true, `${fileName(r.file)}: ${[sm.removed.join(' ') || '—', sm.added.join(' ')].join(' → ')}`);
+          if (sm.size) sm.labels = (sm.labels || []).map((l) => l.replace(/ \((only on \w+|all sizes)\)$/, ''));
+          toast(`${who}${where} · ${(sm.labels || []).join(' · ')}${sm.size ? ` · ${sm.size.toLowerCase()}` : ''}`, sm.offScale.length ? 'Some values are off your design scale' : '', false, true, `${fileName(r.file)}: ${[sm.removed.join(' ') || '—', sm.added.join(' ')].join(' → ')}`);
         }
       }
       afterEdit();
@@ -362,7 +363,8 @@
     const w = S.device === 'desktop' ? Math.round(aw / zFit) : DEVICES[S.device];
     const z = S.zoom === 'fit' ? zFit : S.zoom;
     const h = ah / z, left = Math.max(16, (c.clientWidth - w * z) / 2);
-    Object.assign(fb.style, { width: w + 'px', height: h + 'px', left: left + 'px', transform: `scale(${z})` });
+    // +2 for the frame's border, so the app inside is exactly w wide (1024 must count as desktop).
+    Object.assign(fb.style, { width: w + 2 + 'px', height: h + 'px', left: left + 'px', transform: `scale(${z})` });
     fb.style.setProperty('--iz', 1 / z);
     fb.classList.toggle('dev', S.device !== 'desktop');
     $('sizer').style.width = (left + w * z + 16) + 'px';
@@ -530,6 +532,27 @@
     }).join('');
     return sec(`Properties${inf.lib ? ` <span class="note" style="font-weight:400">${esc(inf.lib.replace(/^@/, '').split('/')[0])}</span>` : ''}`, rows);
   }
+  /* screen sizes: edit for all sizes, or only the size you're looking at */
+  S.sizeOnly = { desktop: false, tablet: true, mobile: true };
+  function sizeRange() {
+    const sc = S.theme?.screens || [];
+    if (!sc.length) return null;
+    const find = (name, min) => (sc.find((x) => x.name === name) || sc.find((x) => x.min >= min))?.name || null;
+    const tab = find('md', 700), desk = find('lg', 1000);
+    return { desktop: [desk, null], tablet: [tab, desk], mobile: [null, tab] }[S.device];
+  }
+  function bpParam() {
+    const r = sizeRange();
+    if (!r) return null;
+    const dev = S.device;
+    return S.sizeOnly[dev] ? { mode: 'only', start: r[0], end: r[1], label: `Only on ${dev}` } : { mode: 'all', label: 'All sizes' };
+  }
+  function sizeHTML(inf) {
+    if (!sizeRange() || inf?.classKind === 'cva') return '';
+    const dev = S.device, only = S.sizeOnly[dev];
+    const differs = (inf?.classes || []).some((c) => /^(sm|md|lg|xl|2xl):[^:]+$/.test(c));
+    return `<div class="sizeRow"><div class="seg">${[[false, 'All sizes'], [true, `${dev[0].toUpperCase() + dev.slice(1)} only`]].map(([v, n]) => `<button data-act="sizeOnly" data-v="${v}" class="${only === v ? 'on' : ''}" title="${v ? `Change it only on ${dev}; other screen sizes keep how they look now` : 'Make it the same on every screen size'}">${ico(v ? dev : 'corners', 12)}${n}</button>`).join('')}</div>${differs ? '<span class="note" title="This element is styled differently on other screen sizes">Differs by size</span>' : ''}</div>`;
+  }
   function scopeHTML(s, name) {
     const c = s.defInfo?.cva;
     if (c) {
@@ -567,6 +590,7 @@
     const loc = activeLoc();
     let h = `<div class="sec head"><div class="secH"><span class="nm">${ico(layerIcon(el))}${esc(dName(el))}</span><span class="hbs">${hb('copyLoc', 'code', `Code: ${loc.replace(/:(\d+):\d+$/, ':$1')} (click to copy)`)}${hb('parent', 'up', 'Select parent')}</span></div>
       ${scopeHTML(s, name)}
+      ${sizeHTML(inf)}
       ${S.multi.length ? `<span class="note">+${S.multi.length} more selected: changes apply to all ${S.multi.length + 1}.</span>` : ''}
       ${s.repeat > 1 ? `<span class="note">Repeated ×${s.repeat} by the same code: edits apply to all of them.</span>` : ''}
       ${actionsHTML()}</div>`;
@@ -580,7 +604,8 @@
       if (inf.text?.editable) h += sec('Content', `<label class="inp"><input type="text" data-text="1" value="${esc(inf.text.value)}" aria-label="Text"></label>`);
       else if (isText(el)) h += sec('Content', `<span class="note">${esc(inf.text?.reason || '')}</span>`);
       if (isText(el) || inf.text?.editable) {
-        const fam = cs(el).fontFamily.split(',')[0].replace(/["']/g, '');
+        // next/font names fonts like "__geistSans_1e4310": show "Geist Sans".
+        const fam = camelWords(cs(el).fontFamily.split(',')[0].replace(/["']/g, '').replace(/^_+/, '').replace(/_[0-9a-f]{4,}$/i, '').replace(/_Fallback.*$/, '')).replace(/^./, (c) => c.toUpperCase());
         const fw = val('fontWeight');
         h += sec('Typography', `<label class="inp lock"><input type="text" value="${esc(fam)}" disabled aria-label="Font"></label>
           <div class="r2"><label class="inp"><select data-sel="fontWeight" aria-label="Weight">${[[100, 'Thin'], [200, 'Extra light'], [300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semibold'], [700, 'Bold'], [800, 'Extra bold'], [900, 'Black']].map(([v, n]) => `<option value="${v}"${v === fw ? ' selected' : ''}>${n}</option>`).join('')}</select>${ico('chev', 12)}</label>${nf('fontSize', '<b class="tg">T</b>', 'Font size')}</div>
@@ -852,6 +877,7 @@
       case 'changes': S.changesOpen = !S.changesOpen; renderChanges(); break;
       case 'toastClose': $('toast').hidden = true; break;
       case 'scope': S.scope = v; S.cpick = null; renderPanel(); break;
+      case 'sizeOnly': S.sizeOnly[S.device] = v === 'true'; renderPanel(); break;
       case 'reveal': S.reveal = { el: S.sel?.el, ...(S.reveal?.el === S.sel?.el ? S.reveal : {}), [v]: true }; renderPanel(); break;
       case 'saveVersion': api('/version', {}).then((v) => { S.versions = v; renderPanel(); renderTop(); toast(`Saved version ${v.versions.length}`); }).catch((e) => toast(e.message, '', true)); break;
       case 'copyLoc': navigator.clipboard?.writeText(activeLoc() || '').then(() => toast('Copied the code location', activeLoc() || '')).catch(() => {}); break;
@@ -868,7 +894,7 @@
       case 'chatToggle': toggleAI(false); break;
       case 'ask': toggleAI(false); break;
       case 'layersToggle': S.layersOpen = !S.layersOpen; renderLayers(); renderTop(); break;
-      case 'device': S.device = v; S.zoom = 'fit'; applyDevice(); renderTop(); break;
+      case 'device': S.device = v; S.zoom = 'fit'; applyDevice(); renderTop(); renderPanel(); break;
       case 'zoom': setZoom(v); break;
       case 'reload': W?.location.reload(); break;
       case 'history': S.side = S.side === 'history' ? 'design' : 'history'; if (S.side === 'history') refreshVersions(); renderAll(); break;
@@ -1107,7 +1133,7 @@
     if (!m || m.status !== 'pending') return;
     S.amber = [];
     if (v === 'apply') {
-      const r = await api('/ai/apply', { edits: chosen(m) }).catch((e) => ({ error: e.message }));
+      const r = await api('/ai/apply', { edits: chosen(m).map((e) => (e.structure ? e : { ...e, bp: bpParam() })) }).catch((e) => ({ error: e.message }));
       if (r.error) { toast(r.error, '', true); renderAI(); return; }
       const ok = r.results.filter((x) => x.ok && x.changed).length, bad = r.results.filter((x) => !x.ok);
       S.count = r.n;
