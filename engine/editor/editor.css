@@ -299,3 +299,32 @@ details.code[open] summary::before{content:'⌄ '}
 .notePop>.note{margin-top:-2px;padding:0 2px}
 .card .kc{box-shadow:none}
 .bub{border-radius:14px 14px 4px 14px;padding:8px 12px}
+
+/* AI answers grouped by note */
+.ed{gap:4px}
+.edT{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.edT .mono{font:500 11px/16px 'Geist Mono',ui-monospace,monospace}
+.noteRes .prop,.ask .prop{max-height:min(62vh,560px);overflow:auto}
+.prop.byNote{gap:8px}
+.ngs{display:flex;flex-direction:column;gap:8px}
+.ng{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:10px;background:var(--raised);transition:opacity .12s,box-shadow .12s}
+.ng:hover{box-shadow:inset 0 0 0 1px rgba(233,181,71,.5)}
+.ng.off{opacity:.5}
+.ngH{display:flex;align-items:center;gap:8px;min-width:0}
+.nNum{flex:0 0 auto;display:grid;place-items:center;width:20px;height:20px;border-radius:10px 10px 10px 2px;background:var(--select);color:#fff;font:600 11px/1 Geist,system-ui,sans-serif}
+.nNum.other{background:var(--line);border-radius:10px}
+.ngQ{flex:1;min-width:0;color:var(--ink2);line-height:16px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ngH{align-items:flex-start}
+.ngH .nSt,.ngH .nTog{margin-top:1px}
+.nSt{flex:0 0 auto;padding:1px 6px;border-radius:4px;font:500 11px/16px Geist,system-ui,sans-serif}
+.nSt.ok{background:rgba(74,190,120,.16);color:#6FD39A}
+.nSt.part{background:rgba(233,181,71,.16);color:var(--intent)}
+.nSt.no{background:rgba(240,106,95,.14);color:var(--danger)}
+.ngS{color:var(--ink);line-height:18px}
+.ngE{display:flex;flex-direction:column;gap:4px}
+.ngE .ed{padding:6px 8px}
+.nTog{flex:0 0 auto;position:relative;width:26px;height:16px;padding:0;border:0;border-radius:8px;background:var(--line)}
+.nTog i{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:6px;background:var(--ink2);transition:transform .12s}
+.nTog.on{background:var(--intent)}
+.nTog.on i{transform:translateX(10px);background:var(--canvas)}
+.amberBtn[disabled]{opacity:.4}

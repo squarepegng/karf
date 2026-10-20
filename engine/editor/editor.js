@@ -927,9 +927,10 @@
   }
 
   /* ---------- AI: Ask bar, chat, annotations ---------- */
-  const PROP_NAMES = { gradient: 'Gradient', clipText: 'Gradient text', fit: 'Image fit', bg: 'Fill', color: 'Text color', borderC: 'Stroke color', fontSize: 'Size', fontWeight: 'Weight', lineHeight: 'Line height', letterSpacing: 'Letter spacing', align: 'Align', radius: 'Radius', rTL: 'Top-left corner', rTR: 'Top-right corner', rBR: 'Bottom-right corner', rBL: 'Bottom-left corner', padX: 'Padding X', padY: 'Padding Y', gap: 'Gap', borderW: 'Stroke', opacity: 'Opacity', shadow: 'Shadow' };
-  const UNIT = { fontSize: 'px', lineHeight: 'px', radius: 'px', rTL: 'px', rTR: 'px', rBR: 'px', rBL: 'px', padX: 'px', padY: 'px', gap: 'px', borderW: 'px', opacity: '%', letterSpacing: '%' };
-  const opLabel = (o) => `${PROP_NAMES[o.prop] || o.prop} ${o.value}${UNIT[o.prop] || ''}`;
+  const PROP_NAMES = { gradient: 'Gradient', clipText: 'Gradient text', fit: 'Image fit', bg: 'Fill', color: 'Text color', borderC: 'Stroke color', fontSize: 'Size', fontWeight: 'Weight', lineHeight: 'Line height', letterSpacing: 'Letter spacing', align: 'Align', radius: 'Radius', rTL: 'Top-left corner', rTR: 'Top-right corner', rBR: 'Bottom-right corner', rBL: 'Bottom-left corner', padX: 'Padding X', padY: 'Padding Y', gap: 'Gap', borderW: 'Stroke', opacity: 'Opacity', shadow: 'Shadow', w: 'Width', h: 'Height', mX: 'Margin X', mY: 'Margin Y', layout: 'Layout', alignItems: 'Align', justify: 'Distribute', wrap: 'Wrap' };
+  const UNIT = { w: 'px', h: 'px', mX: 'px', mY: 'px', fontSize: 'px', lineHeight: 'px', radius: 'px', rTL: 'px', rTR: 'px', rBR: 'px', rBL: 'px', padX: 'px', padY: 'px', gap: 'px', borderW: 'px', opacity: '%', letterSpacing: '%' };
+  const WORDS = { fill: 'Fill', grow: 'Fill', hug: 'Hug', auto: 'Auto', row: 'Horizontal', col: 'Vertical', none: 'Off', true: 'On', false: 'Off' };
+  const opLabel = (o) => { const v = String(o.value); if (o.prop === 'fontWeight') return `Weight ${({ 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semibold', 700: 'Bold', 800: 'Extra bold' })[v] || v}`; return `${PROP_NAMES[o.prop] || o.prop} ${WORDS[v] || v}${/^-?[\d.]+$/.test(v) ? UNIT[o.prop] || '' : ''}`; };
   const structLabel = (st) => ({ group: `Group into a frame (${st.className || ''})`, ungroup: 'Ungroup', replace: `Replace with: ${(st.jsx || '').slice(0, 60)}`, delete: 'Delete', duplicate: 'Duplicate', move: `Move ${st.dir || 'to ' + st.index}`, swap: `Swap → ${st.to}`, insert: `Add ${st.position}: ${(st.jsx || '').slice(0, 60)}`, image: [st.src && `Image → ${st.src}`, st.alt != null && `Alt “${st.alt}”`].filter(Boolean).join(' · ') })[st.type];
   const editLabel = (e) => e.structure ? structLabel(e.structure) : [...e.ops.map(opLabel), ...(e.props || []).map((p) => `${p.name}: ${p.value}`), ...(e.text ? [`“${e.text}”`] : [])].join(' · ');
   function measure(el) {
@@ -1001,7 +1002,7 @@
     const history = historyFor();
     const ctx = followUp ? 'Follow-up' : where === 'chat' && S.sel ? ((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || nameOf(S.sel.el)) : where === 'notes' ? `${S.notes.length} note${S.notes.length === 1 ? '' : 's'}` : 'Whole screen';
     S.chat.push({ role: 'user', text, shown: shown || text, ctx, where, atts: atts.map((a) => ({ name: a.name, thumb: a.thumb })) });
-    const m = { role: 'kerf', busy: true, status: 'pending', where, targets };
+    const m = { role: 'kerf', busy: true, status: 'pending', where, targets, noteTexts: where === 'notes' && !followUp ? S.notes.map((n) => n.text) : null, skip: [] };
     S.chat.push(m);
     S.card = m;
     renderAI();
@@ -1018,7 +1019,7 @@
     if (!m || m.status !== 'pending') return;
     S.amber = [];
     if (v === 'apply') {
-      const r = await api('/ai/apply', { edits: m.proposal.edits }).catch((e) => ({ error: e.message }));
+      const r = await api('/ai/apply', { edits: chosen(m) }).catch((e) => ({ error: e.message }));
       if (r.error) { toast(r.error, '', true); renderAI(); return; }
       const ok = r.results.filter((x) => x.ok && x.changed).length, bad = r.results.filter((x) => !x.ok);
       S.count = r.n;
@@ -1031,14 +1032,42 @@
     saveChat();
   }
   const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: '' };
+  const chosen = (m) => m.proposal.edits.filter((e) => !(m.skip || []).includes(e.note ?? 0));
+  const editRow = (e) => `<div class="ed"><div class="edT"><b>${esc(e.name || e.tag)}</b><span class="mono">${esc(editLabel(e))}</span></div>${e.why ? `<span>${esc(e.why)}</span>` : ''}</div>`;
+  const NSTAT = { done: ['Done', 'ok'], partial: ['Partly', 'part'], not_possible: ['Not here', 'no'] };
+  // Notes answered one by one: the mark's number, what was asked, what Kerf did, and its edits.
+  function notesHTML(m, i) {
+    const p = m.proposal, texts = m.noteTexts || [];
+    const count = Math.max(texts.length, ...p.notes.map((n) => n.note), ...p.edits.map((e) => e.note || 0));
+    const groups = [];
+    for (let n = 1; n <= count; n++) {
+      const info = p.notes.find((x) => x.note === n), eds = p.edits.filter((e) => e.note === n);
+      if (!info && !eds.length && !texts[n - 1]) continue;
+      groups.push({ n, info, eds, text: texts[n - 1] });
+    }
+    const loose = p.edits.filter((e) => !e.note || e.note > count);
+    if (loose.length) groups.push({ n: 0, info: null, eds: loose, text: null });
+    const pending = m.status === 'pending';
+    return groups.map((g) => {
+      const st = NSTAT[g.info?.status] || (g.eds.length ? NSTAT.done : NSTAT.not_possible);
+      const off = (m.skip || []).includes(g.n);
+      return `<div class="ng${off ? ' off' : ''}" data-ng="${g.n}" data-i="${i}">
+        <div class="ngH">${g.n ? `<span class="nNum">${g.n}</span>` : '<span class="nNum other">+</span>'}<span class="ngQ">${g.text ? `“${esc(g.text)}”` : g.n ? `Note ${g.n}` : 'Also changed'}</span>${g.info || g.n ? `<span class="nSt ${st[1]}">${st[0]}</span>` : ''}
+        ${pending && g.eds.length ? `<button class="nTog${off ? '' : ' on'}" data-act2="noteSkip" data-i="${i}" data-n="${g.n}" role="switch" aria-checked="${!off}" title="${off ? 'Include these changes' : 'Leave these out'}"><i></i></button>` : ''}</div>
+        ${g.info?.summary ? `<div class="ngS">${esc(g.info.summary)}</div>` : ''}
+        ${g.eds.length ? `<div class="ngE">${g.eds.map(editRow).join('')}</div>` : ''}</div>`;
+    }).join('');
+  }
   function kerfHTML(m, i) {
     if (m.busy) return `<div class="prop"><div class="kerfSays"><i class="spin"></i><span class="note">Kerf is reading the code…</span></div></div>`;
     if (m.error) return `<div class="prop err"><span class="note warn">${esc(m.error)}</span></div>`;
     const p = m.proposal;
     const badge = { partial: 'Partly possible', not_yet: 'Not possible in Kerf yet', needs_developer: 'For developers' }[p.scope];
-    return `<div class="prop"><div class="kerfSays"><i class="dotA"></i><span>${badge ? `<b class="badge">${badge}</b> ` : ''}${esc(p.message)}</span></div>
-      ${p.edits.length ? `<div class="edits">${p.edits.map((e) => `<div class="ed"><b>${esc(e.tag)}</b><span>${esc(e.why)}</span><span class="mono">${esc(editLabel(e))}</span></div>`).join('')}</div>` : ''}
-      ${m.status === 'pending' ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="amberBtn" data-act2="decide" data-i="${i}" data-v="apply">Apply ${p.edits.length} change${p.edits.length === 1 ? '' : 's'}</button></div>` : STATUS[m.status] ? `<span class="note">${STATUS[m.status]}</span>` : ''}</div>`;
+    const byNote = p.notes?.length && p.edits.length + p.notes.length > 1;
+    const n = chosen(m).length;
+    return `<div class="prop${byNote ? ' byNote' : ''}">${byNote ? `<div class="kerfSays"><i class="dotA"></i><span>${esc(p.message)}</span></div><div class="ngs">${notesHTML(m, i)}</div>` : `<div class="kerfSays"><i class="dotA"></i><span>${badge ? `<b class="badge">${badge}</b> ` : ''}${esc(p.message)}</span></div>
+      ${p.edits.length ? `<div class="edits">${p.edits.map(editRow).join('')}</div>` : ''}`}
+      ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="amberBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n} change${n === 1 ? '' : 's'}`}</button></div>` : STATUS[m.status] ? `<span class="note">${STATUS[m.status]}</span>` : ''}</div>`;
   }
   const replyForm = (where) => composer('replyIn', { form: 'reply', where, placeholder: 'Reply to Kerf…' });
   function renderAsk() {
@@ -1186,8 +1215,8 @@
   });
 
   /* annotations */
-  function shapeSVG(n, i, draft) {
-    const st = `stroke="#2B66D9" stroke-width="2" fill="${draft ? 'none' : 'rgba(43,102,217,.06)'}"`;
+  function shapeSVG(n, i, draft, hl) {
+    const st = `stroke="${hl ? '#E9B547' : '#2B66D9'}" stroke-width="${hl ? 3 : 2}" fill="${draft ? 'none' : 'rgba(43,102,217,.06)'}"`;
     let s = '';
     if (n.shape === 'box') s = `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6" ${st}/>`;
     else if (n.shape === 'circle') s = `<ellipse cx="${n.x + n.w / 2}" cy="${n.y + n.h / 2}" rx="${n.w / 2}" ry="${n.h / 2}" ${st}/>`;
@@ -1197,8 +1226,18 @@
     else if (n.shape === 'pin') s += `<circle cx="${n.x}" cy="${n.y}" r="6" fill="#2B66D9"/>`;
     return s;
   }
+  const drawMarks = () => { $('marksG').innerHTML = S.notes.map((n, i) => shapeSVG(n, i, false, S.hlNote === i + 1)).join('') + (S.noteDraft ? shapeSVG(S.noteDraft, null, true) : ''); };
+  // Hovering a note's answer lights up its mark and the elements it changes.
+  document.addEventListener('mouseover', (e) => {
+    const g = e.target.closest?.('.ng'), n = g ? +g.dataset.ng : null;
+    if (n === (S.hlNote ?? null)) return;
+    S.hlNote = n;
+    const m = g ? S.chat[+g.dataset.i] : S.card;
+    if (m?.proposal && m.status === 'pending') S.amber = (n != null ? m.proposal.edits.filter((x) => (n ? x.note === n : !x.note)) : chosen(m)).map((x) => x.loc);
+    drawMarks();
+  });
   function renderMarks() {
-    $('marksG').innerHTML = S.notes.map((n, i) => shapeSVG(n, i)).join('') + (S.noteDraft ? shapeSVG(S.noteDraft, null, true) : '');
+    drawMarks();
     $('annoCap').hidden = S.tool !== 'annotate';
     const busy = S.card?.busy && S.card.where === 'notes';
     const chip = $('notesChip');
@@ -1282,6 +1321,13 @@
       if (act === 'askHint') runAI(v, visibleTargets(), 'ask');
       else if (act === 'decide') decide(S.chat[+a.dataset.i], v);
       else if (act === 'closeCard') { if (S.card?.status === 'pending') S.card.status = 'discarded'; S.card = null; S.amber = []; renderAI(); }
+      else if (act === 'noteSkip') {
+        const m = S.chat[+a.dataset.i], n = +a.dataset.n;
+        if (!m || m.status !== 'pending') return;
+        m.skip = (m.skip || []).includes(n) ? m.skip.filter((x) => x !== n) : [...(m.skip || []), n];
+        S.amber = chosen(m).map((e) => e.loc);
+        renderAI();
+      }
       else if (act === 'noteAdd') addNote();
       else if (act === 'attach') { const id = a.dataset.id; pickImages().then((fs) => fs.length && addFiles(id, fs)); }
       else if (act === 'attX') { (S.att[a.dataset.id] || []).splice(+a.dataset.i, 1); reKC(a.dataset.id); }

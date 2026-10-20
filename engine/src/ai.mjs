@@ -31,9 +31,15 @@ function apiKey() {
 const Proposal = z.object({
   scope: z.enum(['done', 'partial', 'not_yet', 'needs_developer']).describe('done: edits cover the request. partial: edits cover part of it and the rest needs something Kerf cannot change yet. not_yet: it is a visual change but nothing in the toolset can do it yet. needs_developer: it changes behavior, data, logic or backend.'),
   message: z.string().describe('One or two plain sentences to the designer: what you changed and how far it reaches, or why it needs a developer'),
+  notes: z.array(z.object({
+    note: z.number().int(),
+    status: z.enum(['done', 'partial', 'not_possible']),
+    summary: z.string().describe('One short plain sentence for this note: what you changed, or why it could not be done here'),
+  })).nullable().describe('Only when the request has numbered notes: one entry per note, in order. Otherwise null'),
   edits: z.array(
     z.object({
       loc: z.string().describe('Exactly one of the element ids you were given'),
+      note: z.number().int().nullable().describe('When the request has numbered notes: the note this edit answers; otherwise null'),
       ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('For w/h: hug, fill or px. For layout: row, col or none. A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
       text: z.string().nullable().describe('New text, only when the element’s text is editable and the request asks to change wording; otherwise null'),
       props: z.array(z.object({ name: z.string(), value: z.string() })).describe('Component property changes, only names listed as editable for that element, with one of its allowed values; [] if none'),
@@ -55,6 +61,7 @@ const SYSTEM = `You are the design assistant inside Kerf, a Figma-style editor t
 A designer points at elements on a live screen and says what should change. You answer with property edits on those elements; Kerf turns each edit into the right Tailwind class in the source and shows your proposal for approval before writing anything.
 
 How to work:
+- When the request has numbered notes (the designer marked parts of the screen), answer each note on its own: set note on every edit, and fill notes with one entry per note saying what you changed for it or why it could not be done. Elements tagged (note N) sit under that note's mark. Keep message to one short overall sentence.
 - Only edit elements from the list you are given, by their exact id. Prefer the fewest edits that achieve the request.
 - Use the project's own design tokens and spacing, radius and type scales (listed below) so edits stay on-system. Use raw hex colors only when no token fits.
 - Each element shows its source tag, its current classes and a few measured values. An element marked "shared component" is used in many places; editing it changes all of them, so mention that in your message.
@@ -153,6 +160,13 @@ export function cleanOps(ops, theme) {
 
 const IMG_TYPES = /^image\/(jpeg|png|gif|webp)$/;
 
+// How the designer would recognise an element: its text, or its tag.
+const nameFor = (t) => {
+  const txt = String(t.text || '').replace(/\s+/g, ' ').trim();
+  return txt && !txt.startsWith('image:') ? `${t.tag} “${txt.length > 28 ? txt.slice(0, 27) + '…' : txt}”` : t.tag;
+};
+const noteOf = (e, t) => (Number.isInteger(e.note) && e.note > 0 ? e.note : Number.isInteger(t.note) ? t.note : null);
+
 export async function propose({ request, targets, history = [], images = [] }, theme, library) {
   const key = apiKey();
   if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
@@ -229,7 +243,7 @@ export async function propose({ request, targets, history = [], images = [] }, t
         if (e.imageSrc) st.src = e.imageSrc;
         if (e.imageAlt != null) st.alt = e.imageAlt;
       }
-      edits.push({ loc: e.loc, tag: t.tag, ops: [], props: [], text: null, structure: st, why: e.why });
+      edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops: [], props: [], text: null, structure: st, why: e.why });
       continue;
     }
     if (t.classKind === 'dynamic') continue;
@@ -241,7 +255,8 @@ export async function propose({ request, targets, history = [], images = [] }, t
     for (const p of e.props || []) {
       try { props.push({ name: p.name, value: checkProp({ props: t.props || [] }, p.name, p.value) }); } catch { /* not allowed here */ }
     }
-    if (ops.length || text || props.length) edits.push({ loc: e.loc, tag: t.tag, ops, text, props, why: e.why });
+    if (ops.length || text || props.length) edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops, text, props, why: e.why });
   }
-  return { scope: p.scope, message: p.message, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } };
+  const notes = Array.isArray(p.notes) ? p.notes.filter((n) => Number.isInteger(n.note) && n.note > 0).map((n) => ({ note: n.note, status: n.status, summary: n.summary })) : null;
+  return { scope: p.scope, message: p.message, notes: notes?.length ? notes : null, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } };
 }
