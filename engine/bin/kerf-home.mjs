@@ -43,6 +43,11 @@ http.createServer(async (req, res) => {
     return send(res, 202, { ok: true });
   }
   send(res, 404, { error: 'Not found' });
+}).on('error', (e) => {
+  if (e.code !== 'EADDRINUSE') throw e;
+  console.log(`Kerf is already running at http://localhost:${PORT} (or another app is using port ${PORT}).`);
+  console.log(`To use a different port: KERF_PORT=4200 node bin/kerf-home.mjs`);
+  process.exit(1);
 }).listen(PORT, () => console.log(`Kerf is ready: http://localhost:${PORT}`));
 
 process.on('SIGINT', () => { stopAll(); process.exit(0); });
