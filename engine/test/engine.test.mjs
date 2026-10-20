@@ -89,3 +89,9 @@ test('adds className when there is none, refuses computed classes', () => {
   assert.match(code, /<section className="px-4">Plain<\/section>/);
   assert.throws(() => editElement(CARD, 11, 30, { ops: [{ prop: 'padX', value: 16 }] }, th), /computed/);
 });
+
+test('retypes a label that sits next to an icon', () => {
+  const src = 'export const B = () => <button className="flex"><Icon /> Enter {/* note */}</button>;';
+  const { code } = editElement(src, 1, 23, { text: 'Unlock' }, th);
+  assert.match(code, /<Icon \/> Unlock \{/);
+});

@@ -50,7 +50,7 @@ Properties: `bg`, `color`, `borderC`, `fontSize`, `fontWeight`, `lineHeight`,
 
 ```bash
 npm test                                   # unit tests
-node test/live.mjs http://localhost:5173   # real edits against a running app
+node scripts/live-check.mjs http://localhost:5173   # real edits against a running app
 ```
 
 ## Next

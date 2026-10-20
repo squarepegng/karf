@@ -9,6 +9,8 @@ import { pathToFileURL } from 'node:url';
 import kerf from '../src/plugin.mjs';
 
 const webRoot = path.resolve(process.argv[2] || '.');
+// Tools like Tailwind and PostCSS look for their config in the working directory.
+process.chdir(webRoot);
 const req = createRequire(path.join(webRoot, 'package.json'));
 const viteDir = path.dirname(req.resolve('vite/package.json'));
 const vite = await import(pathToFileURL(path.join(viteDir, 'dist/node/index.js')).href);

@@ -62,7 +62,12 @@ const split = (s) => s.split(/\s+/).filter(Boolean);
 
 // Text Kerf may retype: one fixed string, not data or an expression.
 export function textInfo(el) {
-  const kids = el.children.filter((c) => !(c.type === 'JSXText' && !c.value.trim()));
+  const isComment = (c) => c.type === 'JSXExpressionContainer' && c.expression.type === 'JSXEmptyExpression';
+  const kids = el.children.filter((c) => !(c.type === 'JSXText' && !c.value.trim()) && !isComment(c));
+  // A label next to icons (<button><Icon/> Enter</button>) is still one fixed string.
+  const texts = kids.filter((c) => c.type === 'JSXText');
+  const dynamic = kids.some((c) => c.type === 'JSXExpressionContainer');
+  if (kids.length > 1 && texts.length === 1 && !dynamic) return { editable: true, value: texts[0].value.trim(), node: texts[0], kind: 'text' };
   if (kids.length !== 1) return { editable: false, reason: kids.length ? 'This element contains other elements or several pieces of text.' : 'This element has no text.' };
   const k = kids[0];
   if (k.type === 'JSXText') return { editable: true, value: k.value.trim(), node: k, kind: 'text' };

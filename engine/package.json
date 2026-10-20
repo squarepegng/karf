@@ -7,7 +7,7 @@
   "bin": { "kerf": "./bin/kerf.mjs" },
   "scripts": {
     "dev": "node bin/kerf.mjs",
-    "test": "node --test test/"
+    "test": "node --test test/engine.test.mjs"
   },
   "dependencies": {
     "@babel/parser": "^7.26.3",

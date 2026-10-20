@@ -1,6 +1,8 @@
 // The Vite plugin: tags elements while the app runs in dev, and exposes a
 // small local API the Kerf editor calls to read and change source files.
 import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { tagSource } from './ast.mjs';
 import { loadTheme } from './tailwind.mjs';
 import { createEditor, KerfError } from './edit.mjs';
@@ -15,6 +17,8 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
+
+const OVERLAY = path.join(path.dirname(fileURLToPath(import.meta.url)), '../overlay/overlay.js');
 
 export default function kerf() {
   let webRoot;
@@ -37,6 +41,9 @@ export default function kerf() {
       if (!/\.[jt]sx$/.test(file) || !file.startsWith(srcDir)) return null;
       return tagSource(code, file, webRoot);
     },
+    transformIndexHtml() {
+      return [{ tag: 'script', attrs: { src: '/__kerf/overlay.js', defer: true }, injectTo: 'body' }];
+    },
     configureServer(server) {
       server.middlewares.use('/__kerf', async (req, res) => {
         const send = (status, body) => {
@@ -46,6 +53,11 @@ export default function kerf() {
         };
         try {
           const route = req.url.split('?')[0];
+          if (req.method === 'GET' && route === '/overlay.js') {
+            res.setHeader('Content-Type', 'text/javascript');
+            res.setHeader('Cache-Control', 'no-store');
+            return res.end(fs.readFileSync(OVERLAY, 'utf8'));
+          }
           if (req.method === 'GET' && route === '/theme') return send(200, theme);
           if (req.method === 'GET' && route === '/changes') return send(200, editor.history.map(({ rel, loc, change, summary, at }) => ({ file: rel, loc, change, summary, at })));
           if (req.method !== 'POST') return send(404, { error: 'Not found' });

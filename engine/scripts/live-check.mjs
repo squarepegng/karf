@@ -1,6 +1,6 @@
 // End-to-end check against a running app with Kerf attached:
 // make real edits through the API, then the caller type-checks and diffs.
-//   node test/live.mjs http://localhost:5173
+//   node scripts/live-check.mjs http://localhost:5173
 const base = (process.argv[2] || 'http://localhost:5173') + '/__kerf';
 const call = async (route, body) => {
   const r = await fetch(base + route, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
