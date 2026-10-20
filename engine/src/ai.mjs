@@ -1,6 +1,7 @@
 // Kerf's AI: a designer's request plus the code behind the elements they point at
 // goes to Claude, which answers with the same property edits the panel makes.
 // Nothing is written here; the editor shows the proposal and applies it on approval.
+import { designName } from './labels.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -161,10 +162,7 @@ export function cleanOps(ops, theme) {
 const IMG_TYPES = /^image\/(jpeg|png|gif|webp)$/;
 
 // How the designer would recognise an element: its text, or its tag.
-const nameFor = (t) => {
-  const txt = String(t.text || '').replace(/\s+/g, ' ').trim();
-  return txt && !txt.startsWith('image:') ? `${t.tag} “${txt.length > 28 ? txt.slice(0, 27) + '…' : txt}”` : t.tag;
-};
+const nameFor = (t) => designName(t.tag, t.text, { icon: !!t.lib });
 const noteOf = (e, t) => (Number.isInteger(e.note) && e.note > 0 ? e.note : Number.isInteger(t.note) ? t.note : null);
 
 export async function propose({ request, targets, history = [], images = [] }, theme, library) {

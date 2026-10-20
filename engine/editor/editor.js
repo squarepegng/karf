@@ -116,8 +116,36 @@
   const pick = (t) => (t && t.closest ? t.closest('[data-kerf],[data-kerf-use]') : null);
   const defOf = (el) => el.getAttribute('data-kerf');
   const useOf = (el) => el.getAttribute('data-kerf-use');
+  const layerIcon = (el) => { const k = kindOf(el); return / icon$|^Icon$/.test(k) ? 'spark' : k === 'Image' ? 'image' : useOf(el) && /^[A-Z]/.test(el.getAttribute('data-kerf-n') || '') ? 'comp' : TEXTY.has(k) && !el.childElementCount ? 'text' : k === 'Row' ? 'padH' : k === 'Stack' ? 'padV' : 'frame'; };
   const nameOf = (el) => el.getAttribute('data-kerf-n') || el.tagName.toLowerCase();
   const fileName = (loc) => (loc || '').split(':')[0].split('/').pop();
+  /* names a designer would use: "Title “Stratemark”", "Button “Enter”", "Row", "Key round icon" */
+  const TAGN = { h1: 'Title', h2: 'Heading', h3: 'Heading', h4: 'Heading', h5: 'Heading', h6: 'Heading', p: 'Text', span: 'Text', strong: 'Text', em: 'Text', small: 'Text', b: 'Text', i: 'Text', label: 'Label', a: 'Link', button: 'Button', img: 'Image', picture: 'Image', svg: 'Icon', input: 'Input', textarea: 'Text box', select: 'Dropdown', form: 'Form', ul: 'List', ol: 'List', li: 'List item', nav: 'Navigation', header: 'Header', footer: 'Footer', aside: 'Sidebar', section: 'Section', main: 'Page', article: 'Card', hr: 'Divider', video: 'Video', table: 'Table', tr: 'Table row', td: 'Cell', th: 'Cell', code: 'Code', blockquote: 'Quote', dialog: 'Dialog' };
+  const TEXTY = new Set(['Title', 'Heading', 'Text', 'Label', 'Link', 'Button', 'List item', 'Quote', 'Cell']);
+  const camelWords = (n) => n.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
+  const clip = (t, n = 24) => { t = String(t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; };
+  function kindOf(el) {
+    const tag = el.tagName.toLowerCase(), comp = el.getAttribute('data-kerf-n');
+    if (comp && /^[A-Z]/.test(comp)) { const w = camelWords(comp); return tag === 'svg' || /Icon$/.test(comp) ? `${w.replace(/ Icon$/, '')} icon` : w; }
+    if (TAGN[tag]) return TAGN[tag];
+    if (!el.childElementCount && (el.textContent || '').trim()) return 'Text';
+    const c = cs(el);
+    if (c.display.includes('grid')) return 'Grid';
+    if (c.display.includes('flex')) return c.flexDirection.startsWith('column') ? 'Stack' : 'Row';
+    return 'Frame';
+  }
+  // The words shown next to an element: its text, placeholder or alt text.
+  function wordsOf(el) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'img') return clip(el.getAttribute('alt'));
+    if (tag === 'input' || tag === 'textarea') return clip(el.getAttribute('placeholder') || el.value);
+    return clip(el.textContent);
+  }
+  function dName(el) {
+    if (!el) return '';
+    const k = kindOf(el), w = wordsOf(el);
+    return w && (TEXTY.has(k) || el.getAttribute('data-kerf-n') || /^(input|textarea|img)$/i.test(el.tagName)) && !/ icon$/.test(k) ? `${k} “${w}”` : k;
+  }
   const activeLoc = () => (S.sel ? (S.scope === 'here' ? S.sel.use || S.sel.def : S.sel.def || S.sel.use) : null);
   const cvaParam = () => (S.sel?.defInfo?.cva && activeLoc() === S.sel.def ? { mode: S.scope === 'variant' ? 'variant' : 'all', active: activeVariant() } : undefined);
   const info = () => (S.sel ? (activeLoc() === S.sel.def ? S.sel.defInfo : S.sel.useInfo) : null);
@@ -173,17 +201,17 @@
     try {
       if (S.multi.length) {
         // Several selected: apply the same change to each one, in a safe order.
-        const edits = [{ loc, ...change, cva: cvaParam() }, ...S.multi.map((m) => ({ loc: locOf(m), ...change }))];
-        const r = await api('/ai/apply', { edits: edits.map((e) => ({ loc: e.loc, ops: e.ops || [], props: e.props || [], text: e.text })) });
+        const edits = [{ loc, ...change, cva: cvaParam(), name: dName(S.sel.el) }, ...S.multi.map((m) => ({ loc: locOf(m), ...change, name: dName(m.el) }))];
+        const r = await api('/ai/apply', { edits: edits.map((e) => ({ loc: e.loc, ops: e.ops || [], props: e.props || [], text: e.text, name: e.name })) });
         S.count = r.n;
         const ok = r.results.filter((x) => x.ok && x.changed).length;
         toast(`${ok} element${ok === 1 ? '' : 's'} · ${(r.results.find((x) => x.summary)?.summary.labels || []).join(' · ')}`, r.results.some((x) => !x.ok) ? r.results.find((x) => !x.ok).error : '', false, true);
       } else {
-        const r = await api('/edit', { loc, ...change, cva: cvaParam() });
+        const r = await api('/edit', { loc, ...change, cva: cvaParam(), name: S.sel ? dName(S.sel.el) : null });
         if (r.changed) {
           S.count = r.n;
           const sm = r.summary;
-          const who = S.sel ? (S.sel.use && activeLoc() === S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || nameOf(S.sel.el) : '';
+          const who = S.sel ? dName(S.sel.el) : '';
           const where = sm.scope === 'variant' ? ` (all “${activeVariant()?.variant}”)` : sm.scope === 'all' ? ' (every one)' : '';
           toast(`${who}${where} · ${(sm.labels || []).join(' · ')}`, sm.offScale.length ? 'Some values are off your design scale' : '', false, true, `${fileName(r.file)}: ${[sm.removed.join(' ') || '—', sm.added.join(' ')].join(' → ')}`);
         }
@@ -209,7 +237,7 @@
   async function undo() {
     try {
       const r = await api('/undo', {});
-      if (r.undone) { S.count = r.n; toast(`Undone in ${fileName(r.file)}`); afterEdit(); renderChanges(); }
+      if (r.undone) { S.count = r.n; toast(r.label ? `Undone: ${r.label}` : 'Undone'); afterEdit(); renderChanges(); }
       else toast('Nothing to undo');
     } catch (e) { toast(e.message, '', true); }
   }
@@ -290,6 +318,8 @@
     dup: '<rect x="5" y="5" width="8.5" height="8.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M3 10.5V3.8c0-.4.4-.8.8-.8h6.7" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>',
     swap: '<path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
     image: '<rect x="2.5" y="3" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="6" cy="6.5" r="1.2" fill="currentColor"/><path d="M3 12l3.5-3.5 2.5 2.5 2-2 2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>',
+    code: '<path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
+    zin: '<path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
     clip: '<path d="M10.5 4.5L5.6 9.4a1.4 1.4 0 0 0 2 2l5-5a2.8 2.8 0 0 0-4-4l-5 5a4.2 4.2 0 0 0 6 6l4.4-4.4" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>',
     mic: '<rect x="6" y="2" width="4" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M3.8 7.5a4.2 4.2 0 0 0 8.4 0M8 11.8V14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>',
     reload: '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 3v3h-3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
@@ -301,7 +331,10 @@
   const hb = (act, icon, title, v = '', extra = '') => `<button class="ib sm" data-act="${act}" data-v="${v}" ${extra} title="${title}" aria-label="${title}">${ico(icon)}</button>`;
 
   /* ---------- top bar ---------- */
-  const DEVICES = { desktop: null, tablet: 820, mobile: 390 };
+  const DEVICES = { desktop: 1280, tablet: 820, mobile: 390 };
+  const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.25, 1.5, 2];
+  S.zoom = 'fit';
+  S.z = 1;
   function renderTop() {
     const p = S.project || {};
     const n = S.versions.draft.length + S.versions.versions.reduce((a, v) => a + v.changes.length, 0);
@@ -312,16 +345,46 @@
       </div>
       <form class="pathBox" data-form="path" title="Page"><span class="mono" style="color:var(--ink3)">${esc(location.host)}</span><input id="pathIn" value="${esc(S.path)}" spellcheck="false" aria-label="Page path"><button type="button" class="ib sm" data-act="reload" title="Reload page" aria-label="Reload page">${ico('reload')}</button></form>
       <div class="tside r">
-        ${Object.keys(DEVICES).map((d) => `<button class="icon${S.device === d ? ' on' : ''}" data-act="device" data-v="${d}" title="${d[0].toUpperCase() + d.slice(1)}" aria-pressed="${S.device === d}">${ico(d, 16)}</button>`).join('')}
+        ${Object.keys(DEVICES).map((d) => `<button class="icon${S.device === d ? ' on' : ''}" data-act="device" data-v="${d}" title="${d[0].toUpperCase() + d.slice(1)} · ${d === 'desktop' ? 'fills the screen, at least 1024' : DEVICES[d]} px wide" aria-pressed="${S.device === d}">${ico(d, 16)}</button>`).join('')}
+        <div class="zoom" role="group" aria-label="Zoom"><button class="icon" data-act="zoom" data-v="out" title="Zoom out · ⌘−" aria-label="Zoom out">${ico('minus', 14)}</button><button class="zpct" data-act="zoom" data-v="${S.zoom === 'fit' ? '1' : 'fit'}" title="${S.zoom === 'fit' ? 'Fitted to the screen. Click for 100% (⇧0)' : 'Click to fit (⇧1)'}">${S.zoom === 'fit' ? 'Fit' : ''} ${Math.round(S.z * 100)}%</button><button class="icon" data-act="zoom" data-v="in" title="Zoom in · ⌘+" aria-label="Zoom in">${ico('zin', 14)}</button></div>
         <span class="div" style="height:20px;margin:0 4px"></span>
         <button class="icon${S.side === 'history' ? ' on' : ''}" data-act="history" title="Version history" aria-label="Version history">${ico('history', 16)}${S.versions.versions.length ? '<i class="badgeDot"></i>' : ''}</button>
         <button class="primary" data-act="pr" ${n ? '' : 'disabled'}>Create PR<span class="count">${n}</span></button>
       </div>`;
   }
+  // The app keeps its real width (so desktop stays desktop) and is scaled to fit, like a Figma frame.
   function applyDevice() {
-    const w = DEVICES[S.device];
-    $('frameBox').style.maxWidth = w ? w + 'px' : '';
+    const c = $('canvas'), fb = $('frameBox');
+    if (!c) return;
+    const aw = Math.max(80, c.clientWidth - 32), ah = Math.max(80, c.clientHeight - 18);
+    // Desktop keeps a desktop width (1024+) by zooming out, but Fit never goes below 50%, so text stays readable.
+    const zFit = S.device === 'desktop' ? Math.max(0.5, Math.min(1, aw / 1024)) : Math.min(1, aw / DEVICES[S.device]);
+    const w = S.device === 'desktop' ? Math.round(aw / zFit) : DEVICES[S.device];
+    const z = S.zoom === 'fit' ? zFit : S.zoom;
+    const h = ah / z, left = Math.max(16, (c.clientWidth - w * z) / 2);
+    Object.assign(fb.style, { width: w + 'px', height: h + 'px', left: left + 'px', transform: `scale(${z})` });
+    fb.style.setProperty('--iz', 1 / z);
+    fb.classList.toggle('dev', S.device !== 'desktop');
+    $('sizer').style.width = (left + w * z + 16) + 'px';
+    $('devLabel').textContent = S.device === 'desktop' && z === 1 ? '' : `${S.device[0].toUpperCase() + S.device.slice(1)} · ${w} px${z !== 1 ? ` · ${Math.round(z * 100)}%` : ''}`;
+    $('devLabel').style.left = left + 'px';
+    const changed = S.z !== z;
+    S.z = z;
+    if (changed) renderTop();
   }
+  function setZoom(v) {
+    const cur = S.z;
+    if (v === 'fit') S.zoom = 'fit';
+    else if (v === 'in') S.zoom = ZOOMS.find((x) => x > cur + 0.01) || 2;
+    else if (v === 'out') S.zoom = [...ZOOMS].reverse().find((x) => x < cur - 0.01) || 0.25;
+    else S.zoom = Math.min(2, Math.max(0.25, +v || 1));
+    applyDevice();
+    renderTop();
+  }
+  new ResizeObserver(() => applyDevice()).observe(document.getElementById('canvas'));
+  // Pinch or ⌘-scroll zooms the canvas, inside the app too.
+  const pinch = (e) => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); setZoom(Math.min(2, Math.max(0.25, Math.round(S.z * Math.exp(-e.deltaY * 0.01) * 100) / 100))); };
+  document.getElementById('canvas').addEventListener('wheel', pinch, { passive: false });
 
   /* ---------- toolbar ---------- */
   function renderBar() {
@@ -372,9 +435,9 @@
         const el = n.el, k = keyOf(el), open = !!S.open[k] || depth < 2;
         const on = S.sel?.el === el;
         const leafText = !n.kids.length && el.childElementCount === 0 ? (el.textContent || '').trim().slice(0, 40) : '';
-        const icon = useOf(el) && el.getAttribute('data-kerf-n') ? 'comp' : leafText ? 'text' : 'frame';
+        const icon = layerIcon(el);
         rows.push(`<button class="layer${on ? ' on' : ''}" data-layer="${rows.length}" style="padding-left:${6 + depth * 14}px">
-          <span class="tw" data-twist="${esc(k)}">${n.kids.length ? ico(open ? 'chev' : 'chevR', 10) : ''}</span>${ico(icon, 12)}<span class="nm">${esc(nameOf(el))}</span>${leafText ? `<span class="tx">${esc(leafText)}</span>` : ''}</button>`);
+          <span class="tw" data-twist="${esc(k)}">${n.kids.length ? ico(open ? 'chev' : 'chevR', 10) : ''}</span>${ico(icon, 12)}<span class="nm">${esc(kindOf(el))}</span>${(() => { const w = / icon$/.test(kindOf(el)) ? '' : leafText || (/^(img|input|textarea)$/i.test(el.tagName) ? wordsOf(el) : ''); return w ? `<span class="tx">${esc(w)}</span>` : ''; })()}</button>`);
         layerEls.push(el);
         if (n.kids.length && open) add(n.kids, depth + 1);
       }
@@ -386,7 +449,7 @@
     const changes = S.versions.draft;
     box.innerHTML = `<div class="lhead">Layers<span class="note" style="font-weight:400">${esc(S.path)}</span></div>
       <div class="tree">${rows.join('') || '<div class="empty">This page has no elements Kerf can edit yet.</div>'}</div>
-      <div class="lchanges"><span class="secT">Changes since last version</span>${changes.length ? changes.slice(-8).reverse().map((c) => `<div class="row"><span class="dot"></span><span>${esc(c.label)}<br><span class="note mono">${esc(fileName(c.file))}</span></span></div>`).join('') : '<span class="note">None yet</span>'}</div>`;
+      <div class="lchanges"><span class="secT">Changes since last version</span>${changes.length ? changes.slice(-8).reverse().map((c) => `<div class="row"><span class="dot"></span><span>${c.name ? `<b>${esc(c.name)}</b><br>` : ''}${esc(c.label)}</span></div>`).join('') : '<span class="note">None yet</span>'}</div>`;
     box.querySelector('.tree').scrollTop = st;
     const onRow = box.querySelector('.layer.on');
     if (onRow && layersScrollToSel) { onRow.scrollIntoView({ block: 'nearest' }); layersScrollToSel = false; }
@@ -502,8 +565,7 @@
     const el = s.el, inf = info();
     const name = (activeLoc() === s.use ? s.useInfo?.tag : s.defInfo?.tag) || nameOf(el);
     const loc = activeLoc();
-    let h = `<div class="sec head"><div class="secH"><span class="nm">${ico(s.use ? 'comp' : 'frame')}${esc(name)}</span>${hb('parent', 'up', 'Select parent')}</div>
-      <span class="path">${esc(loc.replace(/:(\d+):\d+$/, ':$1'))}</span>
+    let h = `<div class="sec head"><div class="secH"><span class="nm">${ico(layerIcon(el))}${esc(dName(el))}</span><span class="hbs">${hb('copyLoc', 'code', `Code: ${loc.replace(/:(\d+):\d+$/, ':$1')} (click to copy)`)}${hb('parent', 'up', 'Select parent')}</span></div>
       ${scopeHTML(s, name)}
       ${S.multi.length ? `<span class="note">+${S.multi.length} more selected: changes apply to all ${S.multi.length + 1}.</span>` : ''}
       ${s.repeat > 1 ? `<span class="note">Repeated ×${s.repeat} by the same code: edits apply to all of them.</span>` : ''}
@@ -527,6 +589,14 @@
         h += sec('Text color', colorRow('color', 'Text color'));
       }
       h += layoutSections(el);
+      if (el.tagName.toLowerCase() === 'svg') {
+        h += sec('Icon color', colorRow('color', 'Icon color'));
+        h += sec('Appearance', `<div class="r2">${nf('opacity', 'opa', 'Opacity', '%')}<span></span></div>`);
+        const st0 = p.querySelector('.scroll')?.scrollTop || 0;
+        p.innerHTML = tabsHTML() + `<div class="scroll">${h}</div>`;
+        p.querySelector('.scroll').scrollTop = st0;
+        return;
+      }
       const indep = S.corners;
       h += sec('Appearance', `<div class="r2c">${nf('opacity', 'opa', 'Opacity', '%')}${nf('radius', 'rad', 'Corner radius')}<button class="ib${indep ? ' on' : ''}" data-act="corners" title="Independent corners">${ico('corners')}</button></div>
         ${indep ? `<div class="r4">${nf('rTL', cornerIco(0), 'Top left')}${nf('rTR', cornerIco(90), 'Top right')}${nf('rBR', cornerIco(180), 'Bottom right')}${nf('rBL', cornerIco(270), 'Bottom left')}</div>` : ''}`);
@@ -552,14 +622,15 @@
     renderPeek();
   }
   const time = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const chLabel = (c) => `${c.name ? `<b>${esc(c.name)}</b> · ` : ''}${esc(c.label)}`;
   function historyHTML() {
     const { versions, draft, peeking } = S.versions;
     const v = versions.slice().reverse();
     return `<div class="ptabs"><button class="on">Version history</button><button class="x" data-act="history" aria-label="Close">${ico('x')}</button></div>
       <div class="scroll" style="padding:8px;display:flex;flex-direction:column;gap:4px">
-      ${draft.length ? `<div class="ver"><div class="vh"><span>Current</span><span>${draft.length} unsaved change${draft.length === 1 ? '' : 's'}</span></div>${draft.slice(0, 4).map((c) => `<span class="ch">${esc(fileName(c.file))} · ${esc(c.label)}</span>`).join('')}<span class="note">Going back to Preview saves these as a version.</span></div>` : ''}
+      ${draft.length ? `<div class="ver"><div class="vh"><span>Current</span><span>${draft.length} unsaved change${draft.length === 1 ? '' : 's'}</span></div>${draft.slice(-4).reverse().map((c) => `<span class="ch">${chLabel(c)}</span>`).join('')}${draft.length > 4 ? `<span class="note">and ${draft.length - 4} more</span>` : ''}<div class="acts"><button class="outline" data-act="saveVersion">Save as a version</button><span class="note">Also saved when you go back to Preview.</span></div></div>` : ''}
       ${v.map((x) => `<div class="ver${peeking === x.n ? ' on' : ''}"><div class="vh"><span>Version ${x.n}</span><span>${time(x.at)}</span></div>
-        ${x.changes.slice(0, 5).map((c) => `<span class="ch">${c.source === 'ai' ? '<span class="src">AI</span> ' : ''}${esc(fileName(c.file))} · ${esc(c.label)}</span>`).join('')}${x.changes.length > 5 ? `<span class="note">and ${x.changes.length - 5} more</span>` : ''}
+        ${x.changes.slice(0, 5).map((c) => `<span class="ch">${c.source === 'ai' ? '<span class="src">AI</span> ' : ''}${chLabel(c)}</span>`).join('')}${x.changes.length > 5 ? `<span class="note">and ${x.changes.length - 5} more</span>` : ''}
         <div class="acts"><button class="outline" data-act="peek" data-v="${x.n}">${peeking === x.n ? 'Back to now' : 'Show before'}</button><button class="ghostBtn" data-act="restore" data-v="${x.n - 1}" title="Undo this version and everything after it">Undo from here</button></div></div>`).join('')}
       ${!v.length && !draft.length ? `<div class="empty"><b>No versions yet</b><span>Each time you go from Edit back to Preview, Kerf saves your changes as a version. Here you can see the screen before a version or undo back to it.</span></div>` : ''}
       </div>`;
@@ -620,7 +691,7 @@
     const t = box.querySelector('.tag');
     if (label != null && t) { t.textContent = label; t.classList.toggle('in', r.top < 22); }
   }
-  const labelOf = (el) => `${nameOf(el)} · ${fileName(useOf(el) || defOf(el))}`;
+  const labelOf = (el) => dName(el);
   function pool(container, n, cls) {
     while (container.children.length < n) { const d = document.createElement('div'); d.className = 'box ' + cls; d.innerHTML = '<span class="tag"></span>'; container.appendChild(d); }
     return [...container.children];
@@ -652,6 +723,10 @@
     try { W = frame.contentWindow; D = frame.contentDocument; } catch { W = D = null; }
     if (!W || !D) return;
     S.sel = null; S.hover = null;
+    // An input the app focuses on load would swallow Kerf's shortcuts (E, A…): release it until the user clicks in the app.
+    let touched = false;
+    W.addEventListener('pointerdown', () => { touched = true; }, true);
+    [0, 300, 1200].forEach((ms) => setTimeout(() => { const a = D.activeElement; if (!touched && a && a !== D.body && /^(input|textarea|select)$/i.test(a.tagName)) a.blur(); }, ms));
     const block = (e) => {
       if (S.mode !== 'edit' && S.tool !== 'annotate') return;
       if (S.editing && S.editing.contains(e.target)) return;
@@ -659,7 +734,10 @@
     };
     ['pointerdown', 'mousedown', 'mouseup', 'pointerup', 'touchstart', 'submit', 'contextmenu', 'auxclick'].forEach((t) => W.addEventListener(t, block, true));
     let lastClick = null;
-    W.addEventListener('click', (e) => {
+    // Browsers send no click to a disabled button or input, only pointer events: select those on release.
+    W.addEventListener('pointerup', (e) => { if (S.mode === 'edit' && e.button === 0 && e.target.closest?.(':disabled')) onCanvasClick(e); }, true);
+    W.addEventListener('click', onCanvasClick, true);
+    function onCanvasClick(e) {
       if (S.mode !== 'edit') { closeFloating(); return; }
       if (S.editing && S.editing.contains(e.target)) return;
       block(e);
@@ -679,7 +757,7 @@
       }
       S.multi = [];
       select(hit);
-    }, true);
+    }
     W.addEventListener('dblclick', (e) => {
       if (S.mode !== 'edit') return;
       block(e);
@@ -688,6 +766,7 @@
     W.addEventListener('pointermove', (e) => { S.hover = S.mode === 'edit' ? pick(e.target) : null; }, true);
     W.addEventListener('pointerleave', () => { S.hover = null; });
     W.addEventListener('keydown', onKey, true);
+    W.addEventListener('wheel', pinch, { passive: false });
     // Re-read layers when the app's DOM changes (navigation, data loading, hot reload).
     new W.MutationObserver(() => layersSoon()).observe(D.body, { childList: true, subtree: true });
     renderAll();
@@ -711,6 +790,9 @@
     const typing = t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); toggleAI(true); return; }
+    if (mod && (e.key === '=' || e.key === '+')) { e.preventDefault(); setZoom('in'); return; }
+    if (mod && (e.key === '-' || e.key === '_')) { e.preventDefault(); setZoom('out'); return; }
+    if (e.shiftKey && !mod && !typing && (e.code === 'Digit1' || e.code === 'Digit0')) { e.preventDefault(); setZoom(e.code === 'Digit1' ? 'fit' : 1); return; }
     if (e.key === 'Escape') {
       if (S.editing) return;
       e.preventDefault();
@@ -770,6 +852,9 @@
       case 'changes': S.changesOpen = !S.changesOpen; renderChanges(); break;
       case 'toastClose': $('toast').hidden = true; break;
       case 'scope': S.scope = v; S.cpick = null; renderPanel(); break;
+      case 'reveal': S.reveal = { el: S.sel?.el, ...(S.reveal?.el === S.sel?.el ? S.reveal : {}), [v]: true }; renderPanel(); break;
+      case 'saveVersion': api('/version', {}).then((v) => { S.versions = v; renderPanel(); renderTop(); toast(`Saved version ${v.versions.length}`); }).catch((e) => toast(e.message, '', true)); break;
+      case 'copyLoc': navigator.clipboard?.writeText(activeLoc() || '').then(() => toast('Copied the code location', activeLoc() || '')).catch(() => {}); break;
       case 'parent': { const p = S.sel && pick(S.sel.el.parentElement); if (p) select(p); break; }
       case 'corners': S.corners = !S.corners; renderPanel(); break;
       case 'cpick': S.cpick = S.cpick === v ? null : v; renderPanel(); break;
@@ -783,7 +868,8 @@
       case 'chatToggle': toggleAI(false); break;
       case 'ask': toggleAI(false); break;
       case 'layersToggle': S.layersOpen = !S.layersOpen; renderLayers(); renderTop(); break;
-      case 'device': S.device = v; applyDevice(); renderTop(); break;
+      case 'device': S.device = v; S.zoom = 'fit'; applyDevice(); renderTop(); break;
+      case 'zoom': setZoom(v); break;
       case 'reload': W?.location.reload(); break;
       case 'history': S.side = S.side === 'history' ? 'design' : 'history'; if (S.side === 'history') refreshVersions(); renderAll(); break;
       case 'peek': peek(+v); break;
@@ -890,8 +976,8 @@
     const p = await api('/project').catch(() => ({}));
     const all = [...S.versions.versions.flatMap((v) => v.changes), ...S.versions.draft];
     const files = [...new Set(all.map((c) => c.file))];
-    const title = all.length === 1 ? `Design: ${all[0].label}`.slice(0, 72) : `Design updates on ${S.path === '/' ? 'the home screen' : S.path}`;
-    const body = `Changes made in Kerf, by hand and with Kerf's AI.\n\n${all.map((c) => `- ${c.label} (${c.file.split('/').pop()})`).join('\n')}\n\n<details><summary>Code changes</summary>\n\n${all.map((c) => `- \`${c.file}\`: ${c.code || c.label}`).join('\n')}\n</details>`;
+    const title = all.length === 1 ? `Design: ${all[0].name ? all[0].name + ' · ' : ''}${all[0].label}`.slice(0, 72) : `Design updates: ${all.length} changes${S.path === '/' ? '' : ` on ${S.path}`}`;
+    S.prAll = all;
     const m = $('modal');
     m.hidden = false;
     m.innerHTML = `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="prT">
@@ -899,9 +985,9 @@
       <div class="db">
         ${!p.repo ? `<span class="note warn">This project isn’t connected to a GitHub repository, so Kerf can’t open a pull request for it.</span>` : ''}
         <label><span class="secT">Title</span><input class="fld" id="prTitle" value="${esc(title)}"></label>
-        <label><span class="secT">Note for reviewers</span><textarea class="fld" id="prBody" rows="5">${esc(body)}</textarea></label>
+        <label><span class="secT">Note for your developers <span class="note" style="font-weight:400">(optional)</span></span><textarea class="fld" id="prBody" rows="3" placeholder="Anything they should know, e.g. why you made these changes"></textarea></label>
         <div style="display:flex;align-items:center;gap:8px;color:var(--ink2)"><span class="chip mono" style="color:var(--ink)">${p.branch?.startsWith('kerf/') ? esc(p.branch) : 'kerf/…'}</span>→<span class="chip mono" style="color:var(--ink)">${esc(p.branch?.startsWith('kerf/') ? 'its pull request' : p.branch || 'main')}</span>${p.repo ? `<span class="note">${esc(p.repo)}</span>` : ''}</div>
-        <div class="files"><div class="fh"><span>${all.length} change${all.length === 1 ? '' : 's'}</span><span class="note">${files.length} file${files.length === 1 ? '' : 's'}</span></div>${files.map((f) => `<div class="fr"><span class="dot" style="margin:0"></span><span class="mono">${esc(f)}</span></div>`).join('')}</div>
+        <div class="files"><div class="fh"><span>What changed · ${all.length}</span><span class="note" title="${esc(files.join('\n'))}">${files.length} code file${files.length === 1 ? '' : 's'}</span></div><div class="frs">${all.map((c) => `<div class="fr"><span class="dot" style="margin:0"></span><span>${c.source === 'ai' ? '<span class="src">AI</span> ' : ''}${c.name ? `<b>${esc(c.name)}</b> · ` : ''}${esc(c.label)}</span></div>`).join('')}</div></div>
       </div>
       <div class="df"><button class="outline" data-act="closeModal">Cancel</button><button class="primary solo" data-act="createPR" ${p.repo && files.length ? '' : 'disabled'}>Create pull request</button></div></section>`;
   }
@@ -910,7 +996,9 @@
     btn.disabled = true;
     btn.innerHTML = '<i class="spin"></i>Sending to GitHub…';
     try {
-      const r = await api('/pr', { title: $('prTitle').value, body: $('prBody').value });
+      const all = S.prAll || [], note = $('prBody').value.trim();
+      const body = `${note ? note + '\n\n' : ''}### What changed\n${all.map((c) => `- ${c.source === 'ai' ? '(AI) ' : ''}${c.name ? `**${c.name}**: ` : ''}${c.label}`).join('\n')}\n\n<details><summary>Code changes</summary>\n\n${all.map((c) => `- \`${c.file}\`: ${c.code || c.label}`).join('\n')}\n</details>\n\nMade with Kerf.`;
+      const r = await api('/pr', { title: $('prTitle').value, body });
       $('modal').innerHTML = `<section class="dialog" role="dialog" aria-modal="true"><div class="db" style="padding:20px;gap:10px">
         <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:8px;background:var(--raised)">${ico('check', 16)}</span>
         <h2 style="margin:0;font-size:18px">${r.updated ? 'Pull request updated' : r.needsGitHubStep ? 'Branch pushed' : 'Pull request ready'}</h2>
@@ -1000,7 +1088,7 @@
     if (!text || S.card?.busy) return;
     if (!targets.length) { toast('Nothing on screen to work with yet. Wait for the page to load, or select something.', '', true); return; }
     const history = historyFor();
-    const ctx = followUp ? 'Follow-up' : where === 'chat' && S.sel ? ((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || nameOf(S.sel.el)) : where === 'notes' ? `${S.notes.length} note${S.notes.length === 1 ? '' : 's'}` : 'Whole screen';
+    const ctx = followUp ? 'Follow-up' : where === 'chat' && S.sel ? dName(S.sel.el) : where === 'notes' ? `${S.notes.length} note${S.notes.length === 1 ? '' : 's'}` : 'Whole screen';
     S.chat.push({ role: 'user', text, shown: shown || text, ctx, where, atts: atts.map((a) => ({ name: a.name, thumb: a.thumb })) });
     const m = { role: 'kerf', busy: true, status: 'pending', where, targets, noteTexts: where === 'notes' && !followUp ? S.notes.map((n) => n.text) : null, skip: [] };
     S.chat.push(m);
@@ -1085,7 +1173,7 @@
     }
   }
   function chatHTML() {
-    const ctx = S.sel ? `${esc((S.sel.use ? S.sel.useInfo?.tag : S.sel.defInfo?.tag) || nameOf(S.sel.el))} · ${esc(fileName(activeLoc()))}` : 'Whole screen';
+    const ctx = S.sel ? esc(dName(S.sel.el)) : 'Whole screen';
     const msgs = S.chat.map((m, i) => (m.role === 'user' ? `<div class="uMsg"><span class="ctx">${esc(m.ctx)}</span>${m.atts?.length ? `<div class="uAtt">${m.atts.map((a) => `<img src="${a.thumb}" alt="${esc(a.name)}" title="${esc(a.name)}">`).join('')}</div>` : ''}<div class="bub">${esc(m.shown || m.text)}</div></div>` : `<div class="kMsg">${kerfHTML(m, i)}</div>`)).join('');
     return `<div class="chatScroll" id="chatScroll">${msgs || `<div class="empty"><b>Talk to Kerf</b><span>Select an element and describe the change, like “make these icons lighter”. Kerf reads the code, proposes edits in amber, and you approve them. Ask, notes and chat share this one conversation, so you can follow up here.</span></div>`}</div>
       <div class="comp">${composer('chatIn', { form: 'chat', ctx, placeholder: 'Describe a change, or follow up…' })}</div>`;
@@ -1248,7 +1336,7 @@
     if (S.noteDraft && W) {
       const n = S.noteDraft, ow = $('ov').clientWidth, oh = $('ov').clientHeight;
       const ax = (n.shape === 'arrow' ? n.x2 : n.x + (n.w || 0)) - W.scrollX + 12, ay = (n.shape === 'arrow' ? n.y2 : n.y) - W.scrollY;
-      pop.style.transform = `translate(${Math.min(ow - 332, Math.max(12, ax))}px,${Math.min(oh - 180, Math.max(12, ay))}px)`;
+      pop.style.transform = `translate(${Math.min(ow - 332 / S.z, Math.max(12, ax))}px,${Math.min(oh - 180 / S.z, Math.max(12, ay))}px) scale(${1 / S.z})`;
       if (!pop.dataset.open) {
         pop.innerHTML = `<div class="secH"><span>Note ${S.notes.length + 1}</span>${hb('noteDiscard2', 'x', 'Discard', '', 'data-act2="noteDiscard"')}</div>${composer('noteIn', { form: 'note', send: 'Add note', placeholder: 'What should change here?' })}<span class="note">Kerf reads the code under this mark.</span>`;
         pop.dataset.open = '1';
@@ -1274,7 +1362,7 @@
     runAI(request + (tagged.length ? '\n' + tagged.join(' ') : ''), targets, 'notes', S.notes.map((n, i) => `${i + 1}. ${n.text}`).join('\n'), false, atts);
   }
   let draw = null;
-  const ovPoint = (e) => { const r = $('ov').getBoundingClientRect(); return { x: e.clientX - r.left + W.scrollX, y: e.clientY - r.top + W.scrollY }; };
+  const ovPoint = (e) => { const r = $('ov').getBoundingClientRect(); return { x: (e.clientX - r.left) / S.z + W.scrollX, y: (e.clientY - r.top) / S.z + W.scrollY }; };
   $('annoCap').addEventListener('pointerdown', (e) => {
     if (S.tool !== 'annotate' || !W) return;
     e.preventDefault();
@@ -1368,10 +1456,10 @@
     if (!loc) { toast('Select an element first.', '', true); return false; }
     const before = D?.querySelector('vite-error-overlay');
     try {
-      const r = await api('/structure', { loc, op });
+      const r = await api('/structure', { loc, op, name: S.sel ? dName(S.sel.el) : null });
       if (!r.changed) return false;
       S.count = r.n;
-      toast(r.summary.action, '', false, true, fileName(r.file));
+      toast(`${S.sel ? dName(S.sel.el) + ' · ' : ''}${r.summary.action}`, '', false, true, fileName(r.file));
       if (!keepSel) { S.sel = null; renderPanel(); }
       afterEdit();
       guard(before);
@@ -1618,9 +1706,22 @@
     if (cls.some((x) => /^[wh]-(\d|\[)/.test(x))) return 'fixed';
     return 'auto';
   }
+  // Frames get auto layout; text, icons and images only get what they can use.
+  const isMedia = (el) => /^(img|svg|video|picture|canvas)$/i.test(el.tagName);
+  const isContainer = (el) => !isMedia(el) && (el.childElementCount > 0 || !isText(el)) && !/^(input|textarea|select|hr)$/i.test(el.tagName);
   function layoutSections(el) {
     const L = layoutVal(el);
     let h = '';
+    const shown = (k) => S.reveal?.el === el && S.reveal[k];
+    const hasPad = (+val('padX') || 0) > 0 || (+val('padY') || 0) > 0, hasMargin = (+val('mX') || 0) !== 0 || (+val('mY') || 0) !== 0;
+    const marginSec = () => sec('Margin', hasMargin || shown('margin') ? `<div class="r2">${nf('mX', 'padH', 'Horizontal margin')}${nf('mY', 'padV', 'Vertical margin')}</div>` : '', hasMargin || shown('margin') ? '' : hb('reveal', 'plus', 'Add margin', 'sm', 'data-v="margin"'));
+    const sizeSec = () => sec('Size', `<div class="r2">${modeSel('w')}${modeSel('h')}</div><div class="r2">${fixedField('w')}${fixedField('h')}</div>`);
+    const modeSel = (axis) => `<label class="inp"><span class="u">${axis.toUpperCase()}</span><select data-size="${axis}" aria-label="${axis === 'w' ? 'Width' : 'Height'}">${[['auto', 'Auto'], ['hug', 'Hug'], ['fill', 'Fill'], ['fixed', 'Fixed']].map(([v, n]) => `<option value="${v}"${sizeMode(axis) === v ? ' selected' : ''}>${n}</option>`).join('')}</select>${ico('chev', 12)}</label>`;
+    const fixedField = (axis) => sizeMode(axis) === 'fixed' ? nf(axis, `<b class="tg">${axis.toUpperCase()}</b>`, axis === 'w' ? 'Width' : 'Height') : `<label class="inp lock"><input disabled value="${Math.round(axis === 'w' ? el.getBoundingClientRect().width : el.getBoundingClientRect().height)}"></label>`;
+    if (!isContainer(el)) {
+      if (!isMedia(el)) h += sec('Padding', hasPad || shown('pad') ? `<div class="r2">${nf('padX', 'padH', 'Horizontal padding')}${nf('padY', 'padV', 'Vertical padding')}</div>` : '', hasPad || shown('pad') ? '' : hb('reveal', 'plus', 'Add padding', 'sm', 'data-v="pad"'));
+      return h + sizeSec() + marginSec();
+    }
     // Alignment matrix like Figma's: 3×3, mapped to justify/items by direction.
     const pos = ['start', 'center', 'end'];
     const cell = (r, c) => {
@@ -1633,10 +1734,7 @@
       ${auto ? `<div class="r2c" style="grid-template-columns:76px minmax(0,1fr)"><div class="m9">${[0, 1, 2].map((r) => [0, 1, 2].map((c) => cell(r, c)).join('')).join('')}</div>
         <div style="display:flex;flex-direction:column;gap:8px">${nf('gap', 'gap', 'Gap')}<div class="ibs txt"><button class="ib${L.justify === 'between' ? ' on' : ''}" data-act="set" data-p="justify" data-v="${L.justify === 'between' ? 'start' : 'between'}" title="Space items out evenly">Space between</button></div></div></div>` : ''}
       <div class="r2">${nf('padX', 'padH', 'Horizontal padding')}${nf('padY', 'padV', 'Vertical padding')}</div>`);
-    const modeSel = (axis) => `<label class="inp"><span class="u">${axis.toUpperCase()}</span><select data-size="${axis}" aria-label="${axis === 'w' ? 'Width' : 'Height'}">${[['auto', 'Auto'], ['hug', 'Hug'], ['fill', 'Fill'], ['fixed', 'Fixed']].map(([v, n]) => `<option value="${v}"${sizeMode(axis) === v ? ' selected' : ''}>${n}</option>`).join('')}</select>${ico('chev', 12)}</label>`;
-    const fixedField = (axis) => sizeMode(axis) === 'fixed' ? nf(axis, `<b class="tg">${axis.toUpperCase()}</b>`, axis === 'w' ? 'Width' : 'Height') : `<label class="inp lock"><input disabled value="${Math.round(axis === 'w' ? el.getBoundingClientRect().width : el.getBoundingClientRect().height)}"></label>`;
-    h += sec('Size', `<div class="r2">${modeSel('w')}${modeSel('h')}</div><div class="r2">${fixedField('w')}${fixedField('h')}</div>`);
-    h += sec('Margin', `<div class="r2">${nf('mX', 'padH', 'Horizontal margin')}${nf('mY', 'padV', 'Vertical margin')}</div>`);
+    h += sizeSec() + marginSec();
     return h;
   }
   document.addEventListener('click', (e) => {
@@ -1662,7 +1760,7 @@
     if (!show) return;
     const r = el.getBoundingClientRect(), c = cs(el);
     const pl = parseFloat(c.paddingLeft), pt = parseFloat(c.paddingTop);
-    const set = (id, x, y) => { const h = $(id); h.style.transform = `translate(${x}px,${y}px)`; };
+    const set = (id, x, y) => { const h = $(id); h.style.transform = `translate(${x}px,${y}px) scale(${1 / S.z})`; };
     set('hPadL', r.left + Math.max(2, pl / 2) - 4, r.top + r.height / 2 - 8);
     set('hPadR', r.right - Math.max(2, pl / 2) - 4, r.top + r.height / 2 - 8);
     set('hPadT', r.left + r.width / 2 - 8, r.top + Math.max(2, pt / 2) - 4);
@@ -1686,7 +1784,7 @@
   document.addEventListener('pointermove', (e) => {
     const d = S.handleDrag;
     if (!d) return;
-    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    const dx = (e.clientX - d.x) / S.z, dy = (e.clientY - d.y) / S.z;
     const el = S.sel.el;
     let prop, v;
     if (d.k === 'padL') { prop = 'padX'; v = d.padX + dx; } else if (d.k === 'padR') { prop = 'padX'; v = d.padX - dx; }
@@ -1708,7 +1806,7 @@
     const l = $('dragLabel'), o = $('ov').getBoundingClientRect();
     l.hidden = false;
     l.textContent = text;
-    l.style.transform = `translate(${x - o.left + 12}px,${y - o.top + 12}px)`;
+    l.style.transform = `translate(${(x - o.left) / S.z + 12 / S.z}px,${(y - o.top) / S.z + 12 / S.z}px) scale(${1 / S.z})`;
   }
 
   /* ---------- spacing measurements (hold Alt/Option) ---------- */
