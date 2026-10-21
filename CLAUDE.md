@@ -1,6 +1,6 @@
 # Tovi: project context for Claude Code
 
-This file summarizes every decision made so far in planning sessions with Claude (claude.ai). Read it before doing any work. The product is named **Tovi** (renamed from the working name "Kerf" in October 2026). Planned domains: usetovi.com (main) and tovi.design. The GitHub repo is still named `karf`.
+This file summarizes every decision made so far in planning sessions with Claude (claude.ai). Read it before doing any work. The product is named **Tovi** (renamed from the working name "Kerf" in October 2026). Planned domains: usetovi.com (main) and tovi.design. The GitHub repo is `squarepegng/tovi` (renamed from `karf` in October 2026; old links redirect).
 
 > **Naming in code:** everything people see says Tovi. Internal identifiers keep "kerf" on purpose: the `data-kerf` tags, the `/__kerf/` editor address, the `.kerf/` session folder, `~/Kerf/projects/`, the `kerf/…` PR branches, `kerf-*.mjs` file names, `KerfError`/`createKerf`. Renaming those would break saved sessions and open PRs; do it only as a planned migration.
 
@@ -10,12 +10,12 @@ This file summarizes every decision made so far in planning sessions with Claude
 
 The founder is a designer, not an engineer. Work directly: do the task, explain briefly in plain language, don't over-explain, and don't re-ask for permission already given. Never ask them to paste tokens or passwords; sign-ins happen on the service's own pages.
 
-GitHub account: **squarepegng**. Repo: **https://github.com/squarepegng/karf** (public, currently empty).
+GitHub account: **squarepegng**. Repo: **https://github.com/squarepegng/tovi** (public; was `karf`).
 
 ## Immediate tasks, in order
 
-1. Push `index.html` (the working prototype, in this folder) to `squarepegng/karf` on the `main` branch. Add this `CLAUDE.md` too.
-2. Help connect the repo to Vercel: Add New → Project → Import `karf`, framework preset "Other", no build command, no output directory, Deploy. The founder hasn't confirmed whether they have a Vercel account yet; ask.
+1. Push `index.html` (the working prototype, in this folder) to `squarepegng/tovi` on the `main` branch. Add this `CLAUDE.md` too.
+2. Help connect the repo to Vercel: Add New → Project → Import `karf` (now `tovi`), framework preset "Other", no build command, no output directory, Deploy. The founder hasn't confirmed whether they have a Vercel account yet; ask.
 3. Write the technical architecture doc (see "Technical approach" below).
 4. Start Phase 1 of the real product.
 

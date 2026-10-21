@@ -9,7 +9,7 @@ Last updated: 2026-10-21.
 
 _Renamed from Kerf in October 2026. Internal names (`data-kerf`, `/__kerf/`, `.kerf/`, `~/Kerf/projects/`, `kerf/…` branches, `kerf-*.mjs`) are kept on purpose; see CLAUDE.md._
 
-Tovi lets designers and founders edit their team's **real, running React + Tailwind app** the way they'd edit in Figma: select anything, change colour, type, spacing, layout, size, images, structure. Tovi writes the change into the source code as a careful developer would (AST edits of Tailwind classes, never find-and-replace), and the changes go to developers as one **GitHub pull request**. It also has AI that does the same edits from plain-English requests: an Ask bar, ⌘K chat and on-screen notes. "Tovi" is the working name. The user sometimes types "Kev" or "karf". The GitHub repo is `squarepegng/karf`.
+Tovi lets designers and founders edit their team's **real, running React + Tailwind app** the way they'd edit in Figma: select anything, change colour, type, spacing, layout, size, images, structure. Tovi writes the change into the source code as a careful developer would (AST edits of Tailwind classes, never find-and-replace), and the changes go to developers as one **GitHub pull request**. It also has AI that does the same edits from plain-English requests: an Ask bar, ⌘K chat and on-screen notes. "Tovi" is the working name. The user sometimes types "Kev" or "karf". The GitHub repo is `squarepegng/tovi`.
 
 ## 2. Who you're working with (important)
 
@@ -31,9 +31,9 @@ Tovi lets designers and founders edit their team's **real, running React + Tailw
 
 | What | Where |
 |---|---|
-| Tovi repo (git root) | `/Users/mac/Documents/kerf` → GitHub `squarepegng/karf` |
+| Tovi repo (git root) | `/Users/mac/Documents/kerf` → GitHub `squarepegng/tovi` |
 | The real product (engine + editor) | `/Users/mac/Documents/kerf/engine` |
-| Original single-file prototype | `index.html` on `main` of `squarepegng/karf`, deployed by Vercel from `main` |
+| Original single-file prototype | `index.html` on `main` of `squarepegng/tovi`, deployed by Vercel from `main` |
 | Project context and decisions | `/Users/mac/Documents/kerf/CLAUDE.md` |
 | Open decisions checklist | `/Users/mac/Documents/kerf/CHECKLIST.md` |
 | The user's own test app: Stratemark | `/Users/mac/Documents/STRATEMARK-app` → GitHub `squarepegng/STRATEMARK-app` (web app in `apps/web`, Vite + React + Tailwind v3) |
@@ -63,9 +63,9 @@ cd ~/Documents/kerf/engine && node bin/kerf-home.mjs
 | PR | What's in it | State |
 |---|---|---|
 | #1, #2 | Prototype Edit mode; the engine that opens a GitHub project and edits it like Figma | Merged |
-| [#3](https://github.com/squarepegng/karf/pull/3) | AI (Ask, ⌘K chat, notes with per-note results, image attachments, dictation); component properties; structure edits (delete, duplicate, move, swap, insert, replace, group/ungroup, images); layout tools and on-canvas handles; plain-language changes; saved sessions; cva variant editing; history and Create PR | Merged 2026-10-21 |
-| [#4](https://github.com/squarepegng/karf/pull/4) | Designer names everywhere; panel shows only what fits; Figma-style canvas (zoom, fit, device frames); fixes (disabled elements selectable, autofocus no longer steals shortcuts, plain PR dialog, Save as a version, start-page logs hidden) | Merged 2026-10-21 |
-| [#5](https://github.com/squarepegng/karf/pull/5) | Edit per screen size ("All sizes" / "Mobile only"…); Next.js 13+ support; clear messages for unsupported projects; Tailwind TS configs; `HANDOFF.md`, `CHECKLIST.md`, updated README | Merged 2026-10-21 |
+| [#3](https://github.com/squarepegng/tovi/pull/3) | AI (Ask, ⌘K chat, notes with per-note results, image attachments, dictation); component properties; structure edits (delete, duplicate, move, swap, insert, replace, group/ungroup, images); layout tools and on-canvas handles; plain-language changes; saved sessions; cva variant editing; history and Create PR | Merged 2026-10-21 |
+| [#4](https://github.com/squarepegng/tovi/pull/4) | Designer names everywhere; panel shows only what fits; Figma-style canvas (zoom, fit, device frames); fixes (disabled elements selectable, autofocus no longer steals shortcuts, plain PR dialog, Save as a version, start-page logs hidden) | Merged 2026-10-21 |
+| [#5](https://github.com/squarepegng/tovi/pull/5) | Edit per screen size ("All sizes" / "Mobile only"…); Next.js 13+ support; clear messages for unsupported projects; Tailwind TS configs; `HANDOFF.md`, `CHECKLIST.md`, updated README | Merged 2026-10-21 |
 
 All were squash-merged. The old branches `kerf/ai-layer`, `kerf/sprint-1` and `kerf/sprint-2` are fully contained in `main`; don't build on them. Start new work on a fresh branch from `main`.
 
@@ -168,7 +168,7 @@ The user is marking **`CHECKLIST.md`** (Keep / Later / Remove) and will say whic
 
 ## 11. Conversation history in brief
 
-1. Pushed the prototype and `CLAUDE.md` to `squarepegng/karf` and deployed it on Vercel. A browser-clicking deploy loop wasted credits; prefer CLI.
+1. Pushed the prototype and `CLAUDE.md` to `squarepegng/tovi` and deployed it on Vercel. A browser-clicking deploy loop wasted credits; prefer CLI.
 2. The user clarified the goal: real Figma-style editing of any element, not a demo. We rebuilt Edit mode (PR #1, merged), then made it Figma/Framer-clean on request.
 3. Built the real engine to open any React + Tailwind codebase from a GitHub link or folder (the start page) instead of per-app editors. Tested on Stratemark.
 4. Added real Claude AI (Ask, ⌘K, notes) using the user's saved key (PR #2 merged; PR #3 open with much more).
