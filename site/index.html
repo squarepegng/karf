@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tovi: design the real product</title>
+<meta name="description" content="Tovi opens your team's running React app in a Figma-style editor. Fix spacing, type and colour by hand, and send the changes to developers as one clean pull request.">
+<meta property="og:title" content="Tovi: design the real product">
+<meta property="og:description" content="Edit your team's real, running app like a Figma frame. The changes arrive as one pull request.">
+<meta name="theme-color" content="#FBFBFC">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="logo" href="#top" aria-label="Tovi home">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="3.5" y="3.5" width="15" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="1" y="1" width="5" height="5" rx="1" fill="#FBFBFC" stroke="#2B66D9" stroke-width="1.4"/><rect x="16" y="16" width="5" height="5" rx="1" fill="#FBFBFC" stroke="#2B66D9" stroke-width="1.4"/></svg>
+      <span>Tovi</span>
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#ai">AI</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn btn-primary btn-sm" href="#join">Join the beta</a>
+  </div>
+</header>
+
+<main id="main">
+  <!-- Hero -->
+  <section class="hero" id="top">
+    <div class="wrap">
+      <h1 class="hero-title">
+        <span class="sel" aria-hidden="false">
+          Design the real product.
+          <i class="h tl"></i><i class="h tr"></i><i class="h bl"></i><i class="h br"></i>
+          <span class="sel-tag" aria-hidden="true">Hug × Hug</span>
+        </span>
+      </h1>
+      <p class="hero-sub">Tovi opens your team’s running app in a Figma-style editor. Fix spacing, type and colour by hand, and send the changes to developers as one clean pull request.</p>
+      <form class="join" data-join>
+        <label class="sr" for="email-top">Work email</label>
+        <input id="email-top" name="email" type="email" placeholder="you@company.com" autocomplete="email" required>
+        <button class="btn btn-primary" type="submit">Join the beta</button>
+        <p class="join-msg" role="status" aria-live="polite"></p>
+      </form>
+      <p class="hero-note">For React apps built with Vite or Next.js and styled with Tailwind.</p>
+    </div>
+
+    <!-- Live demo -->
+    <div class="wrap wrap-wide">
+      <div class="editor" id="demo" aria-label="Try it: a small version of the Tovi editor">
+        <div class="ed-bar">
+          <span class="ed-crumb"><b>northfold</b> / Shop</span>
+          <span class="ed-modes" aria-hidden="true"><span>Preview</span><span class="on">Edit</span></span>
+          <span class="ed-pr" aria-hidden="true">Create PR<i class="ed-dot" id="prDot"></i></span>
+        </div>
+        <div class="ed-body">
+          <div class="ed-canvas" id="canvas">
+            <div class="shop">
+              <article class="pcard is-sel" id="cardA">
+                <div class="pimg pimg-a" aria-hidden="true"></div>
+                <div class="ptxt"><h3>Linen throw</h3><p>Stone, washed linen</p></div>
+                <div class="prow"><span class="price">€89</span><span class="pbtn">Add to cart</span></div>
+                <span class="pad-viz" aria-hidden="true"></span>
+                <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
+                <button class="pad-handle" id="padHandle" type="button" aria-label="Drag to change padding"></button>
+                <span class="size-tag" aria-hidden="true">Fill × Hug</span>
+              </article>
+              <article class="pcard" id="cardB" aria-hidden="true">
+                <div class="pimg pimg-b"></div>
+                <div class="ptxt"><h3>Oak tray</h3><p>Oiled oak, 40 cm</p></div>
+                <div class="prow"><span class="price">€54</span><span class="pbtn">Add to cart</span></div>
+              </article>
+            </div>
+          </div>
+          <aside class="ed-panel" aria-label="Design panel">
+            <p class="pn-name">Card <span>ProductCard</span></p>
+            <div class="pn-row"><span class="pn-label">Auto layout</span><span class="pn-val">Vertical, gap 12</span></div>
+            <div class="pn-row"><span class="pn-label">Width</span><span class="pn-val">Fill</span></div>
+            <div class="pn-row">
+              <span class="pn-label" id="padL">Padding</span>
+              <div class="stepper" role="group" aria-labelledby="padL">
+                <button type="button" data-pad="-1" aria-label="Less padding">−</button>
+                <output id="padOut" aria-live="polite">16</output>
+                <button type="button" data-pad="1" id="padPlus" aria-label="More padding">+</button>
+              </div>
+            </div>
+            <div class="pn-row">
+              <span class="pn-label" id="radL">Radius</span>
+              <div class="seg" role="radiogroup" aria-labelledby="radL">
+                <button type="button" role="radio" data-rad="6">6</button>
+                <button type="button" role="radio" data-rad="8" aria-checked="true">8</button>
+                <button type="button" role="radio" data-rad="12">12</button>
+                <button type="button" role="radio" data-rad="16">16</button>
+              </div>
+            </div>
+            <div class="rule" role="radiogroup" aria-label="Where should this change go?">
+              <p>This card is used 12 times.</p>
+              <div class="rule-opts">
+                <button type="button" role="radio" data-scope="here">Only here</button>
+                <button type="button" role="radio" data-scope="all" aria-checked="true">Everywhere</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+        <div class="ed-code" aria-live="polite">
+          <div class="code-head"><span class="code-file" id="codeFile">src/components/ProductCard.jsx</span><span class="code-state" id="codeState">Matches the code</span></div>
+          <pre class="code" id="code"></pre>
+        </div>
+        <svg class="cursor" id="cursor" width="18" height="22" viewBox="0 0 18 22" aria-hidden="true"><path d="M1 1l15 9.5-6.6 1.4L13 20l-3 1.2-3.4-8.2L1 17z" fill="#fff" stroke="#1B1B1E" stroke-width="1.2" stroke-linejoin="round"/></svg>
+      </div>
+      <p class="demo-hint">Try it: change the padding or radius, or drag the handle under the card.</p>
+    </div>
+  </section>
+
+  <!-- The gap -->
+  <section class="sec gap" aria-labelledby="gapT">
+    <div class="wrap two">
+      <h2 id="gapT">A mockup is a picture of the product. Tovi edits the product.</h2>
+      <div class="prose">
+        <p>Every handoff loses something: a few pixels of spacing, a hover state, what happens with real data. By the time a design ships, someone else has rebuilt it from a picture, and the details drift.</p>
+        <p>With Tovi you skip the picture. Open the product your team already runs, fix the screen where it lives, and the fix reaches your developers as code they can review and merge.</p>
+      </div>
+    </div>
+    <div class="wrap">
+      <div class="flows" role="img" aria-label="Today: design file, rebuild in code, review, drift. With Tovi: edit the running app, pull request.">
+        <div class="flow">
+          <span class="flow-name">Today</span>
+          <span class="pill">Design file</span><i></i><span class="pill">Rebuilt in code</span><i></i><span class="pill">Review</span><i></i><span class="pill pill-muted">Drift</span>
+        </div>
+        <div class="flow">
+          <span class="flow-name">With Tovi</span>
+          <span class="pill pill-sel">Edit the running app</span><i></i><span class="pill pill-sel">Pull request</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="sec" id="how" aria-labelledby="howT">
+    <div class="wrap">
+      <h2 id="howT">How it works</h2>
+      <p class="lede">Two modes, one pull request. There’s nothing to learn that you don’t already know from Figma.</p>
+      <ol class="steps">
+        <li>
+          <div class="vig">
+            <div class="v-input"><span class="v-muted">github.com/</span>acme/storefront</div>
+            <div class="v-btn">Open</div>
+          </div>
+          <h3>Connect your repo</h3>
+          <p>Paste a GitHub link. Tovi runs your app on your computer with the editor on top.</p>
+        </li>
+        <li>
+          <div class="vig">
+            <div class="v-tools"><span class="on">Preview</span><span>Edit</span></div>
+            <div class="v-page"><i></i><i></i><i class="short"></i></div>
+          </div>
+          <h3>Preview</h3>
+          <p>Use the product normally. Click through, open menus, find what’s off.</p>
+        </li>
+        <li>
+          <div class="vig">
+            <div class="v-tools"><span>Preview</span><span class="on">Edit</span></div>
+            <div class="v-page"><i></i><i class="v-sel"></i><i class="short"></i></div>
+          </div>
+          <h3>Edit the screen</h3>
+          <p>Press E. The screen freezes exactly as it is, data and all, and you edit it like a frame.</p>
+        </li>
+        <li>
+          <div class="vig">
+            <div class="v-pr"><span>Create pull request</span><b>7</b></div>
+            <div class="v-ba"><i></i><i class="after"></i></div>
+          </div>
+          <h3>Create a pull request</h3>
+          <p>Every change on every screen goes into one PR, with before-and-after images.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Code quality -->
+  <section class="sec" aria-labelledby="codeT">
+    <div class="wrap two two-top">
+      <div>
+        <h2 id="codeT">Code a careful developer would write</h2>
+        <p class="lede">Tovi links every element on screen to the line of JSX that made it, then changes that line through the syntax tree. No find-and-replace, no inline styles.</p>
+        <ul class="facts">
+          <li><b>Uses your scale.</b> 24 px becomes <code>p-6</code>, and your colour tokens stay tokens.</li>
+          <li><b>Finds where a style lives.</b> Style tables, <code>cva</code> variants and <code>@apply</code> classes are changed at the source.</li>
+          <li><b>Asks how far to go.</b> Only this one, every instance, or every variant.</li>
+          <li><b>Won’t break the build.</b> Every change is checked before it’s written, and undone if the page breaks.</li>
+        </ul>
+      </div>
+      <figure class="pr" aria-label="Example pull request">
+        <div class="pr-head">
+          <p class="pr-title">Design updates from Tovi</p>
+          <p class="pr-meta"><span class="pr-open">Open</span> 3 files changed, from <code>tovi/shop-polish</code></p>
+        </div>
+        <div class="pr-file">
+          <p class="pr-path">src/components/ProductCard.jsx</p>
+          <pre class="code code-light"><span class="ln del"><b>−</b>&lt;article className="rounded-lg border bg-surface p-4"&gt;</span><span class="ln add"><b>+</b>&lt;article className="rounded-xl border bg-surface p-6"&gt;</span></pre>
+        </div>
+        <div class="pr-file">
+          <p class="pr-path">src/lib/styles.js</p>
+          <pre class="code code-light"><span class="ln ctx"><b> </b>export const TAG_STYLES = {</span><span class="ln del"><b>−</b>  sale: 'bg-amber-100 text-amber-600',</span><span class="ln add"><b>+</b>  sale: 'bg-amber-100 text-amber-800',</span></pre>
+        </div>
+        <figcaption class="pr-why">Raised the sale tag’s contrast to 6.1:1 so it passes AA.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- AI -->
+  <section class="sec" id="ai" aria-labelledby="aiT">
+    <div class="wrap">
+      <h2 id="aiT">One AI, three ways to point</h2>
+      <p class="lede">Describe it, select it or draw on it. Before anything changes, Tovi shows how it read your request, and every change can be undone.</p>
+      <div class="ai">
+        <div class="ai-item ai-ask">
+          <div class="askbar"><svg class="spark" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5c.4 3.3 2.2 5.1 5.5 5.5v2C10.2 9.4 8.4 11.2 8 14.5H8c-.4-3.3-2.2-5.1-5.5-5.5V7C5.8 6.6 7.6 4.8 8 1.5z" fill="currentColor"/></svg>Make the pricing cards feel less cramped</div>
+          <div class="interp"><b>Tovi’s reading</b> Increase the gap and padding on the three plan cards, 16 to 24.</div>
+          <h3>Ask bar</h3>
+          <p>Describe a change to the whole screen while you preview.</p>
+        </div>
+        <div class="ai-item ai-chat">
+          <div class="chat">
+            <p class="chat-sel">Button “Checkout”</p>
+            <p class="chat-me">Make this the main action on the page</p>
+            <p class="chat-ai">I’ll use your primary button variant here and make it full width on mobile.</p>
+            <label class="chat-chk"><input type="checkbox" checked disabled> Variant: outline to primary</label>
+            <label class="chat-chk"><input type="checkbox" checked disabled> Width: Fill on mobile</label>
+          </div>
+          <h3>Chat about the selection <kbd>⌘K</kbd></h3>
+          <p>Ask about what you’ve selected. Tovi knows its parents, children and variants.</p>
+        </div>
+        <div class="ai-item ai-notes">
+          <div class="notes">
+            <div class="n-screen"><i></i><i></i><i class="short"></i><span class="n-ring"></span></div>
+            <div class="n-note"><b>1</b> Too bright in dark mode</div>
+            <div class="n-apply">Apply all</div>
+          </div>
+          <h3>Notes</h3>
+          <p>Pin, circle or box anything on the screen, write or say a note, then apply them all at once.</p>
+        </div>
+      </div>
+      <p class="ai-scope">Tovi’s AI works on how things look and how they’re laid out. Changes to behaviour, data or the back end are left to your developers.</p>
+    </div>
+  </section>
+
+  <!-- Guardrails -->
+  <section class="sec" aria-labelledby="guardT">
+    <div class="wrap two two-top">
+      <div>
+        <h2 id="guardT">Guardrails for people who aren’t designers</h2>
+        <p class="lede">Founders and builders get the same editor, with a little help: values snap to your team’s design scale, and Tovi warns you when text gets hard to read.</p>
+      </div>
+      <div class="guards">
+        <div class="g-snap" aria-label="Gap snapping to 16, the nearest value on the scale">
+          <p class="g-label">Gap</p>
+          <div class="g-track"><span class="g-tick" style="--x:0%">4</span><span class="g-tick" style="--x:20%">8</span><span class="g-tick" style="--x:40%">12</span><span class="g-tick on" style="--x:60%">16</span><span class="g-tick" style="--x:80%">24</span><span class="g-tick" style="--x:100%">32</span><i class="g-knob"></i></div>
+        </div>
+        <div class="g-contrast">
+          <span class="g-sw" aria-hidden="true">Aa</span>
+          <p><b>3.2 : 1 contrast.</b> Too low for body text. Try <code>muted-strong</code>, which passes at 5.4 : 1.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing -->
+  <section class="sec" id="pricing" aria-labelledby="priceT">
+    <div class="wrap">
+      <h2 id="priceT">Free when you bring your own AI key</h2>
+      <p class="lede">The whole editor is free. You pay only if you’d rather use Tovi’s AI than your own key.</p>
+      <div class="plans">
+        <div class="plan">
+          <p class="plan-name">Free</p>
+          <p class="plan-price">$0</p>
+          <ul>
+            <li>The full editor: layout, type, colour, components</li>
+            <li>Unlimited pull requests</li>
+            <li>AI with your own Anthropic key</li>
+            <li>Runs on your computer</li>
+          </ul>
+        </div>
+        <div class="plan plan-pro">
+          <p class="plan-name">Pro</p>
+          <p class="plan-price">Priced at launch</p>
+          <ul>
+            <li>Everything in Free</li>
+            <li>Tovi’s AI included, no key to manage</li>
+            <li>Cloud previews for every pull request (coming later)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="sec" id="faq" aria-labelledby="faqT">
+    <div class="wrap two two-top">
+      <h2 id="faqT">Questions</h2>
+      <div class="faq">
+        <details>
+          <summary>What does Tovi work with?</summary>
+          <p>React apps built with Vite or Next.js 13 and newer, styled with Tailwind CSS v3. Tailwind v4 support is on the way.</p>
+        </details>
+        <details>
+          <summary>Can it change our code without anyone checking?</summary>
+          <p>No. Tovi edits its own copy of your project. Nothing reaches your repository until you create the pull request, and your developers review it like any other.</p>
+        </details>
+        <details>
+          <summary>Where does our code go?</summary>
+          <p>Your app runs on your own computer. When you use the AI, Tovi sends Claude the code and a screenshot of the part of the screen you’re asking about, using your key.</p>
+        </details>
+        <details>
+          <summary>Do developers need to install anything?</summary>
+          <p>No. They get a normal pull request with a plain-language summary and before-and-after images.</p>
+        </details>
+        <details>
+          <summary>When can I use it?</summary>
+          <p>We’re starting with a private beta for a small group of teams, then opening to everyone. Join the list and we’ll get in touch.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="sec final" id="join" aria-labelledby="joinT">
+    <div class="wrap">
+      <h2 id="joinT">Fix the real thing</h2>
+      <p class="lede">Join the private beta. We’re inviting a small group of product teams first.</p>
+      <form class="join" data-join>
+        <label class="sr" for="email-end">Work email</label>
+        <input id="email-end" name="email" type="email" placeholder="you@company.com" autocomplete="email" required>
+        <button class="btn btn-primary" type="submit">Join the beta</button>
+        <p class="join-msg" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <span class="logo logo-sm"><svg width="18" height="18" viewBox="0 0 22 22" aria-hidden="true"><rect x="3.5" y="3.5" width="15" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="1" y="1" width="5" height="5" rx="1" fill="#FBFBFC" stroke="#2B66D9" stroke-width="1.4"/><rect x="16" y="16" width="5" height="5" rx="1" fill="#FBFBFC" stroke="#2B66D9" stroke-width="1.4"/></svg>Tovi</span>
+    <p>© 2026 Tovi</p>
+  </div>
+</footer>
+
+<script src="main.js" defer></script>
+</body>
+</html>
