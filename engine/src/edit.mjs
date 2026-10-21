@@ -237,8 +237,17 @@ export function describe(code, line, col, ctx = {}) {
     cva: ci.kind === 'cva' ? { name: ci.entry.name, groups: Object.fromEntries(Object.entries(ci.entry.groups).map(([g, v]) => [g, Object.keys(v)])), defaults: ci.entry.defaults } : undefined,
     text: ti.editable ? { editable: true, value: ti.value } : { editable: false, reason: ti.reason },
     ...propsInfo(code, el),
+    sized: sizedProps(ci.classes, ctx.theme),
     ...sourcedDescribe(code, el, ctx),
   };
+}
+// Properties set differently per screen size (md:text-lg…), so the panel can mark them, like Framer's overrides.
+const SIZED_PROPS = ['bg', 'color', 'borderC', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'align', 'radius', 'padX', 'padY', 'mX', 'mY', 'gap', 'borderW', 'opacity', 'shadow', 'w', 'h', 'layout', 'alignItems', 'justify'];
+function sizedProps(classes, theme) {
+  const screens = new Set((theme?.screens || []).map((x) => x.name));
+  const rest = (classes || []).map((c) => c.match(/^([\w-]+):([^:]+)$/)).filter((m) => m && screens.has(m[1])).map((m) => m[2]);
+  if (!rest.length) return [];
+  return SIZED_PROPS.filter((p) => { try { const m = matcher(p, theme); return rest.some((c) => m(c)); } catch { return false; } });
 }
 function sourcedDescribe(code, el, ctx) {
   const src = sourcedInfo(code, el, ctx);
@@ -417,7 +426,7 @@ export function createEditor(webRoot, getTheme, library) {
     },
     describe(loc, dom) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);
-      return { file: rel, line, ...describe(fs.readFileSync(file, 'utf8'), line, col, { file, webRoot, dom }) };
+      return { file: rel, line, ...describe(fs.readFileSync(file, 'utf8'), line, col, { file, webRoot, dom, theme: getTheme() }) };
     },
     edit(loc, change) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);

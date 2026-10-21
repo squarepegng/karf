@@ -338,28 +338,138 @@
   const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.9, 1, 1.25, 1.5, 2];
   S.zoom = 'fit';
   S.z = 1;
+  // Pages a designer would recognise: "/" is Home, "/deck/new" is "Deck / New".
+  const pageName = (p) => {
+    const parts = String(p || '/').split('?')[0].split('/').filter(Boolean);
+    if (!parts.length) return 'Home';
+    return parts.map((x) => (/^[0-9a-f-]{8,}$/i.test(x) || /^\d+$/.test(x) ? '…' : decodeURIComponent(x).replace(/[-_]+/g, ' ').replace(/^./, (c) => c.toUpperCase()))).join(' / ');
+  };
+  S.pages = [];
+  const DEV_LABEL = { desktop: 'Desktop', tablet: 'Tablet', mobile: 'Phone' };
+  function devRange(d) {
+    const sc = S.theme?.screens || [];
+    const find = (name, min) => sc.find((x) => x.name === name) || sc.find((x) => x.min >= min);
+    const tab = find('md', 700)?.min || 768, desk = find('lg', 1000)?.min || 1024;
+    return { desktop: `${desk}px and up`, tablet: `${tab}–${desk - 1}px`, mobile: `under ${tab}px` }[d];
+  }
   function renderTop() {
     const p = S.project || {};
     const n = S.versions.draft.length + S.versions.versions.reduce((a, v) => a + v.changes.length, 0);
     $('top').innerHTML = `<div class="tside">
-        <button class="icon${S.layersOpen && S.mode === 'edit' ? ' on' : ''}" data-act="layersToggle" title="Show or hide layers" aria-label="Show or hide layers" ${S.mode === 'edit' ? '' : 'disabled'}>${ico('sidebar', 16)}</button>
-        <span class="brand">${ico('kerf', 18)}<span>${esc(p.name || 'Kerf')}</span></span>
-        ${p.branch ? `<span class="chip mono" title="Git branch">${ico('branch', 12)}${esc(p.branch)}</span>` : ''}
+        <button class="icon${S.layersOpen && S.mode === 'edit' ? ' on' : ''}" data-act="layersToggle" title="Layers" aria-label="Show or hide layers" ${S.mode === 'edit' ? '' : 'disabled'}>${ico('sidebar', 16)}</button>
+        <button class="logoBtn" data-act="kerfMenu" title="Kerf menu" aria-label="Kerf menu" aria-haspopup="menu">${ico('kerf', 16)}${ico('chev', 10)}</button>
+        <span class="crumbs"><span class="proj" title="${esc(p.repo || p.name || '')}">${esc(String(p.name || 'Kerf').split('/').pop())}</span><span class="sep">/</span><button class="pageBtn" data-act="pagesMenu" title="Pages" aria-haspopup="menu">${esc(pageName(S.path))}${ico('chev', 10)}</button></span>
       </div>
-      <form class="pathBox" data-form="path" title="Page"><span class="mono" style="color:var(--ink3)">${esc(location.host)}</span><input id="pathIn" value="${esc(S.path)}" spellcheck="false" aria-label="Page path"><button type="button" class="ib sm" data-act="reload" title="Reload page" aria-label="Reload page">${ico('reload')}</button></form>
+      <div class="tmid"><div class="bps" role="radiogroup" aria-label="Screen size">${Object.keys(DEVICES).map((d) => `<button class="${S.device === d ? 'on' : ''}" data-act="device" data-v="${d}" role="radio" aria-checked="${S.device === d}" title="${DEV_LABEL[d]} · ${devRange(d)}">${ico(d, 14)}<span>${DEV_LABEL[d]}</span></button>`).join('')}</div></div>
       <div class="tside r">
-        ${Object.keys(DEVICES).map((d) => `<button class="icon${S.device === d ? ' on' : ''}" data-act="device" data-v="${d}" title="${d[0].toUpperCase() + d.slice(1)} · ${d === 'desktop' ? 'fills the screen, at least 1024' : DEVICES[d]} px wide" aria-pressed="${S.device === d}">${ico(d, 16)}</button>`).join('')}
-        <div class="zoom" role="group" aria-label="Zoom"><button class="icon" data-act="zoom" data-v="out" title="Zoom out · ⌘−" aria-label="Zoom out">${ico('minus', 14)}</button><button class="zpct" data-act="zoom" data-v="${S.zoom === 'fit' ? '1' : 'fit'}" title="${S.zoom === 'fit' ? 'Fitted to the screen. Click for 100% (⇧0)' : 'Click to fit (⇧1)'}">${S.zoom === 'fit' ? 'Fit' : ''} ${Math.round(S.z * 100)}%</button><button class="icon" data-act="zoom" data-v="in" title="Zoom in · ⌘+" aria-label="Zoom in">${ico('zin', 14)}</button></div>
-        <span class="div" style="height:20px;margin:0 4px"></span>
+        <button class="zpct" data-act="zoomMenu" title="Zoom" aria-haspopup="menu">${Math.round(S.z * 100)}%${ico('chev', 10)}</button>
         <button class="icon${S.side === 'history' ? ' on' : ''}" data-act="history" title="Version history" aria-label="Version history">${ico('history', 16)}${S.versions.versions.length ? '<i class="badgeDot"></i>' : ''}</button>
-        <button class="primary" data-act="pr" ${n ? '' : 'disabled'}>Create PR<span class="count">${n}</span></button>
+        <button class="primary" data-act="pr" ${n ? '' : 'disabled'} title="Send your changes to developers as one pull request">Hand off${n ? `<span class="count">${n}</span>` : ''}</button>
       </div>`;
   }
+
+  /* menus: one popover for the Kerf menu, pages, zoom and right-click */
+  function openMenu(items, at) {
+    const m = $('menu');
+    m.innerHTML = items.map((it, i) => it === '-' ? '<div class="msep"></div>' : it.input ? `<form class="minput" data-mi="${i}"><input placeholder="${esc(it.placeholder || '')}" value="${esc(it.value || '')}" spellcheck="false" aria-label="${esc(it.placeholder || '')}"></form>` : it.head ? `<div class="mhead">${esc(it.head)}</div>` : `<button class="mi${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}" data-mi="${i}" ${it.disabled ? 'disabled' : ''} role="menuitem"><span class="mchk">${it.on ? ico('check', 12) : ''}</span><span class="ml">${esc(it.label)}</span>${it.kbd ? `<span class="mk">${esc(it.kbd)}</span>` : ''}</button>`).join('');
+    m.hidden = false;
+    const w = m.offsetWidth, h = m.offsetHeight;
+    m.style.left = Math.max(8, Math.min(innerWidth - w - 8, at.x)) + 'px';
+    m.style.top = Math.max(8, Math.min(innerHeight - h - 8, at.y)) + 'px';
+    m._items = items;
+    const inp = m.querySelector('input');
+    if (inp) setTimeout(() => inp.focus(), 0);
+  }
+  const closeMenu = () => { $('menu').hidden = true; };
+  const below = (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.bottom + 6 }; };
+  $('menu').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mi]');
+    if (!b) return;
+    const it = $('menu')._items[+b.dataset.mi];
+    closeMenu();
+    it?.run?.();
+  });
+  $('menu').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const it = $('menu')._items[+e.target.dataset.mi];
+    const v = e.target.querySelector('input').value.trim();
+    closeMenu();
+    it?.run?.(v);
+  });
+  document.addEventListener('pointerdown', (e) => { if (!$('menu').hidden && !e.target.closest('#menu')) closeMenu(); }, true);
+  const goTo = (v) => { if (!v) return; if (!v.startsWith('/')) v = '/' + v; frame.src = v; };
+  function kerfMenu(at) {
+    const p = S.project || {};
+    openMenu([
+      { head: p.repo || p.name || 'This project' },
+      ...(p.branch ? [{ label: `Branch: ${p.branch}`, disabled: true }] : []),
+      { label: 'Open another project…', run: () => window.open('http://localhost:4100', '_blank') },
+      '-',
+      { label: S.minUI ? 'Show panels' : 'Hide panels', kbd: '⇧\\', run: () => toggleMinUI() },
+      { label: 'Keyboard shortcuts', kbd: '?', run: () => shortcuts() },
+    ], at);
+  }
+  function pagesMenu(at) {
+    const seen = [...new Set([S.path, ...S.pages])].slice(0, 12);
+    openMenu([
+      { input: true, placeholder: 'Go to a page, e.g. /settings', run: goTo },
+      { head: 'Pages you’ve visited' },
+      ...seen.map((x) => ({ label: `${pageName(x)}  ·  ${x}`, on: x === S.path, run: () => goTo(x) })),
+      '-',
+      { label: 'Reload page', kbd: '⌘R', run: () => { try { W.location.reload(); } catch { frame.src = S.path; } } },
+    ], at);
+  }
+  function zoomMenu(at) {
+    openMenu([
+      { label: 'Zoom in', kbd: '⌘+', run: () => setZoom('in') },
+      { label: 'Zoom out', kbd: '⌘−', run: () => setZoom('out') },
+      { label: 'Zoom to fit', kbd: '⇧1', on: S.zoom === 'fit', run: () => setZoom('fit') },
+      '-',
+      ...[0.5, 1, 2].map((z) => ({ label: `${z * 100}%`, kbd: z === 1 ? '⇧0' : '', on: S.zoom === z, run: () => setZoom(z) })),
+    ], at);
+  }
+  // Right-click on the canvas: what a designer reaches for, on the element under the cursor.
+  function contextMenu(at) {
+    const s = S.sel, inf = info(), el = s?.el;
+    if (!el) return;
+    const act = (a, v) => () => { const b = document.querySelector(`[data-act="${a}"]${v ? `[data-v="${v}"]` : ''}`); if (b) b.click(); };
+    const plain = /^(div|section|span)$/.test(el.tagName.toLowerCase()) && !el.getAttribute('data-kerf-n');
+    openMenu([
+      { head: dName(el) },
+      ...(inf?.text?.editable ? [{ label: 'Edit text', kbd: '↵', run: () => beginText() }] : []),
+      { label: 'Ask Kerf about this…', kbd: '⌘K', run: () => toggleAI(true) },
+      { label: 'Select parent', kbd: '⇧↵', disabled: !pick(el.parentElement), run: () => { const p = pick(el.parentElement); if (p) select(p); } },
+      '-',
+      { label: 'Duplicate', kbd: '⌘D', run: () => structure({ type: 'duplicate' }, { keepSel: true }) },
+      { label: 'Group into a frame', kbd: '⌥⌘G', run: () => groupSelected() },
+      ...(plain ? [{ label: 'Ungroup', kbd: '⇧⌘G', run: () => structure({ type: 'ungroup' }) }] : []),
+      { label: 'Move up', kbd: '⌥↑', run: () => structure({ type: 'move', dir: 'up' }, { keepSel: true }) },
+      { label: 'Move down', kbd: '⌥↓', run: () => structure({ type: 'move', dir: 'down' }, { keepSel: true }) },
+      ...(document.querySelector('[data-act="sSwap"]') ? [{ label: 'Swap with…', run: act('sSwap') }] : []),
+      { label: 'Add next to it…', kbd: 'I', run: act('insertMenu') },
+      '-',
+      { label: 'Delete', kbd: '⌫', danger: true, run: () => deleteSelected() },
+    ], at);
+  }
+  function shortcuts() {
+    const rows = [['Edit / Preview', 'E · P'], ['Annotate', 'A'], ['Ask Kerf', '⌘K'], ['Undo', '⌘Z'], ['Select parent', '⇧↵'], ['Duplicate', '⌘D'], ['Delete', '⌫'], ['Move up / down', '⌥↑ ⌥↓'], ['Group / ungroup', '⌥⌘G · ⇧⌘G'], ['Add element', 'I'], ['Measure spacing', 'hold ⌥'], ['Select several', '⇧ click'], ['Zoom in / out', '⌘+ · ⌘−'], ['Fit / 100%', '⇧1 · ⇧0'], ['Hide panels', '⇧\\']];
+    const m = $('modal');
+    m.hidden = false;
+    m.innerHTML = `<section class="dialog keys" role="dialog" aria-modal="true" aria-labelledby="kT"><div class="dh"><h2 id="kT">Keyboard shortcuts</h2><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div><div class="db"><div class="krows">${rows.map(([a, k]) => `<div class="kr"><span>${a}</span><span class="kk">${k}</span></div>`).join('')}</div></div></section>`;
+  }
+  S.minUI = false;
+  function toggleMinUI() {
+    S.minUI = !S.minUI;
+    document.body.classList.toggle('minUI', S.minUI);
+    setTimeout(applyDevice, 0);
+  }
+
   // The app keeps its real width (so desktop stays desktop) and is scaled to fit, like a Figma frame.
   function applyDevice() {
     const c = $('canvas'), fb = $('frameBox');
     if (!c) return;
-    const aw = Math.max(80, c.clientWidth - 32), ah = Math.max(80, c.clientHeight - 18);
+    // Room for the frame's name above it and a margin below, like an artboard.
+    const aw = Math.max(80, c.clientWidth - 48), ah = Math.max(80, c.clientHeight - 64);
     // Desktop keeps a desktop width (1024+) by zooming out, but Fit never goes below 50%, so text stays readable.
     const zFit = S.device === 'desktop' ? Math.max(0.5, Math.min(1, aw / 1024)) : Math.min(1, aw / DEVICES[S.device]);
     const w = S.device === 'desktop' ? Math.round(aw / zFit) : DEVICES[S.device];
@@ -370,7 +480,7 @@
     fb.style.setProperty('--iz', 1 / z);
     fb.classList.toggle('dev', S.device !== 'desktop');
     $('sizer').style.width = (left + w * z + 16) + 'px';
-    $('devLabel').textContent = S.device === 'desktop' && z === 1 ? '' : `${S.device[0].toUpperCase() + S.device.slice(1)} · ${w} px${z !== 1 ? ` · ${Math.round(z * 100)}%` : ''}`;
+    $('devLabel').innerHTML = `<b>${DEV_LABEL[S.device]}</b><span>${w}</span>`;
     $('devLabel').style.left = left + 'px';
     const changed = S.z !== z;
     S.z = z;
@@ -407,7 +517,7 @@
       <button class="tb" data-act="undo" ${S.count ? '' : 'disabled'} aria-label="Undo">${ico('undo', 16)}${tip('Undo', '⌘Z')}</button>
       <button class="tb" data-act="changes" aria-label="Changes">${ico('list', 16)}${S.count ? '<i class="badgeDot" style="box-shadow:0 0 0 2px var(--raised)"></i>' : ''}${tip('Changes this session')}</button>`;
     const h = $('hint');
-    h.hidden = S.hintSeen || S.mode !== 'preview' || S.askOpen || S.tool === 'annotate';
+    h.hidden = true;
     if (!h.hidden) h.innerHTML = `Use your app normally. Press <span class="kbd">E</span> to edit a screen, <span class="kbd">A</span> to annotate, or <span class="kbd">⌘K</span> to ask Kerf.`;
   }
 
@@ -440,7 +550,8 @@
         const on = S.sel?.el === el;
         const leafText = !n.kids.length && el.childElementCount === 0 ? (el.textContent || '').trim().slice(0, 40) : '';
         const icon = layerIcon(el);
-        rows.push(`<button class="layer${on ? ' on' : ''}" data-layer="${rows.length}" style="padding-left:${6 + depth * 14}px">
+        const comp = useOf(el) && /^[A-Z]/.test(el.getAttribute('data-kerf-n') || '');
+        rows.push(`<button class="layer${on ? ' on' : ''}${comp ? ' comp' : ''}" data-layer="${rows.length}" style="padding-left:6px"><span class="ind" style="width:${depth * 14}px"></span>
           <span class="tw" data-twist="${esc(k)}">${n.kids.length ? ico(open ? 'chev' : 'chevR', 10) : ''}</span>${ico(icon, 12)}<span class="nm">${esc(kindOf(el))}</span>${(() => { const w = / icon$/.test(kindOf(el)) ? '' : leafText || (/^(img|input|textarea)$/i.test(el.tagName) ? wordsOf(el) : ''); return w ? `<span class="tx">${esc(w)}</span>` : ''; })()}</button>`);
         layerEls.push(el);
         if (n.kids.length && open) add(n.kids, depth + 1);
@@ -451,9 +562,9 @@
     const tree = box.querySelector('.tree');
     const st = tree ? tree.scrollTop : 0;
     const changes = S.versions.draft;
-    box.innerHTML = `<div class="lhead">Layers<span class="note" style="font-weight:400">${esc(S.path)}</span></div>
+    box.innerHTML = `<div class="lhead"><span>Layers</span><button class="lpage" data-act="pagesMenu" title="Pages">${esc(pageName(S.path))}${ico('chev', 10)}</button></div>
       <div class="tree">${rows.join('') || '<div class="empty">This page has no elements Kerf can edit yet.</div>'}</div>
-      <div class="lchanges"><span class="secT">Changes since last version</span>${changes.length ? changes.slice(-8).reverse().map((c) => `<div class="row"><span class="dot"></span><span>${c.name ? `<b>${esc(c.name)}</b><br>` : ''}${esc(c.label)}</span></div>`).join('') : '<span class="note">None yet</span>'}</div>`;
+      ${changes.length ? `<button class="lchanges" data-act="history" title="Open version history"><span class="dot"></span><span>${changes.length} unsaved change${changes.length === 1 ? '' : 's'}</span>${ico('chevR', 10)}</button>` : ''}`;
     box.querySelector('.tree').scrollTop = st;
     const onRow = box.querySelector('.layer.on');
     if (onRow && layersScrollToSel) { onRow.scrollIntoView({ block: 'nearest' }); layersScrollToSel = false; }
@@ -464,7 +575,7 @@
 
   /* ---------- design panel ---------- */
   const val = (p) => read(p, S.sel?.el);
-  const nf = (p, icon, title, unit) => `<label class="inp" title="${title}"><span class="ic" data-scrub="${p}">${icon.startsWith('<') ? icon : ico(icon, 12)}</span><input type="text" inputmode="decimal" data-prop="${p}" value="${esc(val(p))}" aria-label="${title}">${unit ? `<span class="u">${unit}</span>` : ''}</label>`;
+  const nf = (p, icon, title, unit) => `<label class="inp${info()?.sized?.includes(p) ? ' sized' : ''}" title="${title}${info()?.sized?.includes(p) ? ' · different on other screen sizes' : ''}"><span class="ic" data-scrub="${p}">${icon.startsWith('<') ? icon : ico(icon, 12)}</span><input type="text" inputmode="decimal" data-prop="${p}" value="${esc(val(p))}" aria-label="${title}">${unit ? `<span class="u">${unit}</span>` : ''}</label>`;
   const sec = (title, body, act = '') => `<div class="sec"><div class="secH"><span>${title}</span>${act}</div>${body}</div>`;
   function colorRow(p, title, removeAct) {
     const hex = val(p), tok = tokenOf(p), none = hex === 'transparent';
@@ -547,7 +658,7 @@
     const r = sizeRange();
     if (!r) return null;
     const dev = S.device;
-    return S.sizeOnly[dev] ? { mode: 'only', start: r[0], end: r[1], label: `Only on ${dev}` } : { mode: 'all', label: 'All sizes' };
+    return S.sizeOnly[dev] ? { mode: 'only', start: r[0], end: r[1], label: `Only on ${DEV_LABEL[dev].toLowerCase()}` } : { mode: 'all', label: 'All sizes' };
   }
   // Where this element's styles really live (a style table, a constant), and how far a change reaches.
   function sourceHTML(inf) {
@@ -585,7 +696,7 @@
     if (!sizeRange() || inf?.classKind === 'cva') return '';
     const dev = S.device, only = S.sizeOnly[dev];
     const differs = (inf?.classes || []).some((c) => /^(sm|md|lg|xl|2xl):[^:]+$/.test(c));
-    return `<div class="sizeRow"><div class="seg">${[[false, 'All sizes'], [true, `${dev[0].toUpperCase() + dev.slice(1)} only`]].map(([v, n]) => `<button data-act="sizeOnly" data-v="${v}" class="${only === v ? 'on' : ''}" title="${v ? `Change it only on ${dev}; other screen sizes keep how they look now` : 'Make it the same on every screen size'}">${ico(v ? dev : 'corners', 12)}${n}</button>`).join('')}</div>${differs ? '<span class="note" title="This element is styled differently on other screen sizes">Differs by size</span>' : ''}</div>`;
+    return `<div class="sizeRow"><div class="seg">${[[false, 'All sizes'], [true, `${DEV_LABEL[dev]} only`]].map(([v, n]) => `<button data-act="sizeOnly" data-v="${v}" class="${only === v ? 'on' : ''}" title="${v ? `Change it only on ${DEV_LABEL[dev].toLowerCase()} (${devRange(dev)}); other screen sizes keep how they look now` : 'Make it the same on every screen size'}">${ico(v ? dev : 'corners', 12)}${n}</button>`).join('')}</div>${differs ? '<span class="note" title="This element is styled differently on other screen sizes">Differs by size</span>' : ''}</div>`;
   }
   function scopeHTML(s, name) {
     const c = s.defInfo?.cva;
@@ -765,6 +876,12 @@
     const edit = S.mode === 'edit';
     place($('hov'), edit && S.tool !== 'annotate' && S.hover !== S.sel?.el ? S.hover : null, S.hover ? labelOf(S.hover) : '');
     place($('sel'), edit ? S.sel?.el : null, S.sel ? labelOf(S.sel.el) : '');
+    if (edit && S.sel?.el?.isConnected) {
+      const r = S.sel.el.getBoundingClientRect(), dim = $('sel').querySelector('.dim');
+      const t = `${Math.round(r.width)} × ${Math.round(r.height)}`;
+      if (dim.textContent !== t) dim.textContent = t;
+      $('sel').classList.toggle('comp', !!(useOf(S.sel.el) && /^[A-Z]/.test(S.sel.el.getAttribute('data-kerf-n') || '')));
+    }
     const sib = edit && S.sel && S.sel.repeat > 1 ? [...sameLoc(S.sel.el)].filter((x) => x !== S.sel.el).slice(0, 60) : [];
     pool($('sibs'), sib.length, 'sib').forEach((b, i) => place(b, sib[i] || null, null));
     const aEls = D ? (S.amber || []).flatMap((loc) => [...D.querySelectorAll(q(loc))]).slice(0, 60) : [];
@@ -773,6 +890,7 @@
     placeHandles(); placeMulti(); measureLines();
     if (W && W.location.pathname + W.location.search !== S.path) {
       S.path = W.location.pathname + W.location.search;
+      S.pages = [S.path, ...S.pages.filter((x) => x !== S.path)].slice(0, 20);
       if (document.activeElement?.id !== 'pathIn') { const pi = $('pathIn'); if (pi) pi.value = S.path; }
       layersSoon();
     }
@@ -793,6 +911,14 @@
       e.preventDefault(); e.stopPropagation();
     };
     ['pointerdown', 'mousedown', 'mouseup', 'pointerup', 'touchstart', 'submit', 'contextmenu', 'auxclick'].forEach((t) => W.addEventListener(t, block, true));
+    W.addEventListener('contextmenu', (e) => {
+      if (S.mode !== 'edit' || S.tool === 'annotate' || S.editing) return;
+      const hit = pick(e.target);
+      if (!hit) return;
+      if (S.sel?.el !== hit) { S.multi = []; select(hit); }
+      const fr = frame.getBoundingClientRect();
+      setTimeout(() => contextMenu({ x: fr.left + e.clientX * S.z, y: fr.top + e.clientY * S.z }), 0);
+    }, true);
     let lastClick = null;
     // Browsers send no click to a disabled button or input, only pointer events: select those on release.
     W.addEventListener('pointerup', (e) => { if (S.mode === 'edit' && e.button === 0 && e.target.closest?.(':disabled')) onCanvasClick(e); }, true);
@@ -850,6 +976,9 @@
     const typing = t && (t.isContentEditable || /^(input|textarea|select)$/i.test(t.tagName));
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); toggleAI(true); return; }
+    if (!typing && !mod && e.key === '?') { e.preventDefault(); shortcuts(); return; }
+    if (!typing && !mod && e.shiftKey && (e.key === '|' || e.code === 'Backslash')) { e.preventDefault(); toggleMinUI(); return; }
+    if (e.key === 'Escape' && !$('menu').hidden) { closeMenu(); return; }
     if (mod && (e.key === '=' || e.key === '+')) { e.preventDefault(); setZoom('in'); return; }
     if (mod && (e.key === '-' || e.key === '_')) { e.preventDefault(); setZoom('out'); return; }
     if (e.shiftKey && !mod && !typing && (e.code === 'Digit1' || e.code === 'Digit0')) { e.preventDefault(); setZoom(e.code === 'Digit1' ? 'fit' : 1); return; }
@@ -932,6 +1061,10 @@
       case 'layersToggle': S.layersOpen = !S.layersOpen; renderLayers(); renderTop(); break;
       case 'device': S.device = v; S.zoom = 'fit'; applyDevice(); renderTop(); renderPanel(); break;
       case 'zoom': setZoom(v); break;
+      case 'kerfMenu': kerfMenu(below(a)); break;
+      case 'pagesMenu': pagesMenu(below(a)); break;
+      case 'zoomMenu': zoomMenu(below(a)); break;
+      case 'shortcuts': shortcuts(); break;
       case 'reload': W?.location.reload(); break;
       case 'history': S.side = S.side === 'history' ? 'design' : 'history'; if (S.side === 'history') refreshVersions(); renderAll(); break;
       case 'peek': peek(+v); break;
@@ -1043,7 +1176,7 @@
     const m = $('modal');
     m.hidden = false;
     m.innerHTML = `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="prT">
-      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="prT">Create pull request</h2><span class="note">Your developers review it on GitHub before anything goes live.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="prT">Hand off to developers</h2><span class="note">Kerf sends your changes as one pull request on GitHub. Developers review it before anything goes live.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
       <div class="db">
         ${!p.repo ? `<span class="note warn">This project isn’t connected to a GitHub repository, so Kerf can’t open a pull request for it.</span>` : ''}
         <label><span class="secT">Title</span><input class="fld" id="prTitle" value="${esc(title)}"></label>
@@ -1831,6 +1964,7 @@
     set('hPadB', r.left + r.width / 2 - 8, r.bottom - Math.max(2, pt / 2) - 4);
     set('hW', r.right - 4, r.top + r.height / 2 - 4);
     set('hH', r.left + r.width / 2 - 4, r.bottom - 4);
+    set('hWH', r.right - 4, r.bottom - 4);
     const pad = $('padShade');
     if (S.handleDrag?.kind === 'pad') {
       pad.hidden = false;
@@ -1853,8 +1987,15 @@
     let prop, v;
     if (d.k === 'padL') { prop = 'padX'; v = d.padX + dx; } else if (d.k === 'padR') { prop = 'padX'; v = d.padX - dx; }
     else if (d.k === 'padT') { prop = 'padY'; v = d.padY + dy; } else if (d.k === 'padB') { prop = 'padY'; v = d.padY - dy; }
-    else if (d.k === 'w') { prop = 'w'; v = d.w + dx; } else { prop = 'h'; v = d.h + dy; }
-    v = Math.max(0, Math.round(v / (e.shiftKey ? 1 : 4)) * (e.shiftKey ? 1 : 4)); // snap to the 4px grid, Shift for 1px
+    else if (d.k === 'w') { prop = 'w'; v = d.w + dx; } else if (d.k === 'h') { prop = 'h'; v = d.h + dy; }
+    const snap = (x) => Math.max(0, Math.round(x / (e.shiftKey ? 1 : 4)) * (e.shiftKey ? 1 : 4)); // 4px grid, Shift for 1px
+    if (d.k === 'wh') {
+      d.both = [snap(d.w + dx), snap(d.h + dy)];
+      preview(el, 'w', d.both[0]); preview(el, 'h', d.both[1]);
+      showLabel(e.clientX, e.clientY, `${d.both[0]} × ${d.both[1]}`);
+      return;
+    }
+    v = snap(v);
     d.prop = prop; d.val = v;
     preview(el, prop, v);
     showLabel(e.clientX, e.clientY, `${{ padX: 'Padding X', padY: 'Padding Y', w: 'W', h: 'H' }[prop]} ${v}`);
@@ -1864,7 +2005,8 @@
     if (!d) return;
     S.handleDrag = null;
     $('dragLabel').hidden = true;
-    if (d.val != null) commit({ ops: [{ prop: d.prop, value: d.val }] });
+    if (d.both) commit({ ops: [{ prop: 'w', value: d.both[0] }, { prop: 'h', value: d.both[1] }] });
+    else if (d.val != null) commit({ ops: [{ prop: d.prop, value: d.val }] });
   });
   function showLabel(x, y, text) {
     const l = $('dragLabel'), o = $('ov').getBoundingClientRect();
