@@ -47,6 +47,8 @@ export function buildTheme(t) {
     opacity: byValue(t.opacity, (v) => Math.round(parseFloat(v) * 100)),
     shadow: Object.keys(t.boxShadow || {}),
     colors: flattenColors(t.colors),
+    // Breakpoints, smallest first: [{ name: 'sm', min: 640 }, …]. Only simple min-width screens.
+    screens: Object.entries(t.screens || {}).map(([name, v]) => ({ name, min: typeof v === 'string' ? toPx(v) : v && typeof v.min === 'string' && !v.max ? toPx(v.min) : null })).filter((x) => x.min != null && !isNaN(x.min)).sort((a, b) => a.min - b.min),
     byKey: {
       spacing: Object.fromEntries(Object.entries(t.spacing || {}).map(([k, v]) => [k, toPx(v)])),
       radius: Object.fromEntries(Object.entries(t.borderRadius || {}).map(([k, v]) => [k, toPx(v)])),
@@ -70,11 +72,14 @@ export function buildTheme(t) {
 export async function loadTheme(webRoot) {
   const req = createRequire(path.join(webRoot, 'package.json'));
   const resolveConfig = req('tailwindcss/resolveConfig');
-  const file = ['tailwind.config.js', 'tailwind.config.mjs', 'tailwind.config.cjs']
+  const file = ['tailwind.config.js', 'tailwind.config.mjs', 'tailwind.config.cjs', 'tailwind.config.ts', 'tailwind.config.mts', 'tailwind.config.cts']
     .map((f) => path.join(webRoot, f))
     .find((f) => fs.existsSync(f));
-  if (!file) throw new Error(`No tailwind.config.js found in ${webRoot}`);
-  const mod = await import(pathToFileURL(file).href);
+  if (!file) throw new Error(`No tailwind.config file found in ${webRoot}`);
+  let mod;
+  // Tailwind 3.3+ ships its own loader, which also reads TypeScript configs.
+  try { mod = req('tailwindcss/loadConfig')(file); } catch { mod = null; }
+  if (!mod) mod = await import(pathToFileURL(file).href);
   const warn = console.warn;
   console.warn = () => {}; // Tailwind warns about renamed default colors when they're read
   try {

@@ -357,3 +357,7 @@ details.code[open] summary::before{content:'⌄ '}
 .zpct{min-width:58px;height:28px;padding:0 6px;border:0;border-radius:6px;background:transparent;color:var(--ink2);font:500 12px/1 Geist,system-ui,sans-serif;white-space:nowrap}
 .zpct:hover{background:var(--raised);color:var(--ink)}
 .ver .acts .outline{white-space:nowrap}
+.sizeRow{display:flex;align-items:center;gap:8px}
+.sizeRow .seg button{display:inline-flex;align-items:center;gap:5px}
+.sizeRow .note{white-space:nowrap}
+.sizeRow .seg button{white-space:nowrap}

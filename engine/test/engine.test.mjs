@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildTheme, applyOps } from '../src/tailwind.mjs';
-import { editElement, describe } from '../src/edit.mjs';
+import { editElement, describe, applyResponsive } from '../src/edit.mjs';
 import { tagSource } from '../src/ast.mjs';
 
 // A small theme shaped like a resolved Tailwind config.
@@ -17,6 +17,7 @@ const th = buildTheme({
   boxShadow: { DEFAULT: 'x', card: 'var(--s-card)', none: 'none' },
   colors: { surface: 'rgb(var(--c-surface) / <alpha-value>)', 'surface-2': 'x', content: 'x', muted: 'x', border: 'x', primary: { DEFAULT: 'x', fg: 'x' } },
   fontFamily: { sans: [], display: [] },
+  screens: { sm: '640px', md: '768px', lg: '1024px', xl: '1280px' },
 });
 
 const ops = (list, o) => applyOps(list.split(' '), o, th).classes.join(' ');
@@ -290,4 +291,21 @@ test('grouping reports where each element moved', () => {
   assert.deepEqual(g.shift, { after: 6, delta: 2 });
   assert.ok(editElement(g.code, 5, 6, { ops: [{ prop: 'w', value: 'hug' }] }, th).code.includes('<button className="btn w-fit">'));
   assert.ok(editElement(g.code, 9, 4, { ops: [{ prop: 'padX', value: 16 }] }, th).code.includes('<p className="px-4">Below</p>'));
+});
+
+const rsp = (list, o, bp) => applyResponsive(list.split(' '), o, th, bp).classes.join(' ');
+test('only on mobile keeps the old value from tablet up', () => {
+  assert.equal(rsp('text-lg px-4', [{ prop: 'fontSize', value: 14 }], { mode: 'only', start: null, end: 'md' }), 'px-4 text-sm md:text-lg');
+});
+test('only on tablet sets md: and keeps desktop as it was', () => {
+  assert.equal(rsp('px-4', [{ prop: 'padX', value: 24 }], { mode: 'only', start: 'md', end: 'lg' }), 'px-4 md:px-6 lg:px-4');
+});
+test('only on desktop replaces lg: and drops bigger overrides', () => {
+  assert.equal(rsp('px-4 lg:px-5 xl:px-6', [{ prop: 'padX', value: 8 }], { mode: 'only', start: 'lg', end: null }), 'px-4 lg:px-2');
+});
+test('all sizes sets the base value and removes size overrides', () => {
+  assert.equal(rsp('text-sm md:text-lg font-bold', [{ prop: 'fontSize', value: 16 }], { mode: 'all' }), 'font-bold text-base');
+});
+test('an existing override at the end screen is left alone', () => {
+  assert.equal(rsp('px-4 md:px-6', [{ prop: 'padX', value: 8 }], { mode: 'only', start: null, end: 'md' }), 'md:px-6 px-2');
 });

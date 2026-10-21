@@ -2,6 +2,8 @@
 
 This file summarizes every decision made so far in planning sessions with Claude (claude.ai). Read it before doing any work. "Kerf" is a working name the founder has accepted; the GitHub repo is named `karf`.
 
+> **Picking this project up in a new session?** Read `HANDOFF.md` first: it has the current state (what's built, open PRs, how to run and test, rules, open decisions). Then read `CHECKLIST.md` for the decisions the founder is making. The "Immediate tasks" below are done; the build has moved on to the real engine in `engine/`.
+
 ## Who you're working with
 
 The founder is a designer, not an engineer. Work directly: do the task, explain briefly in plain language, don't over-explain, and don't re-ask for permission already given. Never ask them to paste tokens or passwords; sign-ins happen on the service's own pages.

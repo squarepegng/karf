@@ -19,8 +19,8 @@ export function parseLoc(loc, webRoot) {
   const m = String(loc).match(/^(.+):(\d+):(\d+)$/);
   if (!m) throw new KerfError(`Bad location: ${loc}`);
   const file = path.resolve(webRoot, m[1]);
-  const src = path.join(webRoot, 'src') + path.sep;
-  if (!file.startsWith(src)) throw new KerfError('Kerf only edits files inside src/');
+  const inside = file.startsWith(path.resolve(webRoot) + path.sep) && !/[\\/](node_modules|\.next|\.git|dist|build|out)[\\/]/.test(file.slice(path.resolve(webRoot).length));
+  if (!inside || !/\.[jt]sx$/.test(file)) throw new KerfError('Kerf only edits your app’s own .jsx and .tsx files.');
   return { rel: m[1], file, line: +m[2], col: +m[3] };
 }
 
@@ -122,8 +122,50 @@ export function describe(code, line, col) {
   };
 }
 
+// Edits per screen size, the mobile-first Tailwind way (md:, lg:…).
+//   bp.mode "all":  one value everywhere: set the base class and drop size overrides of that property.
+//   bp.mode "only": only between bp.start and bp.end (screen names; null = from 0 / no end). The old value
+//                   is kept from bp.end up, so the change doesn't spill into bigger screens.
+export function applyResponsive(list, ops, th, bp) {
+  const order = (th.screens || []).map((x) => x.name);
+  const rank = (n) => (n == null ? -1 : order.indexOf(n));
+  const parse = (c) => { const m = c.match(/^([\w-]+):([^:]+)$/); return m && order.includes(m[1]) ? { bp: m[1], cls: m[2] } : null; };
+  let classes = list.slice();
+  const summary = { added: [], removed: [], changes: [] };
+  const s = bp.mode === 'only' ? (order.includes(bp.start) ? bp.start : null) : null;
+  const e = bp.mode === 'only' && order.includes(bp.end) ? bp.end : null;
+  for (const op of ops) {
+    const m = matcher(op.prop, th);
+    const at = (lvl) => classes.filter((c) => (lvl == null ? !c.includes(':') : parse(c)?.bp === lvl)).map((c) => (lvl == null ? c : parse(c).cls));
+    // What applies at the end screen today (largest level at or below it that sets this property).
+    let oldAtEnd = [];
+    if (e) for (const lvl of [null, ...order.slice(0, rank(e) + 1)]) { const hit = at(lvl).filter(m); if (hit.length) oldAtEnd = hit; }
+    // Overrides that would fight the new value inside the range (or everywhere, for "all").
+    const lo = bp.mode === 'all' ? -1 : rank(s), hi = bp.mode === 'all' ? Infinity : e ? rank(e) : Infinity;
+    classes = classes.filter((c) => { const p = parse(c); if (p && rank(p.bp) > lo && rank(p.bp) < hi && m(p.cls)) { summary.removed.push(c); return false; } return true; });
+    // Apply the op at the start level.
+    const levelCls = at(s);
+    const r = applyOps(levelCls, [op], th);
+    const pre = (c) => (s == null ? c : `${s}:${c}`);
+    const keep = new Set(r.classes);
+    const gone = levelCls.filter((c) => !keep.has(c)).map(pre), fresh = r.classes.filter((c) => !levelCls.includes(c)).map(pre);
+    classes = classes.filter((c) => !gone.includes(c));
+    classes.push(...fresh);
+    summary.removed.push(...gone);
+    summary.added.push(...fresh);
+    summary.changes.push(...r.changes);
+    // Keep the old value from the end screen up.
+    if (e && !at(e).some(m) && oldAtEnd.length && fresh.length) {
+      const back = oldAtEnd.map((c) => `${e}:${c}`);
+      classes.push(...back);
+      summary.added.push(...back);
+    }
+  }
+  return { classes, ...summary };
+}
+
 // Apply class ops and/or a text change to one element. Returns the new code and a summary.
-export function editElement(code, line, col, { ops = [], text, props = [], cva } = {}, theme) {
+export function editElement(code, line, col, { ops = [], text, props = [], cva, bp } = {}, theme) {
   const el = findElement(code, line, col);
   if (!el) throw new KerfError('Element not found. The file may have changed; reload and try again.');
   const s = new MagicString(code);
@@ -180,7 +222,9 @@ export function editElement(code, line, col, { ops = [], text, props = [], cva }
       summary.offScale = summary.added.filter(isOffScale);
       summary.scope = cva?.mode === 'variant' ? 'variant' : 'all';
     }
-    const r = ci.kind === 'cva' ? null : applyOps(ci.classes, ops, theme);
+    const responsive = bp && (bp.mode === 'all' || bp.mode === 'only') && theme.screens?.length;
+    const r = ci.kind === 'cva' ? null : responsive ? applyResponsive(ci.classes, ops, theme, bp) : applyOps(ci.classes, ops, theme);
+    if (r && responsive && bp.label && (bp.mode === 'only' || r.removed.some((c) => c.includes(':')))) summary.size = bp.label;
     if (r) {
     const next = r.classes.join(' ');
     if (ci.kind === 'string' || ci.kind === 'call') {

@@ -105,7 +105,7 @@ details.logs summary{cursor:pointer;color:#8B8B95;font-size:12px;margin-top:10px
 <div class="brand"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="5.5" height="10" rx="1.5" fill="#EDEDF0"/><rect x="8.5" y="3" width="5.5" height="10" rx="1.5" fill="#EDEDF0" opacity=".45"/></svg>Kerf</div>
 <div><h1>Open a project</h1><p>Paste a GitHub link or a folder on this computer. Kerf runs your app and opens it with the editor on top. Your code only changes when you edit.</p></div>
 <form id="f"><input id="src" placeholder="github.com/team/app  or  ~/code/app" autocomplete="off" spellcheck="false" aria-label="GitHub link or folder"><button id="go">Open</button></form>
-<span class="hint">Works today with React + Tailwind apps built with Vite. Private repos use your existing GitHub sign-in on this Mac.</span>
+<span class="hint">Works with React apps built with Vite or Next.js and styled with Tailwind CSS v3. Private repos use your existing GitHub sign-in on this Mac.</span>
 <div class="card" id="keycard"><div class="status" id="keystat"></div><span class="hint">For the AI step. It is saved only on this Mac, in a git-ignored file.</span><form id="kf" style="display:flex;gap:8px"><input id="kin" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" aria-label="Anthropic API key"><button id="ksave">Save key</button></form><span class="err" id="kerr"></span></div>
 <div id="job"></div>
 <div class="recent" id="recent"></div>
