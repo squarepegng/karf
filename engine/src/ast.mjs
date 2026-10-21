@@ -3,10 +3,11 @@ import { parse } from '@babel/parser';
 import MagicString from 'magic-string';
 import path from 'node:path';
 
-export function parseCode(code, { strict = false } = {}) {
+// Plain .ts files can't be read as JSX (`<T>value` means a type there), so they skip the jsx plugin.
+export function parseCode(code, { strict = false, file = '' } = {}) {
   return parse(code, {
     sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
+    plugins: /\.[cm]?ts$/.test(file) ? ['typescript'] : ['jsx', 'typescript'],
     errorRecovery: !strict,
   });
 }

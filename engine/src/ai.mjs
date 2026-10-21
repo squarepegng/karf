@@ -44,7 +44,18 @@ const Proposal = z.object({
       ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('For w/h: hug, fill or px. For layout: row, col or none. A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
       text: z.string().nullable().describe('New text, only when the element’s text is editable and the request asks to change wording; otherwise null'),
       props: z.array(z.object({ name: z.string(), value: z.string() })).describe('Component property changes, only names listed as editable for that element, with one of its allowed values; [] if none'),
-      action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'replace', 'group', 'ungroup', 'image']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit.'),
+      target: z.string().nullable().describe('For style edits: where to make the change. null lets Kerf choose (where the property is set now). Otherwise one of the element’s listed style targets: "element" (only this element), "table:NAME:KEY" (that entry of a style table, so every element using it), "table:NAME:*" (every entry), "css:NAME" (that CSS class everywhere), "const:NAME"'),
+      action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'replace', 'group', 'ungroup', 'image', 'token', 'code']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit. token changes a design-system colour everywhere; code is a last-resort code change'),
+      token: z.object({
+        name: z.string().describe('A colour token name from the list'),
+        value: z.string().describe('The new colour as #RRGGBB'),
+        theme: z.enum(['light', 'dark', 'both']).describe('Which theme value to change'),
+      }).nullable().describe('For token only; otherwise null'),
+      code: z.object({
+        file: z.string().describe('The file path shown for this element or one of its style sources'),
+        find: z.string().describe('An exact snippet of that file you were shown, which occurs once'),
+        replace: z.string().describe('The new text for that snippet'),
+      }).nullable().describe('For code only; otherwise null'),
       moveDir: z.enum(['up', 'down']).nullable().describe('For move: one place earlier or later among its siblings'),
       swapTo: z.string().nullable().describe('For swap: exact name of an icon from the project’s icon library or one of its components'),
       insertPosition: z.enum(['before', 'after', 'inside']).nullable().describe('For insert: relative to this element; inside puts it at the end of its children'),
@@ -61,6 +72,13 @@ const Proposal = z.object({
 const SYSTEM = `You are the design assistant inside Kerf, a Figma-style editor that changes a team's real React + Tailwind code.
 A designer points at elements on a live screen and says what should change. You answer with property edits on those elements; Kerf turns each edit into the right Tailwind class in the source and shows your proposal for approval before writing anything.
 
+Choose the best approach first, as a senior product designer who also reads code would:
+1. What does the designer really mean? Read the request against the screen. "Too bright" on a dark screen means lower contrast so it sits in the dark theme (a darker, quieter fill, softer text, a subtler border), not just darker text. "Make it pop" means more contrast or emphasis against what's around it.
+2. Where does the style really live? On the element itself, in a style table (one entry per status or variant), in a CSS class, in a shared component, or in a design token. Each element in the list says where its styles come from.
+3. How far should the change reach? If the request is about a kind of thing ("the chips", "all buttons", "the cards", "the dark theme"), change it at its source so every instance stays consistent: the table entry or every entry, the CSS class, the component definition, or the token. If it's about this one instance, change only it (target "element"). For a table of statuses or variants, give each entry the value that fits it and keep each status its own hue.
+4. Prefer, in order: style edits on the element or its source, then component properties, then token edits (only when the request is about the palette or theme itself, since a token changes every screen), then code edits (only when nothing else can do it).
+Start message with that approach in one plain sentence that says the reach, e.g. "Your status chips take their colours from one table used in 4 files, so I gave all four a darker fill and softer text there."
+
 How to work:
 - When the request has numbered notes (the designer marked parts of the screen), answer each note on its own: set note on every edit, and fill notes with one entry per note saying what you changed for it or why it could not be done. Elements tagged (note N) sit under that note's mark. Keep message to one short overall sentence.
 - Only edit elements from the list you are given, by their exact id. Prefer the fewest edits that achieve the request.
@@ -73,6 +91,8 @@ How to work:
 - To arrange some siblings differently from the rest (e.g. put an input and a button side by side while the label stays above), group them: action group on the first one, groupWith the others, and groupClass for the new frame's layout. Then set Fill width on the child that should take the remaining space. Ungroup removes a plain wrapper and keeps its children.
 - New elements must fit the design: reuse the project's components where one fits, and use the project's tokens and scales in their classes.
 - Layout works like Figma auto layout: layout row/col/none (direction), alignItems start/center/end/stretch, justify start/center/end/between, wrap wrap/nowrap, gap, padX/padY, margins mX/mY (px or auto), and width/height w/h as hug, fill or a px size.
+- action token changes a design-system colour everywhere it's used: token.name from the token list, token.value #RRGGBB, token.theme light, dark or both.
+- action code is the last resort for visual changes no other action can make (classes computed in an unusual way, inline styles): code.file is the file shown for that element or its style sources, code.find an exact snippet of code you were shown that occurs once, code.replace the new text. Keep it minimal and visual only: never change logic, data, handlers or imports.
 - Always do what you can. If part of a request needs something not in your toolset yet (free positioning, animation, hover states, new pages), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
 - needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Kerf cannot make them yet; use not_yet for those.
 - This can be a conversation: earlier turns are included. Read follow-ups ("smaller", "undo that", "try again but warmer") against what you proposed before and whether it was applied.
@@ -108,7 +128,18 @@ function describeTarget(t, i) {
   if (t.text) lines.push(`  text: ${JSON.stringify(t.text.slice(0, 100))}${t.textEditable ? ' (editable)' : ' (not editable)'}`);
   if (t.classes?.length) lines.push(`  classes: ${t.classes.join(' ')}`);
   if (t.measured) lines.push(`  measured: ${Object.entries(t.measured).map(([k, v]) => `${k} ${v}`).join(', ')}`);
-  if (t.classKind === 'dynamic') lines.push('  (classes are computed in code; do not edit this element)');
+  if (t.classKind === 'dynamic') lines.push(`  (classes are computed in code, so style ops won't work here; use action code if this element must change)`);
+  if (t.classKind === 'sourced' && t.sources) {
+    lines.push('  its styles come from (later wins):');
+    for (const x of t.sources) {
+      if (x.kind === 'table') lines.push(`    - style table ${x.name} in ${x.file}, used in ${x.usedIn} files; this element uses "${x.key}". Entries: ${x.entries.map((e) => `${e.key}="${e.value}"`).join('; ')}`);
+      else if (x.kind === 'css') lines.push(`    - CSS class .${x.name} in ${x.file} (@apply ${x.value}), used in ${x.usedIn} files`);
+      else if (x.kind === 'const') lines.push(`    - constant ${x.name}="${x.value}" in ${x.file}, used in ${x.usedIn} files`);
+      else lines.push(`    - its own classes "${x.value}"${x.kind === 'branch' ? (x.active ? ' (inside a condition, active now)' : ' (inside a condition, not active now)') : ''}`);
+    }
+    lines.push(`  style targets: ${(t.sourceTargets || []).join(', ')}${t.merge ? '' : ' (classes are not merged, so "element" can only add properties nothing else sets)'}`);
+  }
+  if ((t.classKind === 'sourced' || t.classKind === 'dynamic') && t.snippet) lines.push(`  code in ${t.file}: ${t.snippet.replace(/\s+/g, ' ').slice(0, 320)}`);
   const editable = (t.props || []).filter((p) => p.editable);
   if (editable.length) lines.push(`  properties${t.lib ? ` (${t.lib})` : ''}: ${editable.map((p) => `${p.name}=${p.value ?? 'unset'}${p.options ? ` [${p.options.join('|')}]` : ` (${p.kind})`}`).join(', ')}`);
   return lines.join('\n');
@@ -165,7 +196,7 @@ const IMG_TYPES = /^image\/(jpeg|png|gif|webp)$/;
 const nameFor = (t) => designName(t.tag, t.text, { icon: !!t.lib });
 const noteOf = (e, t) => (Number.isInteger(e.note) && e.note > 0 ? e.note : Number.isInteger(t.note) ? t.note : null);
 
-export async function propose({ request, targets, history = [], images = [] }, theme, library) {
+export async function propose({ request, targets, history = [], images = [], tokens = [], webRoot = null }, theme, library) {
   const key = apiKey();
   if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
   if (!request || !String(request).trim()) throw new KerfError('Say or type what should change.');
@@ -196,7 +227,7 @@ export async function propose({ request, targets, history = [], images = [] }, t
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'medium', format: betaZodOutputFormat(Proposal) },
-      system: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}\n${libSummary(library)}`,
+      system: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}\n${tokens.length ? `Colour tokens you can change with action token (light / dark values): ${tokens.map((t) => `${t.name} ${t.values.map((v) => `${v.theme} ${v.hex}`).join(' / ')}`).join('; ')}\n` : ''}${libSummary(library)}`,
       messages: [
         ...history.slice(-8).map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.text).slice(0, 2000) })),
         { role: 'user', content: lastContent },
@@ -205,7 +236,7 @@ export async function propose({ request, targets, history = [], images = [] }, t
   } catch (e) {
     if (e instanceof Anthropic.AuthenticationError) throw new KerfError('Anthropic didn’t accept the saved key. Save a new one on Kerf’s start page.');
     if (e instanceof Anthropic.RateLimitError) throw new KerfError('Claude is busy right now. Try again in a moment.');
-    if (e instanceof Anthropic.APIError) throw new KerfError(`Claude couldn’t answer (${e.status}). Try again.`);
+    if (e instanceof Anthropic.APIError) { console.error('Kerf AI error:', e.status, e.message); throw new KerfError(`Claude couldn’t answer (${e.status}). Try again.`); }
     throw e;
   }
   if (res.stop_reason === 'refusal') throw new KerfError('Claude declined this request. Try rewording it as a visual change.');
@@ -216,9 +247,35 @@ export async function propose({ request, targets, history = [], images = [] }, t
   const known = (nm) => !!library.findIcon(nm) || library.componentList().has(nm);
   const urls = new Set([...String(request).matchAll(/https?:\/\/\S+/g)].map((m) => m[0].replace(/[).,]+$/, '')));
   const uploads = new Set(library.uploads());
+  // Files Claude may change with a code edit: the elements' own files and their style sources.
+  const codeFiles = new Set(targets.flatMap((t) => [t.file, ...(t.sources || []).map((x) => x.file)]).filter(Boolean));
+  const tokenNames = new Set(tokens.map((x) => x.name));
+  const whereOf = (tg) => {
+    const m = String(tg || '').match(/^(table|css|const):([^:]+)(?::(.+))?$/);
+    if (!m) return tg === 'element' ? 'only this element' : null;
+    return m[1] === 'table' ? (m[3] === '*' ? `every entry of ${m[2]}` : `${m[2]} “${m[3]}”`) : m[1] === 'css' ? `.${m[2]} class` : m[2];
+  };
   for (const e of p.edits || []) {
-    const t = allowed.get(e.loc);
+    const t = allowed.get(e.loc) || (e.action === 'token' ? targets[0] && allowed.get(targets[0].loc) : null);
     if (!t) continue;
+    if (e.action === 'token') {
+      const k = e.token;
+      if (!k || !tokenNames.has(k.name) || !/^#[0-9a-f]{6}$/i.test(k.value || '')) continue;
+      edits.push({ loc: t.loc, tag: 'Colour token', name: `Colour “${k.name}”`, note: noteOf(e, t), ops: [], props: [], text: null, structure: { type: 'token', name: k.name, hex: k.value.toUpperCase(), which: k.theme || 'both' }, why: e.why });
+      continue;
+    }
+    if (e.action === 'code') {
+      const c = e.code;
+      const file = String(c?.file || '').replace(/^\.?\//, '');
+      if (!c || !codeFiles.has(file) || !c.find || c.replace == null || c.find === c.replace) continue;
+      if (webRoot) {
+        let content = '';
+        try { content = fs.readFileSync(path.join(webRoot, file), 'utf8'); } catch { continue; }
+        if (content.split(c.find).length !== 2) continue;
+      }
+      edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops: [], props: [], text: null, structure: { type: 'code', file, find: c.find, replace: c.replace }, why: e.why });
+      continue;
+    }
     if (e.action && e.action !== 'style') {
       const st = { type: e.action };
       if (e.action === 'move') st.dir = e.moveDir || 'down';
@@ -253,7 +310,8 @@ export async function propose({ request, targets, history = [], images = [] }, t
     for (const p of e.props || []) {
       try { props.push({ name: p.name, value: checkProp({ props: t.props || [] }, p.name, p.value) }); } catch { /* not allowed here */ }
     }
-    if (ops.length || text || props.length) edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops, text, props, why: e.why });
+    const target = e.target && (t.sourceTargets || []).includes(e.target) ? e.target : null;
+    if (ops.length || text || props.length) edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops, text, props, why: e.why, dom: t.dom || [], ...(target ? { target, where: whereOf(target) } : {}) });
   }
   const notes = Array.isArray(p.notes) ? p.notes.filter((n) => Number.isInteger(n.note) && n.note > 0).map((n) => ({ note: n.note, status: n.status, summary: n.summary })) : null;
   return { scope: p.scope, message: p.message, notes: notes?.length ? notes : null, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } };

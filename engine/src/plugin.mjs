@@ -9,6 +9,7 @@ import { createEditor, KerfError } from './edit.mjs';
 import { propose } from './ai.mjs';
 import { createSession } from './session.mjs';
 import { createLibrary } from './library.mjs';
+import { listTokens, tokenEdit } from './tokens.mjs';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -27,7 +28,14 @@ const ASSETS = { '/': ['index.html', 'text/html; charset=utf-8'], '/index.html':
 // Kerf for one web app: tags JSX so elements map back to source, and serves the editor and its API.
 // Used by the Vite plugin below and by the Next.js runner.
 export async function createKerf(webRoot) {
-  const theme = await loadTheme(webRoot);
+  let theme = await loadTheme(webRoot);
+  // A token change in tailwind.config changes the theme Kerf reads.
+  const setToken = async ({ name, hex, which = 'both', source = 'hand' }) => {
+    const files = tokenEdit(webRoot, theme, name, hex, which);
+    const r = editor.applyFiles(files, `token:${name}`, { token: { name, hex, which }, source }, { action: `Colour “${name}”${which === 'both' || which === 'all' ? '' : ` (${which})`} → ${String(hex).toUpperCase()}` });
+    if ([...files.keys()].some((f) => /tailwind\.config/.test(f))) theme = await loadTheme(webRoot);
+    return r;
+  };
   const library = createLibrary(webRoot);
   const editor = createEditor(webRoot, () => theme, library);
   const session = createSession(webRoot, editor);
@@ -61,6 +69,7 @@ export async function createKerf(webRoot) {
         if (req.method === 'GET' && route === '/icons') return send(200, library.searchIcons(new URL(req.url, 'http://x').searchParams.get('q'), 80, new URL(req.url, 'http://x').searchParams.get('lib') || undefined));
         if (req.method === 'GET' && route === '/components') return send(200, [...library.componentList().values()].map((c) => ({ name: c.name, file: c.rel })).sort((a, b) => a.name.localeCompare(b.name)));
         if (req.method === 'GET' && route === '/uploads') return send(200, library.uploads());
+        if (req.method === 'GET' && route === '/tokens') return send(200, listTokens(webRoot, theme));
         if (req.method === 'GET' && route === '/theme') return send(200, theme);
         if (req.method === 'GET' && route === '/changes') return send(200, editor.history.map(({ rel, loc, change, summary, at }) => ({ file: rel, loc, change, summary, at })));
         if (req.method !== 'POST') return send(404, { error: 'Not found' });
@@ -76,9 +85,10 @@ export async function createKerf(webRoot) {
         if (route === '/peek') return send2(200, session.peekBefore(Number(body.n)));
         if (route === '/unpeek') return send2(200, session.unpeek());
         if (route === '/pr') return send2(200, session.pullRequest(body));
-        if (route === '/inspect') return send(200, editor.describe(body.loc));
-        if (route === '/edit') return send2(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props, cva: body.cva, bp: body.bp, name: body.name }));
+        if (route === '/inspect') return send(200, editor.describe(body.loc, body.dom));
+        if (route === '/edit') return send2(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props, cva: body.cva, bp: body.bp, dom: body.dom, scope: body.scope, target: body.target, name: body.name }));
         if (route === '/undo') return send2(200, editor.undo());
+        if (route === '/token') return send2(200, await setToken(body));
         if (route === '/structure') return send2(200, editor.structure(body.loc, body.op, 'hand', body.name));
         if (route === '/upload') {
           try { return send(200, library.saveUpload(body.name, body.data)); } catch (e) { throw new KerfError(e.message); }
@@ -87,13 +97,15 @@ export async function createKerf(webRoot) {
           // Add what only the source knows: real tag, classes, whether text is editable.
           const targets = (body.targets || []).slice(0, 80).map((t) => {
             try {
-              const d = editor.describe(t.loc);
-              return { ...t, tag: d.tag, classes: d.classes, classKind: d.classKind, textEditable: d.text.editable, text: d.text.editable ? d.text.value : t.text, props: d.props, lib: d.lib };
+              const d = editor.describe(t.loc, t.dom);
+              return { ...t, tag: d.tag, file: d.file, snippet: d.snippet, classes: d.classes, classKind: d.classKind, classReason: d.classReason, sources: d.sources, sourceTargets: d.targets, merge: d.merge, textEditable: d.text.editable, text: d.text.editable ? d.text.value : t.text, props: d.props, lib: d.lib };
             } catch {
               return null;
             }
           }).filter(Boolean);
-          return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images }, theme, library));
+          let tokens = [];
+          try { tokens = listTokens(webRoot, theme); } catch {}
+          return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images, tokens, webRoot }, theme, library));
         }
         if (route === '/ai/apply') {
           // Apply from the bottom of each file up, structure last per element, so positions stay valid.
@@ -105,6 +117,9 @@ export async function createKerf(webRoot) {
             const ins = edits.find((e) => e.loc === del.loc && e.structure?.type === 'insert' && e.structure.position !== 'inside');
             if (ins) { ins.structure = { type: 'replace', jsx: ins.structure.jsx }; edits = edits.filter((e) => e !== del); }
           }
+          // Code changes and colour tokens go last: they can touch files other edits point into.
+          const late = edits.filter((e) => e.structure?.type === 'code' || e.structure?.type === 'token');
+          edits = edits.filter((e) => !late.includes(e));
           // Style edits never move lines: do them top-down so parents get their layout before children.
           // Structural edits do move lines: do them bottom-up per file, deletes last.
           const file = (e) => String(e.loc).split(':')[0];
@@ -128,11 +143,20 @@ export async function createKerf(webRoot) {
                 if (r.shift) shifts.push(r.shift);
                 return { loc: e.loc, ok: true, ...r };
               }
-              return { loc: e.loc, ok: true, ...editor.edit(e.loc, { ops: e.ops, text: e.text || undefined, props: e.props, bp: e.bp, source: 'ai', name: e.name }) };
+              return { loc: e.loc, ok: true, ...editor.edit(e.loc, { ops: e.ops, text: e.text || undefined, props: e.props, bp: e.bp, dom: e.dom, target: e.target, source: 'ai', name: e.name }) };
             } catch (err) {
               return { loc: e.loc, ok: false, error: err.message };
             }
           });
+          for (const e of late) {
+            try {
+              const st = e.structure;
+              const r = st.type === 'token' ? await setToken({ name: st.name, hex: st.hex, which: st.which, source: 'ai' }) : editor.code(st.file, st.find, st.replace, { source: 'ai', name: e.name, label: e.why ? `Code: ${e.why}` : null });
+              results.push({ loc: e.loc, ok: true, ...r });
+            } catch (err) {
+              results.push({ loc: e.loc, ok: false, error: err.message });
+            }
+          }
           return send2(200, { results, n: editor.history.length });
         }
         return send(404, { error: 'Not found' });

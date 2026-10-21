@@ -54,5 +54,7 @@ export function summaryLabels(summary) {
   if (summary.text) out.push(`Text “${summary.text.to}”`);
   (summary.props || []).forEach((p) => out.push(`${p.name} ${p.from ?? 'default'} → ${p.to}`));
   if (summary.size && out.length) out[out.length - 1] += ` (${summary.size.toLowerCase()})`;
+  const where = (summary.where || []).filter((w) => w !== 'this element');
+  if (where.length && out.length) out[out.length - 1] += ` · in ${where.join(', ')}`;
   return out;
 }
