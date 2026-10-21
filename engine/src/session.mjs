@@ -9,6 +9,8 @@ export function createSession(webRoot, editor) {
   const versions = []; // { n, at, from, to } — indices into editor.history
   let peek = null; // { n, current: Map(file → content) }
   let chat = { messages: [], notes: [] };
+  // The project's design direction: a preset feel, a description and up to 3 reference images.
+  let direction = null;
 
   /* ---------- kept on disk, so a restart loses nothing ---------- */
   const DIR = path.join(webRoot, '.kerf');
@@ -16,7 +18,7 @@ export function createSession(webRoot, editor) {
   function save() {
     try {
       fs.mkdirSync(DIR, { recursive: true });
-      fs.writeFileSync(FILE, JSON.stringify({ v: 1, history: editor.history, versions, chat, peek: peek ? { n: peek.n, current: [...peek.current] } : null }));
+      fs.writeFileSync(FILE, JSON.stringify({ v: 1, history: editor.history, versions, chat, direction, peek: peek ? { n: peek.n, current: [...peek.current] } : null }));
     } catch {}
   }
   function load() {
@@ -27,6 +29,7 @@ export function createSession(webRoot, editor) {
     editor.history.push(...(d.history || []).filter((h) => fs.existsSync(h.file)));
     versions.push(...(d.versions || []).filter((v) => v.to <= editor.history.length));
     chat = d.chat || chat;
+    direction = d.direction || null;
     save();
   }
   // Never commit Kerf's own folder.
@@ -157,5 +160,12 @@ export function createSession(webRoot, editor) {
 
   ignoreInGit();
   load();
-  return { save, chat: () => chat, setChat: (c) => { chat = { messages: (c.messages || []).slice(-200), notes: c.notes || [] }; save(); }, snapshot, list, restore, peekBefore, unpeek: () => { unpeekNow(); return list(); }, isPeeking: () => !!peek, repoInfo, pullRequest };
+  const setDirection = (x) => {
+    if (!x) { direction = null; save(); return null; }
+    const refs = (Array.isArray(x.refs) ? x.refs : []).slice(0, 3).filter((r) => r && /^image\/(jpeg|png)$/.test(r.media_type) && typeof r.data === 'string' && r.data.length < 1.5e6).map((r) => ({ media_type: r.media_type, data: r.data, thumb: String(r.thumb || '').slice(0, 60000), name: String(r.name || 'reference').slice(0, 80) }));
+    direction = { preset: String(x.preset || '').slice(0, 40), text: String(x.text || '').slice(0, 600), refs };
+    save();
+    return direction;
+  };
+  return { save, direction: () => direction, setDirection, chat: () => chat, setChat: (c) => { chat = { messages: (c.messages || []).slice(-200), notes: c.notes || [] }; save(); }, snapshot, list, restore, peekBefore, unpeek: () => { unpeekNow(); return list(); }, isPeeking: () => !!peek, repoInfo, pullRequest };
 }

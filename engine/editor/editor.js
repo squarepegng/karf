@@ -376,7 +376,7 @@
   /* menus: one popover for the Kerf menu, pages, zoom and right-click */
   function openMenu(items, at) {
     const m = $('menu');
-    m.innerHTML = items.map((it, i) => it === '-' ? '<div class="msep"></div>' : it.input ? `<form class="minput" data-mi="${i}"><input placeholder="${esc(it.placeholder || '')}" value="${esc(it.value || '')}" spellcheck="false" aria-label="${esc(it.placeholder || '')}"></form>` : it.head ? `<div class="mhead">${esc(it.head)}</div>` : `<button class="mi${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}" data-mi="${i}" ${it.disabled ? 'disabled' : ''} role="menuitem"><span class="mchk">${it.on ? ico('check', 12) : ''}</span><span class="ml">${esc(it.label)}</span>${it.kbd ? `<span class="mk">${esc(it.kbd)}</span>` : ''}</button>`).join('');
+    m.innerHTML = items.map((it, i) => it === '-' ? '<div class="msep"></div>' : it.input ? `<form class="minput" data-mi="${i}"><input placeholder="${esc(it.placeholder || '')}" value="${esc(it.value || '')}" spellcheck="false" aria-label="${esc(it.placeholder || '')}"></form>` : it.head ? `<div class="mhead">${esc(it.head)}</div>` : `<button class="mi${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}" data-mi="${i}" ${it.disabled ? 'disabled' : ''} role="menuitem"><span class="mchk">${it.on ? ico('check', 12) : ''}</span><span class="ml">${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.kbd ? `<span class="mk">${esc(it.kbd)}</span>` : ''}</button>`).join('');
     m.hidden = false;
     const w = m.offsetWidth, h = m.offsetHeight;
     m.style.left = Math.max(8, Math.min(innerWidth - w - 8, at.x)) + 'px';
@@ -412,6 +412,7 @@
       ...(p.branch ? [{ label: `Branch: ${p.branch}`, disabled: true }] : []),
       { label: 'Open another project…', run: () => window.open('http://localhost:4100', '_blank') },
       '-',
+      { label: S.direction ? `Design direction: ${dirName()}` : 'Set a design direction…', run: () => openDirection() },
       { label: S.minUI ? 'Show panels' : 'Hide panels', kbd: '⇧\\', run: () => toggleMinUI() },
       { label: 'Keyboard shortcuts', kbd: '?', run: () => shortcuts() },
     ], at);
@@ -1311,6 +1312,53 @@
     clearTimeout(chatT);
     chatT = setTimeout(() => api('/chat', { messages: S.chat.filter((m) => !m.busy).map(({ targets, ...m }) => m), notes: S.notes }).catch(() => {}), 300);
   }
+  /* style modes: how far Kerf may go beyond the project's design system */
+  const MODE_LABEL = { system: 'On system', improve: 'Improve the system', explore: 'Explore freely' };
+  const PRESET = { calm: ['Calm & precise', 'One accent, lots of space, crisp hierarchy'], warm: ['Warm & editorial', 'Warm neutrals, expressive type, soft corners'], bold: ['Bold & playful', 'Saturated colour, big type, rounded shapes'], minimal: ['Minimal', 'Near-monochrome, few elements, thin lines'] };
+  const modeKey = () => `kerf.mode.${S.project?.name || 'app'}`;
+  S.styleMode = 'system';
+  S.direction = null;
+  try { S.styleMode = localStorage.getItem(modeKey()) || 'system'; } catch {}
+  api('/direction').then((d) => { S.direction = d; renderAI(); }).catch(() => {});
+  const dirName = () => (S.direction ? PRESET[S.direction.preset]?.[0] || (S.direction.text ? 'Custom' : '') : '');
+  function modePill() {
+    const m = S.styleMode, d = m !== 'system' && dirName();
+    return `<button type="button" class="kcMode ${m}" data-act2="modeMenu" title="How far Kerf may go beyond your design system">${ico(m === 'system' ? 'comp' : m === 'improve' ? 'spark' : 'pen', 12)}<span>${esc(MODE_LABEL[m])}${d ? ` · ${esc(d)}` : ''}</span>${ico('chev', 10)}</button>`;
+  }
+  function setStyleMode(m) {
+    S.styleMode = m;
+    try { localStorage.setItem(modeKey(), m); } catch {}
+    renderAI();
+    renderMarks();
+  }
+  function modeMenu(at) {
+    const pick = (m) => () => { if (m !== 'system' && !S.direction) openDirection(m); else setStyleMode(m); };
+    openMenu([
+      { head: 'Design system' },
+      { label: 'On system', sub: 'Use your design system as it is', on: S.styleMode === 'system', run: pick('system') },
+      { label: 'Improve the system', sub: 'Fix colours, type and spacing everywhere', on: S.styleMode === 'improve', run: pick('improve') },
+      { label: 'Explore freely', sub: 'Try a new look for this part only', on: S.styleMode === 'explore', run: pick('explore') },
+      '-',
+      { label: S.direction ? `Design direction: ${dirName()}` : 'Set a design direction…', run: () => openDirection() },
+    ], at);
+  }
+  // The project's design direction: a preset feel, a description and up to 3 reference images.
+  function openDirection(thenMode) {
+    const d = S.direction || {};
+    S._dir = { preset: d.preset || '', text: d.text || '', refs: (d.refs || []).map((r) => ({ ...r, keep: true })), thenMode };
+    const m = $('modal');
+    m.hidden = false;
+    m.innerHTML = `<section class="dialog dirD" role="dialog" aria-modal="true" aria-labelledby="dirT">
+      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="dirT">What feel are you going for?</h2><span class="note">Kerf follows this direction when it improves or explores. You can change it anytime.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <div class="db">
+        <div class="dirGrid">${Object.entries(PRESET).map(([k, [n, sub]]) => `<button class="dirCard${S._dir.preset === k ? ' on' : ''}" data-act2="dirPreset" data-v="${k}"><b>${n}</b><span>${sub}</span></button>`).join('')}</div>
+        <label><span class="secT">Describe it <span class="note" style="font-weight:400">(optional)</span></span><textarea class="fld" id="dirText" rows="2" placeholder="e.g. Feel like a premium research tool: confident, quiet, data first">${esc(S._dir.text)}</textarea></label>
+        <div><span class="secT">References <span class="note" style="font-weight:400">(optional, up to 3 screenshots of products you like)</span></span><div class="dirRefs" id="dirRefs">${dirRefsHTML()}</div></div>
+      </div>
+      <div class="df">${S.direction ? '<button class="ghostBtn" data-act2="dirClear">Remove direction</button>' : ''}<span style="flex:1"></span><button class="outline" data-act="closeModal">Cancel</button><button class="primary solo" data-act2="dirSave">Save direction</button></div></section>`;
+  }
+  const dirRefsHTML = () => `${S._dir.refs.map((r, i) => `<span class="kcThumb"><img src="${r.thumb}" alt="${esc(r.name)}"><button type="button" data-act2="dirRefX" data-i="${i}" aria-label="Remove ${esc(r.name)}">${ico('x', 10)}</button></span>`).join('')}${S._dir.refs.length < 3 ? `<button class="dirAdd" data-act2="dirRefAdd">${ico('plus', 14)}<span>Add</span></button>` : ''}`;
+
   // What the designer is looking at, so Claude can resolve "this" and "here" and judge the screen.
   function aiContext() {
     let theme = null;
@@ -1346,8 +1394,11 @@
     renderAI();
     try {
       const screen = await captureScreen();
-      m.proposal = await api('/ai', { request: text, targets, history, screen, context: aiContext(), images: atts.map((a) => ({ name: a.name, media_type: a.type, data: a.data, orig: a.orig })) });
-      S.amber = m.proposal.edits.map((e) => e.loc);
+      m.mode = S.modeOnce || S.styleMode;
+      S.modeOnce = null;
+      m.proposal = await api('/ai', { request: text, targets, history, screen, context: aiContext(), mode: m.mode, images: atts.map((a) => ({ name: a.name, media_type: a.type, data: a.data, orig: a.orig })) });
+      S.amber = m.proposal.edits.filter((e) => e.structure?.type !== 'token').map((e) => e.loc);
+      if (m.proposal.edits.some((e) => e.structure?.type === 'token') && !S.tokens) loadTokens();
       if (!m.proposal.edits.length) m.status = 'info';
     } catch (e) { m.error = e.message; }
     m.busy = false;
@@ -1357,6 +1408,7 @@
   }
   async function decide(m, v) {
     if (!m || m.status !== 'pending') return;
+    if (m.previewing) { m.previewing = false; previewTokens(m, false); }
     S.amber = [];
     if (v === 'apply') {
       const hadError = !!D?.querySelector('vite-error-overlay');
@@ -1373,6 +1425,7 @@
       m.status = ok ? 'applied' : 'failed';
       toast(`Applied ${ok} change${ok === 1 ? '' : 's'}`, bad.length ? `${bad.length} skipped: ${bad[0].error}` : '', !!bad.length && !ok, !!ok);
       if (m.where === 'notes' && ok) S.notes = [];
+      if (chosen(m).some((e) => e.structure?.type === 'token')) S.tokens = null;
       afterEdit();
     } else m.status = 'discarded';
     renderAI();
@@ -1396,7 +1449,30 @@
   const rowFor = (m) => (e) => editRow(e, m ? rowState(m, e) : 'todo', m ? `data-act2="edPick" data-i="${S.chat.indexOf(m)}" data-e="${m.proposal.edits.indexOf(e)}"` : '');
   // While pending, each row is a checkbox: ticked changes are applied, unticked ones left out.
   document.addEventListener('keydown', (e) => { const r = e.target.closest?.('[data-act2="edPick"]'); if (r && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); r.click(); } });
-  const editRow = (e, st = 'todo', pick = '') => `<div class="ed ${st}"${st === 'pick' || st === 'unpick' ? ` ${pick} role="checkbox" aria-checked="${st === 'pick'}" tabindex="0" title="${st === 'pick' ? 'Leave this change out' : 'Include this change'}"` : ''}>${MARK[st] || ''}<div class="edB"><div class="edT"><b>${esc(e.name || e.tag)}</b><span class="mono">${esc(editLabel(e))}</span></div>${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div></div>`;
+  const editRow = (e, st = 'todo', pick = '') => `<div class="ed ${st}"${st === 'pick' || st === 'unpick' ? ` ${pick} role="checkbox" aria-checked="${st === 'pick'}" tabindex="0" title="${st === 'pick' ? 'Leave this change out' : 'Include this change'}"` : ''}>${MARK[st] || ''}<div class="edB"><div class="edT"><b>${esc(e.name || e.tag)}</b>${e.structure?.type === 'token' ? tokenChange(e.structure) : `<span class="mono">${esc(editLabel(e))}</span>`}${e.offSystem ? '<i class="offSys">Off-system</i>' : ''}</div>${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div></div>`;
+  function tokenChange(st) {
+    const t = (S.tokens || []).find((x) => x.name === st.name);
+    const cur = t ? (t.values.find((v) => v.theme === st.which) || t.values.find((v) => v.theme === (aiContext().theme || 'light')) || t.values[0])?.hex : null;
+    return `<span class="swd">${cur ? `<i style="background:${esc(cur)}"></i>${ico('chevR', 10)}` : ''}<i style="background:${esc(st.hex)}"></i><span class="mono">${esc(st.hex)}${st.which && st.which !== 'both' ? ` · ${esc(st.which)}` : ''}</span></span>`;
+  }
+  // Live preview: the app's colours are CSS variables, so the new palette can be tried on before anything is written.
+  const hexRgb = (h) => [1, 3, 5].map((k) => parseInt(String(h).slice(k, k + 2), 16));
+  function rgbHsl(r, g, b) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; if (mx === mn) return [0, 0, l * 100]; const d = mx - mn, s2 = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); const h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [h * 60, s2 * 100, l * 100]; }
+  function previewTokens(m, on) {
+    if (!D) return;
+    const root = D.documentElement, theme = aiContext().theme || 'light';
+    for (const v of m._pv || []) root.style.removeProperty(v);
+    m._pv = [];
+    if (!on) return;
+    for (const e of chosen(m).filter((x) => x.structure?.type === 'token')) {
+      const t = (S.tokens || []).find((x) => x.name === e.structure.name);
+      if (!t?.var || (e.structure.which !== 'both' && e.structure.which !== theme)) continue;
+      const [r, g, b] = hexRgb(e.structure.hex);
+      const val = t.fn === 'rgb' ? `${r} ${g} ${b}` : t.fn === 'hsl' ? (() => { const [h, s3, l] = rgbHsl(r, g, b); return `${Math.round(h)} ${Math.round(s3)}% ${Math.round(l)}%`; })() : e.structure.hex;
+      root.style.setProperty(t.var, val);
+      m._pv.push(t.var);
+    }
+  }
   const NSTAT = { done: ['Done', 'ok'], partial: ['Partly', 'part'], not_possible: ['Not here', 'no'] };
   // Notes answered one by one: the mark's number, what was asked, what Kerf did, and its edits.
   function notesHTML(m, i) {
@@ -1431,9 +1507,13 @@
     const byNote = p.notes?.length && p.edits.length + p.notes.length > 1;
     const n = chosen(m).length;
     const status = STATUS[m.status] ? `<span class="kStatus ${m.status}">${m.status === 'applied' ? ico('check', 12) : m.status === 'info' ? '<i class="kNo"></i>' : ''}${STATUS[m.status]}</span>` : '';
+    const toks = p.edits.filter((e) => e.structure?.type === 'token'), rest = p.edits.filter((e) => e.structure?.type !== 'token');
+    const suggest = p.suggest && m.status !== 'applied' ? `<div class="kSuggest"><span>${esc(p.suggest.why)}</span><button data-act2="suggestRun" data-i="${i}" data-v="${p.suggest.mode}">${p.suggest.mode === 'improve' ? 'Improve the system instead' : 'Explore freely instead'} →</button></div>` : '';
+    const keep = p.mode === 'explore' && m.status === 'applied' ? `<div class="kSuggest"><span>Like this look?</span><button data-act2="keepLook" data-i="${i}">Make it part of the design system →</button></div>` : '';
     const head = m.applying ? `Applying ${n} change${n === 1 ? '' : 's'}…` : m.status === 'applied' ? `Applied ${m.appliedN ?? n} of ${p.edits.length}` : `${p.edits.length} proposed change${p.edits.length === 1 ? '' : 's'}`;
     return `<div class="prop${byNote ? ' byNote' : ''}">${stepsHTML(m)}${badge ? `<span class="badge">${badge}</span>` : ''}<p class="kText">${esc(cleanMsg(p.message))}</p>
-      ${byNote ? `<div class="ngs">${notesHTML(m, i)}</div>` : p.edits.length ? `<div class="edits"><div class="edH">${m.applying ? '<i class="spin"></i>' : ''}${head}</div>${p.edits.map(rowFor(m)).join('')}</div>` : ''}
+      ${byNote ? `<div class="ngs">${notesHTML(m, i)}</div>` : toks.length ? `<div class="edits sys"><div class="edH">${ico('comp', 12)}Design system · ${toks.length} colour${toks.length === 1 ? '' : 's'}${m.status === 'pending' ? `<button class="pvBtn${m.previewing ? ' on' : ''}" data-act2="tokPreview" data-i="${i}">${ico('eye', 12)}${m.previewing ? 'Previewing' : 'Preview'}</button>` : ''}</div>${toks.map(rowFor(m)).join('')}</div>${rest.length ? `<div class="edits"><div class="edH">On this screen · ${rest.length}</div>${rest.map(rowFor(m)).join('')}</div>` : ''}` : p.edits.length ? `<div class="edits"><div class="edH">${m.applying ? '<i class="spin"></i>' : ''}${head}</div>${p.edits.map(rowFor(m)).join('')}</div>` : ''}
+      ${suggest}${keep}
       ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="primary applyBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
   }
   // "Looked at 14 elements · Thought for 9s", which opens to show what Kerf read.
@@ -1490,6 +1570,7 @@
       <div class="kcBar">
         <button type="button" class="kcB" data-act2="attach" data-id="${id}" title="Attach images · or paste / drop them here" aria-label="Attach images">${ico('clip', 15)}</button>
         ${o.ctx ? `<span class="kcCtx" title="What Kerf will look at">${ico(S.sel ? 'frame' : 'desktop', 12)}${o.ctx}</span>` : ''}
+        ${o.form !== 'note' ? modePill() : ''}
         <span class="sp"></span>
         ${SR ? `<button type="button" class="kcB mic${rec ? ' rec' : ''}" data-act2="mic" data-id="${id}" title="${rec ? 'Stop dictation' : 'Dictate, in any language'}" aria-label="${rec ? 'Stop dictation' : 'Dictate'}">${ico('mic', 15)}</button>` : ''}
         ${o.send ? `<button class="lightBtn sm"${has ? '' : ' disabled'}>${o.send}</button>` : `<button class="sendB"${has ? '' : ' disabled'} aria-label="Send">${ico('up', 14)}</button>`}
@@ -1630,6 +1711,7 @@
       const n = S.notes.length;
       chip.innerHTML = `<div class="ntHead"><span class="ntTitle">${ico('pen', 13)}${n} note${n === 1 ? '' : 's'} for Kerf</span><button class="ghostBtn sm" data-act2="notesClear" title="Remove all notes">Clear all</button></div>
         <div class="ntList">${S.notes.map((x, i) => `<div class="ntRow" data-note="${i + 1}"><i class="nNum">${i + 1}</i><span class="ntText">${esc(x.text)}${x.atts?.length ? ` <em>· ${x.atts.length} image${x.atts.length === 1 ? '' : 's'}</em>` : ''}</span><button class="ntDel" data-act2="noteDel" data-i="${i}" title="Remove this note" aria-label="Remove note ${i + 1}">${ico('x', 12)}</button></div>`).join('')}</div>
+        <div class="ntFoot">${modePill()}</div>
         <button class="primary ntGo" data-act2="notesApply" ${busy ? 'disabled' : ''}>${busy ? '<i class="spin"></i>Kerf is reading your notes…' : `${ico('spark', 14)}Ask Kerf to fix ${n === 1 ? 'this' : `all ${n}`}`}</button>`;
     }
     const pop = $('notePop');
@@ -1711,6 +1793,49 @@
       else if (act === 'chatHint') runAI(v, S.sel ? selectionTargets() : visibleTargets(), 'chat');
       else if (act === 'decide') decide(S.chat[+a.dataset.i], v);
       else if (act === 'closeCard') { if (S.card?.status === 'pending') S.card.status = 'discarded'; S.card = null; S.amber = []; renderAI(); }
+      else if (act === 'modeMenu') { const r = a.getBoundingClientRect(); modeMenu({ x: r.left, y: r.top - 230 }); }
+      else if (act === 'suggestRun' || act === 'keepLook') {
+        const m = S.chat[+a.dataset.i];
+        const k = S.chat.indexOf(m), u = [...S.chat.slice(0, k)].reverse().find((x) => x.role === 'user');
+        if (!m || !u) return;
+        const go = () => {
+          S.modeOnce = act === 'keepLook' ? 'improve' : v;
+          if (act === 'keepLook') runAI('Make the design system match the look I just applied, so it is reusable everywhere: adjust the colour tokens to it and keep type and spacing consistent.', visibleTargets(), m.where, null, true);
+          else runAI(u.text, m.targets?.length ? m.targets : S.sel ? selectionTargets() : visibleTargets(), m.where, u.shown, true);
+        };
+        if ((act === 'keepLook' || v !== 'system') && !S.direction) { S._afterDir = go; openDirection(); } else go();
+      }
+      else if (act === 'tokPreview') {
+        const m = S.chat[+a.dataset.i];
+        if (!m || m.status !== 'pending') return;
+        m.previewing = !m.previewing;
+        previewTokens(m, m.previewing);
+        renderAI();
+      }
+      else if (act === 'dirPreset') { S._dir.preset = S._dir.preset === v ? '' : v; document.querySelectorAll('.dirCard').forEach((c) => c.classList.toggle('on', c.dataset.v === S._dir.preset)); }
+      else if (act === 'dirRefX') { S._dir.refs.splice(+a.dataset.i, 1); $('dirRefs').innerHTML = dirRefsHTML(); }
+      else if (act === 'dirRefAdd') {
+        pickImages().then(async (files) => {
+          for (const f of files.slice(0, 3 - S._dir.refs.length)) {
+            const url = URL.createObjectURL(f);
+            try { const img = await loadImg(url); S._dir.refs.push({ name: f.name, media_type: 'image/jpeg', data: shrink(img, 1200, 0.8).split(',')[1], thumb: shrink(img, 160, 0.8) }); } catch {} finally { URL.revokeObjectURL(url); }
+          }
+          if ($('dirRefs')) $('dirRefs').innerHTML = dirRefsHTML();
+        });
+      }
+      else if (act === 'dirClear') { api('/direction', {}).then(() => { S.direction = null; $('modal').hidden = true; setStyleMode('system'); toast('Design direction removed'); }); }
+      else if (act === 'dirSave') {
+        const text = ($('dirText')?.value || '').trim();
+        if (!S._dir.preset && !text && !S._dir.refs.length) { toast('Pick a feel, describe it, or add a reference.', '', true); return; }
+        const keepOld = S._dir.refs.filter((r) => r.keep && !r.data).length;
+        api('/direction', { preset: S._dir.preset, text, refs: S._dir.refs.filter((r) => r.data) }).then((d) => {
+          S.direction = d;
+          $('modal').hidden = true;
+          if (S._dir.thenMode) setStyleMode(S._dir.thenMode); else renderAI();
+          toast(`Design direction saved: ${dirName()}`, keepOld ? 'Add your references again to keep them' : '');
+          const after = S._afterDir; S._afterDir = null; if (after) after();
+        }).catch((err) => toast(err.message, '', true));
+      }
       else if (act === 'edPick') {
         if (e.target.closest('details')) return;
         const m = S.chat[+a.dataset.i], k = +a.dataset.e;

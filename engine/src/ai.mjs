@@ -32,6 +32,10 @@ function apiKey() {
 const Proposal = z.object({
   scope: z.enum(['done', 'partial', 'not_yet', 'needs_developer']).describe('done: edits cover the request. partial: edits cover part of it and the rest needs something Kerf cannot change yet. not_yet: it is a visual change but nothing in the toolset can do it yet. needs_developer: it changes behavior, data, logic or backend.'),
   message: z.string().describe('One or two plain sentences to the designer: what you changed and how far it reaches, or why it needs a developer'),
+  suggest: z.object({
+    mode: z.enum(['improve', 'explore']),
+    why: z.string().describe('One short plain sentence, e.g. "Your palette and spacing are what make this feel generic."'),
+  }).nullable().describe('Only in On system mode: set when the design system itself is the reason the screen looks weak, so a better result needs a better system. Otherwise null'),
   notes: z.array(z.object({
     note: z.number().int(),
     status: z.enum(['done', 'partial', 'not_possible']),
@@ -204,7 +208,20 @@ const IMG_TYPES = /^image\/(jpeg|png|gif|webp)$/;
 const nameFor = (t) => designName(t.tag, t.text, { icon: !!t.lib });
 const noteOf = (e, t) => (Number.isInteger(e.note) && e.note > 0 ? e.note : Number.isInteger(t.note) ? t.note : null);
 
-export async function propose({ request, targets, history = [], images = [], tokens = [], webRoot = null, screen = null, context = null }, theme, library) {
+// How far Kerf may go beyond the project's design system, chosen by the designer.
+const MODES = {
+  system: 'Mode: On system. Use the project\'s own tokens and scales. If the design system itself is why the screen looks weak (a muddy or clashing palette, poor contrast, inconsistent type or spacing), still answer on-system but set suggest to { mode: "improve", why }.',
+  improve: 'Mode: Improve the system. The designer thinks the current design system is part of the problem. Fix the foundation first: change colour tokens (action token) where the palette is weak, keeping each token\'s role (surface, content, primary…) and WCAG AA contrast, for the theme being shown (or both when it suits both). Then make element or source edits so the screen follows one clear type scale and a consistent spacing rhythm. In the message, describe the new direction in one sentence.',
+  explore: 'Mode: Explore freely, only for the elements given. You may leave the design system: raw #hex colours and sizes off the scale are fine if they make a clearly better design. Do not change tokens. Say in the message that this is an off-system exploration.',
+};
+const PRESETS = {
+  calm: 'Calm & precise: restrained palette with one accent, generous whitespace, crisp hierarchy, subtle borders over shadows (think Linear, Stripe).',
+  warm: 'Warm & editorial: warm neutrals, expressive type contrast, softer corners, magazine-like rhythm.',
+  bold: 'Bold & playful: saturated accent colours, big confident type, rounded shapes, lively contrast.',
+  minimal: 'Minimal: near-monochrome, few elements, lots of space, thin lines, quiet type.',
+};
+
+export async function propose({ request, targets, history = [], images = [], tokens = [], webRoot = null, screen = null, context = null, mode = 'system', direction = null }, theme, library) {
   const key = apiKey();
   if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
   if (!request || !String(request).trim()) throw new KerfError('Say or type what should change.');
@@ -231,9 +248,13 @@ export async function propose({ request, targets, history = [], images = [], tok
     ctx.selected ? `Selected: ${String(ctx.selected).slice(0, 80)}. "This", "it" and "here" mean the selection unless the request says otherwise.` : 'Nothing is selected: the request is about the visible screen.',
   ].filter(Boolean).join('\n');
   const shot = screen && typeof screen.data === 'string' && screen.data.length < 7e6 && /^image\/(jpeg|png)$/.test(screen.media_type) ? screen : null;
-  const lastText = `${where}\n${shot ? 'The first image is a screenshot of exactly what the designer sees. Use it to judge contrast, alignment, spacing and hierarchy. Element boxes below are x,y,w,h in CSS pixels of that same visible area.\n' : ''}\nElements on screen:\n${targets.map(describeTarget).join('\n')}\n\n${imgs.length ? `The designer attached ${imgs.length} image${imgs.length > 1 ? 's' : ''} (above). Treat them as a reference to match, a screenshot pointing at a problem, or an image to put in the design, whichever the request means. To place one, use imageSrc "attachment:N" (or src="attachment:N" in insertJsx).\n\n` : ''}Request:\n${request}`;
+  const m = MODES[mode] ? mode : 'system';
+  const dir = direction && (direction.preset || direction.text) ? `Design direction for this project: ${[PRESETS[direction.preset], direction.text].filter(Boolean).join(' ')}${m === 'system' ? ' (keep within the design system).' : ''}` : '';
+  const refs = m !== 'system' && direction?.refs?.length ? direction.refs.slice(0, 3) : [];
+  const lastText = `${MODES[m]}\n${dir ? dir + '\n' : ''}${refs.length ? `The ${refs.length} reference image${refs.length > 1 ? 's' : ''} labelled "Reference" show the look the designer wants.\n` : ''}${where}\n${shot ? 'The first image is a screenshot of exactly what the designer sees. Use it to judge contrast, alignment, spacing and hierarchy. Element boxes below are x,y,w,h in CSS pixels of that same visible area.\n' : ''}\nElements on screen:\n${targets.map(describeTarget).join('\n')}\n\n${imgs.length ? `The designer attached ${imgs.length} image${imgs.length > 1 ? 's' : ''} (above). Treat them as a reference to match, a screenshot pointing at a problem, or an image to put in the design, whichever the request means. To place one, use imageSrc "attachment:N" (or src="attachment:N" in insertJsx).\n\n` : ''}Request:\n${request}`;
   const lastContent = [
     ...(shot ? [{ type: 'text', text: 'Screenshot of the screen:' }, { type: 'image', source: { type: 'base64', media_type: shot.media_type, data: shot.data } }] : []),
+    ...refs.flatMap((r, n) => [{ type: 'text', text: `Reference ${n + 1} for the design direction:` }, { type: 'image', source: { type: 'base64', media_type: r.media_type, data: r.data } }]),
     ...imgs.flatMap((im, n) => [{ type: 'text', text: `Attachment ${n + 1}: ${String(im.name || 'image').slice(0, 80)}` }, { type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } }]),
     { type: 'text', text: lastText },
   ];
@@ -334,5 +355,7 @@ export async function propose({ request, targets, history = [], images = [], tok
     if (ops.length || text || props.length) edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops, text, props, why: e.why, dom: t.dom || [], ...(target ? { target, where: whereOf(target) } : {}) });
   }
   const notes = Array.isArray(p.notes) ? p.notes.filter((n) => Number.isInteger(n.note) && n.note > 0).map((n) => ({ note: n.note, status: n.status, summary: n.summary })) : null;
-  return { scope: p.scope, message: p.message, notes: notes?.length ? notes : null, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens, cacheRead: res.usage.cache_read_input_tokens || 0, cacheWrite: res.usage.cache_creation_input_tokens || 0 } };
+  if (m === 'explore') edits.forEach((e) => { if (!e.structure) e.offSystem = true; });
+  if (m !== 'improve') { for (let k = edits.length - 1; k >= 0; k--) if (m === 'explore' && edits[k].structure?.type === 'token') edits.splice(k, 1); }
+  return { scope: p.scope, message: p.message, mode: m, suggest: m === 'system' && p.suggest ? { mode: p.suggest.mode, why: p.suggest.why } : null, notes: notes?.length ? notes : null, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens, cacheRead: res.usage.cache_read_input_tokens || 0, cacheWrite: res.usage.cache_creation_input_tokens || 0 } };
 }

@@ -66,6 +66,7 @@ export async function createKerf(webRoot) {
         }
         if (req.method === 'GET' && route === '/versions') return send(200, session.list());
         if (req.method === 'GET' && route === '/chat') return send(200, session.chat());
+        if (req.method === 'GET' && route === '/direction') { const d = session.direction(); return send(200, d ? { ...d, refs: d.refs.map(({ data, ...r }) => r) } : null); }
         if (req.method === 'GET' && route === '/icons/suggest') {
           const u = new URL(req.url, 'http://x').searchParams, lib = u.get('lib') || undefined;
           return send(200, { used: library.usedIcons(lib).slice(0, 36), similar: library.similarIcons(u.get('name'), lib) });
@@ -79,6 +80,7 @@ export async function createKerf(webRoot) {
         if (req.method !== 'POST') return send(404, { error: 'Not found' });
         const body = await readBody(req);
         if (route === '/chat') { session.setChat(body); return send(200, { ok: true }); }
+        if (route === '/direction') { const d = session.setDirection(body); return send(200, d ? { ...d, refs: d.refs.map(({ data, ...r }) => r) } : null); }
         // Every change is saved to .kerf/ so a restart keeps undo, versions and chat.
         const s0 = send;
         const send2 = (status, b) => { if (status === 200 && route !== '/inspect' && route !== '/ai') session.save(); return s0(status, b); };
@@ -109,7 +111,7 @@ export async function createKerf(webRoot) {
           }).filter(Boolean);
           let tokens = [];
           try { tokens = listTokens(webRoot, theme); } catch {}
-          return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images, tokens, webRoot, screen: body.screen, context: body.context }, theme, library));
+          return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images, tokens, webRoot, screen: body.screen, context: body.context, mode: body.mode, direction: session.direction() }, theme, library));
         }
         if (route === '/ai/apply') {
           // Apply from the bottom of each file up, structure last per element, so positions stay valid.

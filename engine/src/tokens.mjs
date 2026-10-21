@@ -115,7 +115,7 @@ export function listTokens(webRoot, theme) {
     if (vr) {
       const byTheme = new Map();
       for (const d of defs.get(vr.v) || []) { const hex = valueToHex(d.value, vr.fn); if (hex) byTheme.set(themeOf(d.selector), { theme: themeOf(d.selector), hex }); }
-      if (byTheme.size) out.push({ name, values: [...byTheme.values()], where: path.relative(webRoot, (defs.get(vr.v) || [])[0].file) });
+      if (byTheme.size) out.push({ name, var: vr.v, fn: vr.fn, values: [...byTheme.values()], where: path.relative(webRoot, (defs.get(vr.v) || [])[0].file) });
     } else if (/^#[0-9a-f]{3,8}$/i.test(raw) && cfgCode.toLowerCase().includes(String(raw).toLowerCase())) {
       out.push({ name, values: [{ theme: 'all', hex: valueToHex(raw) }], where: path.basename(cfg) });
     }
