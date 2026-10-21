@@ -66,7 +66,7 @@ const Proposal = z.object({
       insertJsx: z.string().nullable().describe('For insert or replace: the new JSX. Plain tags (div, p, h2, span, img, button, ul/li…) or the project’s components and icons, Tailwind classes using the project’s tokens, fixed text only. No handlers, no expressions.'),
       groupWith: z.array(z.string()).nullable().describe('For group: ids of the neighboring siblings to wrap together with this element, in the same parent'),
       groupClass: z.string().nullable().describe('For group: Tailwind classes for the new frame, e.g. "flex flex-row items-center gap-3"'),
-      imageSrc: z.string().nullable().describe('For image: one of the uploaded images, "attachment:N" for an image attached to this message, or a URL the designer gave'),
+      imageSrc: z.string().nullable().describe('For image: one of the uploaded images, "attachment:N" for an image attached to this message, a URL the designer gave, or a new picture as "photo: <what it shows>" or "illustration: <what it shows>"'),
       imageAlt: z.string().nullable().describe('For image: alt text describing the image'),
       why: z.string().describe('A few words, e.g. "warmer, more premium card"'),
     }),
@@ -101,6 +101,7 @@ How to work:
 - To arrange some siblings differently from the rest (e.g. put an input and a button side by side while the label stays above), group them: action group on the first one, groupWith the others, and groupClass for the new frame's layout. Then set Fill width on the child that should take the remaining space. Ungroup removes a plain wrapper and keeps its children.
 - New elements must fit the design: reuse the project's components where one fits, and use the project's tokens and scales in their classes.
 - Layout works like Figma auto layout: layout row/col/none (direction), alignItems start/center/end/stretch, justify start/center/end/between, wrap wrap/nowrap, gap, padX/padY, margins mX/mY (px or auto), and width/height w/h as hug, fill or a px size.
+- To put a new picture in an image (a photo, a drawing, "an illustration of…", "a picture of…"), use action image with imageSrc "photo: <4 to 12 words of what it shows>" for real photographs, or "illustration: <…>" for drawn or flat art. Kerf shows the designer options to pick from. Never say you can't create images.
 - action token changes a design-system colour everywhere it's used: token.name from the token list, token.value #RRGGBB, token.theme light, dark or both.
 - action code is the last resort for visual changes no other action can make (classes computed in an unusual way, inline styles): code.file is the file shown for that element or its style sources, code.find an exact snippet of code you were shown that occurs once, code.replace the new text. Keep it minimal and visual only: never change logic, data, handlers or imports.
 - Always do what you can. If part of a request needs something not in your toolset yet (free positioning, animation, hover states, new pages), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
@@ -330,6 +331,11 @@ export async function propose({ request, targets, history = [], images = [], tok
       if (e.action === 'group') {
         st.others = (e.groupWith || []).filter((l) => allowed.has(l) && l.split(':')[0] === e.loc.split(':')[0]);
         st.className = (e.groupClass || 'flex flex-row items-center gap-2').replace(/[^\w\s:/.[\]#-]/g, '');
+      }
+      const ask = e.action === 'image' && String(e.imageSrc || '').match(/^\s*(photo|illustration)\s*:\s*(.+)$/i);
+      if (ask) {
+        edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops: [], props: [], text: null, structure: { type: 'imageAsk', kind: ask[1].toLowerCase(), prompt: ask[2].trim().slice(0, 160), alt: e.imageAlt || null }, why: e.why });
+        continue;
       }
       if (e.action === 'image') {
         const att = String(e.imageSrc || '').match(/^attachment:(\d)$/);

@@ -748,3 +748,23 @@ aside.side{min-width:0}
 #layers .lhead{min-width:0}
 #layers .lpage{min-width:0;flex:0 1 auto}
 #layers .layer .ind{background-image:repeating-linear-gradient(to right,transparent 0 5px,rgba(255,255,255,.07) 5px 6px,transparent 6px 12px)}
+
+/* image picker */
+.dialog.pick{width:min(640px,calc(100% - 32px))}
+.pkTabs{align-self:flex-start}
+.pkTabs button{display:inline-flex;align-items:center;gap:6px}
+.dialog.pick .insSearch{margin:0;height:40px}
+.insSearch .primary.sm{height:28px;padding:0 12px;border-radius:7px}
+.pkGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;max-height:min(460px,60vh);overflow:auto}
+.pkItem{display:flex;flex-direction:column;gap:6px;padding:0;border:2px solid transparent;border-radius:12px;background:transparent;color:var(--ink3);text-align:left;font-size:11px}
+.pkItem img{width:100%;object-fit:cover;border-radius:10px;background:var(--raised)}
+.pkItem span{padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pkItem:hover{border-color:var(--select)}
+.pkWait{display:flex;flex-direction:column;align-items:center;gap:8px;padding:40px 12px;color:var(--ink2);text-align:center}
+.pkNone{padding:32px 12px;text-align:center;color:var(--ink3)}
+.pkCredit{margin:0}
+.pkCredit a,.pkNone a{color:#8FB0F0}
+.imgPick{display:inline-flex;align-items:center;gap:8px}
+.imgPick img{width:44px;height:32px;object-fit:cover;border-radius:5px}
+.outline.sm{height:26px;padding:0 10px;font-size:12px;border-radius:7px}
+.imgOpt{align-self:flex-start;margin-top:6px}

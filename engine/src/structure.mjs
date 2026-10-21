@@ -281,7 +281,8 @@ export function structureEdit(code, line, col, op, ctx) {
       parts.push('image');
     }
     if (op.alt != null) { setLit('alt', String(op.alt)); parts.push('alt text'); }
-    label = `Changed ${parts.join(' and ') || 'image'}`;
+    // A photo's credit (e.g. "Photo by … on Unsplash") rides along in the change label, so it reaches the pull request.
+    label = `Changed ${parts.join(' and ') || 'image'}${op.credit ? ` (${String(op.credit).slice(0, 120)})` : ''}`;
   } else throw new KerfError(`Unknown change: ${op.type}`);
 
   let out = s.toString();

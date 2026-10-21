@@ -126,6 +126,8 @@ Use the action row in the Design panel, or keys:
 - **Swap** an icon (searchable picker with previews, from the same icon library) or a component for another of yours
 - **Add** (I): text, heading, button (your Button if you have one), image (upload), icon, frame, or any of your components, before, after or inside the selection
 - **Images**: replace by upload or link, alt text, cover/contain/fill. Uploads go to `public/kerf/`.
+  - **Find a photo** searches Unsplash (free; save an Access Key on the start page). Kerf credits the photographer.
+  - **Draw one** asks Claude for three flat SVG illustrations in the app's own colours; pick one and it's saved to `public/kerf/`.
 
 Kerf adds and removes imports for you. Elements shown by a condition or
 repeated by a list are protected: Kerf explains and points you to the parent.
@@ -141,7 +143,7 @@ which is git-ignored. Then:
   answers each note on its own: what Kerf changed, or why it couldn't, with a
   switch to leave any note out.
 - **Attachments and voice:** paste, drop or attach images; Claude sees them and
-  can place one in the design. The mic dictates in your browser's language (Chrome, Safari).
+  can place one in the design. Ask for "an illustration of…" or "a photo of…" and Kerf shows options to pick from. The mic dictates in your browser's language (Chrome, Safari).
 
 All three share one conversation, which is saved, so you can follow up anywhere.
 
@@ -182,6 +184,7 @@ are answered as developer work, with no edits.
 | `GET /__kerf/changes` | Every edit made this session |
 | `POST /__kerf/ai`, `/__kerf/ai/apply` | Ask Claude for a proposal; apply it |
 | `GET /__kerf/versions`, `POST /__kerf/version`, `/restore`, `/peek` | Versions |
+| `GET /__kerf/images/photos?q=`, `POST /__kerf/images/illustrate {prompt}` | Search Unsplash photos; draw illustration options |
 | `POST /__kerf/pr` | Create or update the pull request |
 
 Style properties: `bg`, `color`, `borderC`, `fontSize`, `fontWeight`,

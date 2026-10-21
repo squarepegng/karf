@@ -373,3 +373,12 @@ test('a new class string is added after the last argument even with a trailing c
   const out = fs0.readFileSync(path0.join(root, 'src/Chip.tsx'), 'utf8');
   assert.match(out, /'bg-surface text-muted',\n        'bg-\[#2A2350\]',\n      \)\}/);
 });
+
+import { cleanSvg } from '../src/images.mjs';
+test('illustrations are cleaned of scripts, event handlers and outside links', () => {
+  const s = cleanSvg('junk<svg viewBox="0 0 10 10"><script>alert(1)</script><defs><linearGradient id="g"/></defs><rect onclick="x()" fill="url(#g)" width="10" height="10"/><image href="https://evil.example/x.png"/><a href="https://x.example"><circle r="2"/></a><use href="#g"/></svg>tail');
+  assert.ok(s.startsWith('<svg xmlns="http://www.w3.org/2000/svg"'));
+  assert.ok(!/script|onclick|evil|x\.example/.test(s));
+  assert.ok(s.includes('url(#g)') && s.includes('<use href="#g"/>'));
+  assert.equal(cleanSvg('no svg here'), null);
+});

@@ -10,6 +10,7 @@ import { propose } from './ai.mjs';
 import { createSession } from './session.mjs';
 import { createLibrary } from './library.mjs';
 import { listTokens, tokenEdit } from './tokens.mjs';
+import { searchPhotos, photoUsed, illustrate } from './images.mjs';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -67,6 +68,10 @@ export async function createKerf(webRoot) {
         if (req.method === 'GET' && route === '/versions') return send(200, session.list());
         if (req.method === 'GET' && route === '/chat') return send(200, session.chat());
         if (req.method === 'GET' && route === '/direction') { const d = session.direction(); return send(200, d ? { ...d, refs: d.refs.map(({ data, ...r }) => r) } : null); }
+        if (req.method === 'GET' && route === '/images/photos') {
+          const u = new URL(req.url, 'http://x').searchParams;
+          return send(200, await searchPhotos(u.get('q'), u.get('orientation')));
+        }
         if (req.method === 'GET' && route === '/icons/suggest') {
           const u = new URL(req.url, 'http://x').searchParams, lib = u.get('lib') || undefined;
           return send(200, { used: library.usedIcons(lib).slice(0, 36), similar: library.similarIcons(u.get('name'), lib) });
@@ -95,6 +100,15 @@ export async function createKerf(webRoot) {
         if (route === '/edit') return send2(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props, cva: body.cva, bp: body.bp, dom: body.dom, scope: body.scope, target: body.target, name: body.name }));
         if (route === '/undo') return send2(200, editor.undo());
         if (route === '/token') return send2(200, await setToken(body));
+        if (route === '/images/photo-used') return send(200, await photoUsed(body.download));
+        if (route === '/images/illustrate') {
+          // The project's own colours (for the theme on screen) and its design direction steer the drawing.
+          let palette = [];
+          try { palette = listTokens(webRoot, theme).map((t) => ({ name: t.name, hex: (t.values.find((v) => v.theme === (body.theme || 'light')) || t.values[0]).hex })); } catch {}
+          const d = session.direction();
+          const PRESET = { calm: 'calm and precise', warm: 'warm and editorial', bold: 'bold and playful', minimal: 'minimal' };
+          return send(200, await illustrate({ prompt: body.prompt, width: body.width, height: body.height, count: body.count, palette, direction: d ? [PRESET[d.preset], d.text].filter(Boolean).join('; ') : '' }));
+        }
         if (route === '/structure') return send2(200, editor.structure(body.loc, body.op, 'hand', body.name));
         if (route === '/upload') {
           try { return send(200, library.saveUpload(body.name, body.data)); } catch (e) { throw new KerfError(e.message); }

@@ -10,6 +10,13 @@ import { openProject, PROJECTS_DIR, projects, stopAll } from '../src/project.mjs
 const ENV = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env');
 
 const PORT = Number(process.env.KERF_PORT || 4100);
+// Each key has its own line in .env; saving one never touches the others.
+function setEnv(name, value) {
+  const lines = (fs.existsSync(ENV) ? fs.readFileSync(ENV, 'utf8') : '').split('\n').filter((l) => l && !l.startsWith(name + '='));
+  lines.push(`${name}=${value}`);
+  fs.writeFileSync(ENV, lines.join('\n') + '\n');
+  fs.chmodSync(ENV, 0o600);
+}
 let job = null;
 
 function recent() {
@@ -35,16 +42,23 @@ http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/') return send(res, 200, PAGE, 'text/html; charset=utf-8');
   if (req.method === 'GET' && req.url === '/api/job') return send(res, 200, job && { ...job, repoRoot: undefined });
   if (req.method === 'GET' && req.url === '/api/key-status') {
-    const set = fs.existsSync(ENV) && /^ANTHROPIC_API_KEY=sk-ant-\S+/m.test(fs.readFileSync(ENV, 'utf8'));
-    return send(res, 200, { set });
+    const env = fs.existsSync(ENV) ? fs.readFileSync(ENV, 'utf8') : '';
+    return send(res, 200, { set: /^ANTHROPIC_API_KEY=sk-ant-\S+/m.test(env), unsplash: /^UNSPLASH_ACCESS_KEY=\S+/m.test(env) });
+  }
+  if (req.method === 'POST' && req.url === '/api/unsplash-key') {
+    let body = '';
+    for await (const c of req) body += c;
+    const key = String(JSON.parse(body || '{}').key || '').trim();
+    if (!/^[A-Za-z0-9_-]{30,}$/.test(key)) return send(res, 400, { error: 'That does not look like an Unsplash Access Key. Copy the “Access Key” from your Unsplash app page.' });
+    setEnv('UNSPLASH_ACCESS_KEY', key);
+    return send(res, 200, { ok: true });
   }
   if (req.method === 'POST' && req.url === '/api/key') {
     let body = '';
     for await (const c of req) body += c;
     const key = String(JSON.parse(body || '{}').key || '').trim();
     if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) return send(res, 400, { error: 'That does not look like an Anthropic key. It starts with sk-ant-.' });
-    fs.writeFileSync(ENV, 'ANTHROPIC_API_KEY=' + key + '\n');
-    fs.chmodSync(ENV, 0o600);
+    setEnv('ANTHROPIC_API_KEY', key);
     return send(res, 200, { ok: true });
   }
   if (req.method === 'GET' && req.url === '/api/recent') return send(res, 200, recent());
@@ -107,6 +121,7 @@ details.logs summary{cursor:pointer;color:#8B8B95;font-size:12px;margin-top:10px
 <form id="f"><input id="src" placeholder="github.com/team/app  or  ~/code/app" autocomplete="off" spellcheck="false" aria-label="GitHub link or folder"><button id="go">Open</button></form>
 <span class="hint">Works with React apps built with Vite or Next.js and styled with Tailwind CSS v3. Private repos use your existing GitHub sign-in on this Mac.</span>
 <div class="card" id="keycard"><div class="status" id="keystat"></div><span class="hint">For the AI step. It is saved only on this Mac, in a git-ignored file.</span><form id="kf" style="display:flex;gap:8px"><input id="kin" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" aria-label="Anthropic API key"><button id="ksave">Save key</button></form><span class="err" id="kerr"></span></div>
+<div class="card" id="ucard"><div class="status" id="ustat"></div><span class="hint">Optional, for finding real photos from Unsplash (free). Create an app at <a href="https://unsplash.com/oauth/applications" target="_blank" rel="noopener">unsplash.com/developers</a> and paste its Access Key.</span><form id="uf" style="display:flex;gap:8px"><input id="uin" type="password" placeholder="Unsplash Access Key" autocomplete="off" spellcheck="false" aria-label="Unsplash Access Key"><button id="usave">Save key</button></form><span class="err" id="uerr"></span></div>
 <div id="job"></div>
 <div class="recent" id="recent"></div>
 </main>
@@ -139,7 +154,8 @@ async function loadRecent(){
 }
 $('f').addEventListener('submit',e=>{e.preventDefault();const v=$('src').value.trim();if(v)open(v)});
 $('recent').addEventListener('click',e=>{const b=e.target.closest('[data-src]');if(b){$('src').value=b.dataset.src;open(b.dataset.src)}});
-async function loadKey(){const s=await (await fetch('/api/key-status')).json();$('keystat').textContent=s.set?'Anthropic key saved on this Mac':'No Anthropic key yet';}
+async function loadKey(){const s=await (await fetch('/api/key-status')).json();$('keystat').textContent=s.set?'Anthropic key saved on this Mac':'No Anthropic key yet';$('ustat').textContent=s.unsplash?'Unsplash key saved: photo search is on':'Photo search (Unsplash): no key yet';}
+$('uf').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/unsplash-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('uin').value})});const j=await r.json();if(!r.ok){$('uerr').textContent=j.error;return}$('uin').value='';$('uerr').textContent='';loadKey()});
 $('kf').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('kin').value})});const j=await r.json();if(!r.ok){$('kerr').textContent=j.error;return}$('kin').value='';$('kerr').textContent='';loadKey()});
 loadKey();loadRecent();poll();
 </script></body></html>`;

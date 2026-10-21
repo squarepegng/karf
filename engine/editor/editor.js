@@ -1182,6 +1182,7 @@
     if (f === 'path') { let v = $('pathIn').value.trim() || '/'; if (!v.startsWith('/')) v = '/' + v; frame.src = v; $('pathIn').blur(); }
     if (f === 'ask') take('askIn', (v, atts) => runAI(v, visibleTargets(), 'ask', null, false, atts));
     if (f === 'chat') sendChat();
+    if (f === 'pick' && S.pick) { S.pick.prompt = $('pickQ').value; if (S.pick.kind === 'photo') S.pick.photos = null; else S.pick.drawings = null; runPicker(); }
     if (f === 'note') addNote();
     if (f === 'reply') {
       const where = e.target.dataset.where, prev = S.card;
@@ -1469,7 +1470,7 @@
   const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: 'No changes to your app' };
   // Status is shown by Kerf, not written into the reply: drop a leading "Nothing changed yet." if the model adds one.
   const cleanMsg = (t) => { const x = String(t || '').replace(/^\s*(nothing (has )?changed( yet)?|no changes( were)?( made)?( yet)?|i (haven[’']t|have not) changed anything( yet)?)\s*[.:;,—–-]*\s*/i, ''); return x ? x[0].toUpperCase() + x.slice(1) : String(t || ''); };
-  const chosen = (m) => m.proposal.edits.filter((e, k) => !(m.off || []).includes(k) && !(m.skip || []).includes(e.note ?? 0));
+  const chosen = (m) => m.proposal.edits.filter((e, k) => !(m.off || []).includes(k) && !(m.skip || []).includes(e.note ?? 0) && e.structure?.type !== 'imageAsk');
   // Each proposed change shows where it stands: to do, applying, done, failed or left out.
   function rowState(m, e) {
     const inPlan = chosen(m).includes(e);
@@ -1484,7 +1485,7 @@
   const rowFor = (m) => (e) => editRow(e, m ? rowState(m, e) : 'todo', m ? `data-act2="edPick" data-i="${S.chat.indexOf(m)}" data-e="${m.proposal.edits.indexOf(e)}"` : '');
   // While pending, each row is a checkbox: ticked changes are applied, unticked ones left out.
   document.addEventListener('keydown', (e) => { const r = e.target.closest?.('[data-act2="edPick"]'); if (r && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); r.click(); } });
-  const editRow = (e, st = 'todo', pick = '') => `<div class="ed ${st}"${st === 'pick' || st === 'unpick' ? ` ${pick} role="checkbox" aria-checked="${st === 'pick'}" tabindex="0" title="${st === 'pick' ? 'Leave this change out' : 'Include this change'}"` : ''}>${MARK[st] || ''}<div class="edB"><div class="edT"><b>${esc(e.name || e.tag)}</b>${e.structure?.type === 'token' ? tokenChange(e.structure) : `<span class="mono">${esc(editLabel(e))}</span>`}${e.offSystem ? '<i class="offSys">Off-system</i>' : ''}</div>${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div></div>`;
+  const editRow = (e, st = 'todo', pick = '') => `<div class="ed ${st}"${st === 'pick' || st === 'unpick' ? ` ${pick} role="checkbox" aria-checked="${st === 'pick'}" tabindex="0" title="${st === 'pick' ? 'Leave this change out' : 'Include this change'}"` : ''}>${MARK[st] || ''}<div class="edB"><div class="edT"><b>${esc(e.name || e.tag)}</b>${e.structure?.type === 'imageAsk' ? `<span class="mono">${e.structure.kind === 'photo' ? 'New photo' : 'New illustration'}: “${esc(e.structure.prompt)}”</span>` : e.structure?.type === 'image' && e.structure.preview ? `<span class="imgPick"><img src="${esc(e.structure.preview)}" alt=""><span class="mono">${esc(e.structure.alt || 'New image')}</span></span>` : e.structure?.type === 'token' ? tokenChange(e.structure) : `<span class="mono">${esc(editLabel(e))}</span>`}${e.offSystem ? '<i class="offSys">Off-system</i>' : ''}</div>${(e.structure?.type === 'imageAsk' || e.structure?.preview) && pick ? `<button class="outline sm imgOpt" ${pick.replace('data-act2="edPick"', 'data-act2="imgOptions"')}>${e.structure.type === 'imageAsk' ? (e.structure.kind === 'photo' ? 'Show photos' : 'Draw options') : 'Choose another'}</button>` : ''}${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div></div>`;
   function tokenChange(st) {
     const t = (S.tokens || []).find((x) => x.name === st.name);
     const cur = t ? (t.values.find((v) => v.theme === st.which) || t.values.find((v) => v.theme === (aiContext().theme || 'light')) || t.values[0])?.hex : null;
@@ -1924,6 +1925,15 @@
           const after = S._afterDir; S._afterDir = null; if (after) after();
         }).catch((err) => toast(err.message, '', true));
       }
+      else if (act === 'pickKind') { if (S.pick) { S.pick.kind = v; S.pick.prompt = $('pickQ')?.value || S.pick.prompt; renderPicker(); if (S.pick.prompt && !(v === 'photo' ? S.pick.photos : S.pick.drawings)) runPicker(); } }
+      else if (act === 'pickImg') { if (S.pick) chooseImage(S.pick, +a.dataset.i); }
+      else if (act === 'imgOptions') {
+        // A proposed image: open the picker with Kerf's description; the pick fills in this edit.
+        const m = S.chat[+a.dataset.i], e2 = m?.proposal.edits[+a.dataset.e];
+        if (!m || !e2) return;
+        const el = D?.querySelector(q(e2.loc));
+        openImagePicker({ kind: e2.structure.kind, prompt: e2.structure.prompt, el, onPick: ({ src, alt, credit }) => { e2.structure = { type: 'image', src, alt, credit, kind: e2.structure.kind, prompt: e2.structure.prompt, preview: src }; renderAI(); } });
+      }
       else if (act === 'edPick') {
         if (e.target.closest('details')) return;
         const m = S.chat[+a.dataset.i], k = +a.dataset.e;
@@ -2023,9 +2033,79 @@
     const src = el.getAttribute('src') || '', alt = el.getAttribute('alt') || '';
     const fit = cs(el).objectFit;
     return sec('Image', `<div class="thumb"><img src="${esc(el.currentSrc || src)}" alt=""></div>
-      <div class="r2"><button class="outline" data-act="imgUpload">Replace…</button><button class="outline" data-act="imgLink">Use a link</button></div>
+      <div class="r2"><button class="outline" data-act="imgFind" data-v="photo">${ico('search', 12)} Find a photo</button><button class="outline" data-act="imgFind" data-v="illustration">${ico('pen', 12)} Draw one</button></div>
+      <div class="r2"><button class="ghostBtn" data-act="imgUpload">Upload…</button><button class="ghostBtn" data-act="imgLink">Use a link</button></div>
       <label class="inp" title="Alt text"><span class="u">Alt</span><input type="text" data-alt="1" value="${esc(alt)}" placeholder="Describe the image"></label>
       <div class="ibs txt">${['cover', 'contain', 'fill'].map((v) => `<button class="ib${fit === v ? ' on' : ''}" data-act="set" data-p="fit" data-v="${v}" title="${v === 'cover' ? 'Fill the box, crop the edges' : v === 'contain' ? 'Fit inside the box' : 'Stretch to the box'}">${v[0].toUpperCase() + v.slice(1)}</button>`).join('')}</div>`);
+  }
+  /* image picker: real photos (Unsplash) or illustrations Claude draws, chosen from a few options */
+  S.pick = null;
+  function openImagePicker({ kind = 'photo', prompt = '', el = S.sel?.el, onPick }) {
+    const r = el?.getBoundingClientRect?.() || { width: 4, height: 3 };
+    const ratio = r.width && r.height ? r.width / r.height : 4 / 3;
+    S.pick = { kind, prompt, ratio, onPick, photos: null, drawings: null, busy: false, error: '' };
+    $('modal').hidden = false;
+    renderPicker();
+    if (prompt) runPicker();
+    else setTimeout(() => $('pickQ')?.focus(), 0);
+  }
+  function renderPicker() {
+    const P = S.pick;
+    if (!P) return;
+    const res = P.kind === 'photo' ? P.photos : P.drawings;
+    const grid = P.busy
+      ? `<div class="pkWait"><i class="kSpin"><b></b><b></b><b></b><b></b></i><span data-since="${P.started}">${liveText(P.started)}</span><span class="note">${P.kind === 'photo' ? 'Searching Unsplash…' : 'Claude is drawing 3 options in your colours. This takes about 30 seconds.'}</span></div>`
+      : P.error ? `<div class="pkNone warn">${esc(P.error)}</div>`
+      : P.needsKey ? `<div class="pkNone">Photo search needs a free Unsplash key. Add it on <a href="http://localhost:4100" target="_blank" rel="noopener">Kerf’s start page</a>, then search again.</div>`
+      : !res ? `<div class="pkNone">${P.kind === 'photo' ? 'Describe the photo you want, e.g. “hands shaping a clay bowl”.' : 'Describe the illustration, e.g. “a person arranging ceramics on a shelf”.'}</div>`
+      : !res.length ? '<div class="pkNone">Nothing found. Try other words.</div>'
+      : P.kind === 'photo'
+        ? `<div class="pkGrid">${res.map((x, i) => `<button class="pkItem" data-act2="pickImg" data-i="${i}" title="${esc(x.alt)}"><img src="${esc(x.thumb)}" alt="${esc(x.alt)}" style="aspect-ratio:${P.ratio}"><span>${esc(x.credit?.name || '')}</span></button>`).join('')}</div><p class="note pkCredit">Photos from <a href="https://unsplash.com/?utm_source=kerf&utm_medium=referral" target="_blank" rel="noopener">Unsplash</a>, free to use.</p>`
+        : `<div class="pkGrid draw">${res.map((x, i) => `<button class="pkItem" data-act2="pickImg" data-i="${i}" title="${esc(x.title)}"><img src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(x.svg)}" alt="${esc(x.title)}" style="aspect-ratio:${P.ratio}"><span>${esc(x.title)}</span></button>`).join('')}</div>`;
+    $('modal').innerHTML = `<section class="dialog pick" role="dialog" aria-modal="true" aria-labelledby="pkT">
+      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="pkT">Choose an image</h2><span class="note">Pick one and it takes this image’s place, at the same size.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <div class="db">
+        <div class="seg pkTabs"><button data-act2="pickKind" data-v="photo" class="${P.kind === 'photo' ? 'on' : ''}">${ico('image', 12)} Photos</button><button data-act2="pickKind" data-v="illustration" class="${P.kind === 'illustration' ? 'on' : ''}">${ico('pen', 12)} Illustrations</button></div>
+        <form class="insSearch" data-form="pick">${ico('search', 14)}<input id="pickQ" value="${esc(P.prompt)}" placeholder="${P.kind === 'photo' ? 'Search photos' : 'Describe the illustration'}" autocomplete="off" spellcheck="false" aria-label="What should the image show?"><button class="primary sm">${P.kind === 'photo' ? 'Search' : 'Draw'}</button></form>
+        ${grid}
+      </div></section>`;
+  }
+  async function runPicker() {
+    const P = S.pick;
+    if (!P || !P.prompt.trim()) return;
+    P.busy = true; P.error = ''; P.needsKey = false; P.started = Date.now();
+    renderPicker();
+    try {
+      if (P.kind === 'photo') {
+        const o = P.ratio > 1.2 ? 'landscape' : P.ratio < 0.83 ? 'portrait' : 'squarish';
+        const r = await api('/images/photos?q=' + encodeURIComponent(P.prompt) + '&orientation=' + o);
+        P.needsKey = !!r.needsKey; P.photos = r.photos;
+      } else {
+        const w = 1200, h = Math.round(1200 / (P.ratio || 1.33));
+        P.drawings = (await api('/images/illustrate', { prompt: P.prompt, width: w, height: h, theme: aiContext().theme || 'light', count: 3 })).options;
+      }
+    } catch (e) { P.error = e.message; }
+    if (S.pick === P) { P.busy = false; renderPicker(); }
+  }
+  // Put a chosen picture in place: photos are used straight from Unsplash; drawings are saved into the project.
+  async function chooseImage(P, i) {
+    let src, alt, credit = '';
+    if (P.kind === 'photo') {
+      const x = P.photos[i];
+      src = x.url; alt = x.alt; credit = x.credit?.name ? `Photo by ${x.credit.name} on Unsplash` : '';
+      api('/images/photo-used', { download: x.download }).catch(() => {});
+    } else {
+      const x = P.drawings[i];
+      const slug = (P.prompt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'illustration');
+      const data = btoa(unescape(encodeURIComponent(x.svg)));
+      src = (await api('/upload', { name: `${slug}.svg`, data }).catch((e) => { toast(e.message, '', true); return null; }))?.src;
+      alt = x.title;
+    }
+    if (!src) return;
+    $('modal').hidden = true;
+    S.pick = null;
+    if (P.onPick) P.onPick({ src, alt, credit });
+    else { await structure({ type: 'image', src, alt, ...(credit ? { credit } : {}) }, { keepSel: true }); if (credit) toast(credit, 'The credit is added to your pull request.'); }
   }
   function pickImages() {
     return new Promise((resolve) => {
@@ -2182,6 +2262,7 @@
       const cls = ((S.sel?.useInfo || S.sel?.defInfo)?.classes || []).filter((c) => /^(h|w|size|shrink|flex|m[trblxy]?|-?m[trblxy]?)-/.test(c)).join(' ') || 'h-4 w-4';
       if (src) structure({ type: 'replace', jsx: `<img src="${src}" alt="" className="${cls}" />` });
     }
+    else if (act === 'imgFind') openImagePicker({ kind: v });
     else if (act === 'imgUpload') { const src = await upload(await pickFile()); if (src) structure({ type: 'image', src }, { keepSel: true }); }
     else if (act === 'imgLink') { const u = prompt('Image link (https://…)'); if (u && /^https?:\/\//.test(u)) structure({ type: 'image', src: u.trim() }, { keepSel: true }); }
   });
