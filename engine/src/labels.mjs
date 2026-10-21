@@ -23,6 +23,22 @@ function fmt(prop, v) {
   return String(v);
 }
 
+// What a designer would call an element: "Title “Stratemark”", "Button “Enter”", "Key round icon".
+const TAGS = { h1: 'Title', h2: 'Heading', h3: 'Heading', h4: 'Heading', h5: 'Heading', h6: 'Heading', p: 'Text', span: 'Text', strong: 'Text', em: 'Text', small: 'Text', b: 'Text', i: 'Text', label: 'Label', a: 'Link', button: 'Button', img: 'Image', picture: 'Image', svg: 'Icon', input: 'Input', textarea: 'Text box', select: 'Dropdown', form: 'Form', ul: 'List', ol: 'List', li: 'List item', nav: 'Navigation', header: 'Header', footer: 'Footer', aside: 'Sidebar', section: 'Section', main: 'Page', article: 'Card', hr: 'Divider', video: 'Video', table: 'Table', tr: 'Table row', td: 'Cell', th: 'Cell', code: 'Code', blockquote: 'Quote', dialog: 'Dialog', div: 'Frame' };
+const words = (n) => n.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
+export function designKind(tag, { icon = false } = {}) {
+  if (!tag) return 'Layer';
+  if (/^[A-Z]/.test(tag)) { const w = words(tag); return icon || /Icon$/.test(tag) ? `${w.replace(/ Icon$/, '')} icon` : w; }
+  return TAGS[tag.toLowerCase()] || 'Frame';
+}
+const TEXTY = new Set(['Title', 'Heading', 'Text', 'Label', 'Link', 'Button', 'List item', 'Quote', 'Cell', 'Input']);
+export function designName(tag, text, opts) {
+  const kind = designKind(tag, opts);
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!t || t.startsWith('image:') || !(TEXTY.has(kind) || /^[A-Z]/.test(tag || ''))) return kind;
+  return `${kind} “${t.length > 24 ? t.slice(0, 23) + '…' : t}”`;
+}
+
 export function changeLabel({ prop, from, to }) {
   const name = PROP_NAMES[prop] || prop;
   const a = fmt(prop, from), b = fmt(prop, to);

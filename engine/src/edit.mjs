@@ -230,12 +230,12 @@ export function createEditor(webRoot, getTheme, library) {
   return {
     history,
     // Delete, duplicate, move, swap, insert, image.
-    structure(loc, op, source) {
+    structure(loc, op, source, name) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);
       const before = fs.readFileSync(file, 'utf8');
       const { code, summary, moved, shift } = structureEdit(before, line, col, op, { file, library });
       if (code === before) return { file: rel, changed: false, summary };
-      return { ...record(file, rel, before, code, loc, { structure: op, source }, summary), moved: (moved || []).map(([a, b]) => [`${rel}:${a}`, `${rel}:${b}`]), shift: shift ? { file: rel, ...shift } : null };
+      return { ...record(file, rel, before, code, loc, { structure: op, source, name }, summary), moved: (moved || []).map(([a, b]) => [`${rel}:${a}`, `${rel}:${b}`]), shift: shift ? { file: rel, ...shift } : null };
     },
     describe(loc) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);
@@ -253,7 +253,7 @@ export function createEditor(webRoot, getTheme, library) {
       if (!h) return { undone: false };
       if (fs.readFileSync(h.file, 'utf8') !== h.after) throw new KerfError(`${h.rel} changed outside Kerf since this edit, so Kerf won’t overwrite it.`);
       fs.writeFileSync(h.file, h.before);
-      return { undone: true, file: h.rel, n: history.length };
+      return { undone: true, file: h.rel, n: history.length, label: [h.change?.name, ...(h.summary?.labels || [])].filter(Boolean).join(' · ') };
     },
   };
 }

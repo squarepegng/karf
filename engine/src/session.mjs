@@ -45,7 +45,7 @@ export function createSession(webRoot, editor) {
   const describe = (h) => {
     const s = h.summary;
     const code = [s.removed.length || s.added.length ? `${s.removed.join(' ') || '—'} → ${s.added.join(' ')}` : '', ...(s.props || []).map((p) => `${p.name}=${p.to}`)].filter(Boolean).join(' · ');
-    return { file: h.rel, loc: h.loc, label: (s.labels || []).join(' · ') || code, code, source: h.source || 'hand' };
+    return { file: h.rel, loc: h.loc, name: h.change?.name || null, label: (s.labels || []).join(' · ') || code, code, source: h.source || 'hand' };
   };
 
   function snapshot() {

@@ -89,9 +89,9 @@ export default function kerf() {
           if (route === '/unpeek') return send2(200, session.unpeek());
           if (route === '/pr') return send2(200, session.pullRequest(body));
           if (route === '/inspect') return send(200, editor.describe(body.loc));
-          if (route === '/edit') return send2(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props, cva: body.cva }));
+          if (route === '/edit') return send2(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props, cva: body.cva, name: body.name }));
           if (route === '/undo') return send2(200, editor.undo());
-          if (route === '/structure') return send2(200, editor.structure(body.loc, body.op));
+          if (route === '/structure') return send2(200, editor.structure(body.loc, body.op, 'hand', body.name));
           if (route === '/upload') {
             try { return send(200, library.saveUpload(body.name, body.data)); } catch (e) { throw new KerfError(e.message); }
           }
@@ -135,12 +135,12 @@ export default function kerf() {
               e = { ...e, loc };
               try {
                 if (e.structure) {
-                  const r = editor.structure(e.loc, e.structure, 'ai');
+                  const r = editor.structure(e.loc, e.structure, 'ai', e.name);
                   for (const [a, b] of r.moved || []) remap.set(a, b);
                   if (r.shift) shifts.push(r.shift);
                   return { loc: e.loc, ok: true, ...r };
                 }
-                return { loc: e.loc, ok: true, ...editor.edit(e.loc, { ops: e.ops, text: e.text || undefined, props: e.props, source: 'ai' }) };
+                return { loc: e.loc, ok: true, ...editor.edit(e.loc, { ops: e.ops, text: e.text || undefined, props: e.props, source: 'ai', name: e.name }) };
               } catch (err) {
                 return { loc: e.loc, ok: false, error: err.message };
               }

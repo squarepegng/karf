@@ -100,7 +100,7 @@ pre{margin:0;max-height:180px;overflow:auto;padding:10px;background:var(--canvas
 .row span:last-child{color:var(--ink3);font-size:12px}
 a.open{display:inline-flex;align-items:center;justify-content:center;height:36px;padding:0 14px;border-radius:8px;background:var(--ink);color:var(--canvas);text-decoration:none;font-weight:500;align-self:flex-start}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
-</style></head>
+details.logs summary{cursor:pointer;color:#8B8B95;font-size:12px;margin-top:10px}details.logs pre{margin-top:8px}</style></head>
 <body><main>
 <div class="brand"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="5.5" height="10" rx="1.5" fill="#EDEDF0"/><rect x="8.5" y="3" width="5.5" height="10" rx="1.5" fill="#EDEDF0" opacity=".45"/></svg>Kerf</div>
 <div><h1>Open a project</h1><p>Paste a GitHub link or a folder on this computer. Kerf runs your app and opens it with the editor on top. Your code only changes when you edit.</p></div>
@@ -126,7 +126,8 @@ async function poll(){
   if(!j){return}
   const done=j.url||j.error;
   $('job').innerHTML='<div class="card"><div class="status">'+(j.error?'<span class="err">'+esc(j.error)+'</span>':j.url?'Ready':'<span class="spin"></span>'+esc(j.step))+'</div>'+
-    (j.url?'<a class="open" href="'+esc(j.url)+'">Open in Kerf →</a>':'')+'<pre id="log">'+esc(j.log.trim())+'</pre></div>';
+    (j.url?'<a class="open" href="'+esc(j.url)+'">Open in Kerf →</a>':'')+'<details class="logs"'+(j.error||window.__logsOpen?' open':'')+'><summary>Technical details</summary><pre id="log">'+esc(j.log.trim())+'</pre></details></div>';
+  const dd=document.querySelector('#job details');if(dd)dd.ontoggle=()=>{window.__logsOpen=dd.open};
   const l=$('log');if(l)l.scrollTop=l.scrollHeight;
   if(j.url&&started){location.href=j.url;return}
   if(done){$('go').disabled=false;loadRecent();return}
