@@ -1253,7 +1253,7 @@
     const def = defOf(el), use = useOf(el);
     const loc = use && (!def || el.tagName.toLowerCase() === 'svg' || el.getAttribute('data-kerf-n')) ? use : def || use;
     const img = el.tagName.toLowerCase() === 'img' ? { imgSrc: el.getAttribute('src'), alt: el.getAttribute('alt') } : {};
-    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note, dom: [...el.classList], ...img };
+    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note, dom: [...el.classList], name: dName(el), ...img };
   }
   function uniq(list) {
     const seen = new Set(), out = [];
@@ -1307,7 +1307,7 @@
     const history = historyFor();
     const ctx = followUp ? 'Follow-up' : where === 'chat' && S.sel ? dName(S.sel.el) : where === 'notes' ? `${S.notes.length} note${S.notes.length === 1 ? '' : 's'}` : 'Whole screen';
     S.chat.push({ role: 'user', text, shown: shown || text, ctx, where, atts: atts.map((a) => ({ name: a.name, thumb: a.thumb })) });
-    const m = { role: 'kerf', busy: true, status: 'pending', where, targets, noteTexts: where === 'notes' && !followUp ? S.notes.map((n) => n.text) : null, skip: [] };
+    const m = { role: 'kerf', busy: true, status: 'pending', where, targets, noteTexts: where === 'notes' && !followUp ? S.notes.map((n) => n.text) : null, skip: [], started: Date.now(), looked: uniq(targets).map((t) => t.name).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).slice(0, 40), lookedN: targets.length };
     S.chat.push(m);
     S.card = m;
     renderAI();
@@ -1317,6 +1317,7 @@
       if (!m.proposal.edits.length) m.status = 'info';
     } catch (e) { m.error = e.message; }
     m.busy = false;
+    m.took = Math.max(1, Math.round((Date.now() - m.started) / 1000));
     renderAI();
     saveChat();
   }
@@ -1325,10 +1326,15 @@
     S.amber = [];
     if (v === 'apply') {
       const hadError = !!D?.querySelector('vite-error-overlay');
+      m.applying = true;
+      renderAI();
       const r = await api('/ai/apply', { edits: chosen(m).map((e) => (e.structure ? e : { ...e, bp: bpParam() })) }).catch((e) => ({ error: e.message }));
+      m.applying = false;
       if (!r.error && chosen(m).some((e) => e.structure?.type === 'code')) guard(hadError);
       if (r.error) { toast(r.error, '', true); renderAI(); return; }
       const ok = r.results.filter((x) => x.ok && x.changed).length, bad = r.results.filter((x) => !x.ok);
+      m.failed = bad.map((x) => x.loc);
+      m.appliedN = ok;
       S.count = r.n;
       m.status = ok ? 'applied' : 'failed';
       toast(`Applied ${ok} change${ok === 1 ? '' : 's'}`, bad.length ? `${bad.length} skipped: ${bad[0].error}` : '', !!bad.length && !ok, !!ok);
@@ -1340,7 +1346,18 @@
   }
   const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: '' };
   const chosen = (m) => m.proposal.edits.filter((e) => !(m.skip || []).includes(e.note ?? 0));
-  const editRow = (e) => `<div class="ed"><div class="edT"><b>${esc(e.name || e.tag)}</b><span class="mono">${esc(editLabel(e))}</span></div>${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div>`;
+  // Each proposed change shows where it stands: to do, applying, done, failed or left out.
+  function rowState(m, e) {
+    const inPlan = chosen(m).includes(e);
+    if (m.applying) return inPlan ? 'run' : 'skip';
+    if (m.status === 'applied') return !inPlan ? 'skip' : (m.failed || []).includes(e.loc) ? 'bad' : 'ok';
+    if (m.status === 'failed') return 'bad';
+    if (m.status === 'discarded') return 'skip';
+    return 'todo';
+  }
+  const MARK = { todo: '<i class="mk todo"></i>', run: '<i class="mk run"></i>', ok: `<i class="mk ok">${'<svg width="10" height="10" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'}</i>`, bad: '<i class="mk bad">×</i>', skip: '<i class="mk skip"></i>' };
+  const rowFor = (m) => (e) => editRow(e, m ? rowState(m, e) : 'todo');
+  const editRow = (e, st = 'todo') => `<div class="ed ${st}">${MARK[st] || ''}<div class="edB"><div class="edT"><b>${esc(e.name || e.tag)}</b><span class="mono">${esc(editLabel(e))}</span></div>${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div></div>`;
   const NSTAT = { done: ['Done', 'ok'], partial: ['Partly', 'part'], not_possible: ['Not here', 'no'] };
   // Notes answered one by one: the mark's number, what was asked, what Kerf did, and its edits.
   function notesHTML(m, i) {
@@ -1362,21 +1379,36 @@
         <div class="ngH">${g.n ? `<span class="nNum">${g.n}</span>` : '<span class="nNum other">+</span>'}<span class="ngQ">${g.text ? `“${esc(g.text)}”` : g.n ? `Note ${g.n}` : 'Also changed'}</span>${g.info || g.n ? `<span class="nSt ${st[1]}">${st[0]}</span>` : ''}
         ${pending && g.eds.length ? `<button class="nTog${off ? '' : ' on'}" data-act2="noteSkip" data-i="${i}" data-n="${g.n}" role="switch" aria-checked="${!off}" title="${off ? 'Include these changes' : 'Leave these out'}"><i></i></button>` : ''}</div>
         ${g.info?.summary ? `<div class="ngS">${esc(g.info.summary)}</div>` : ''}
-        ${g.eds.length ? `<div class="ngE">${g.eds.map(editRow).join('')}</div>` : ''}</div>`;
+        ${g.eds.length ? `<div class="ngE">${g.eds.map(rowFor(m)).join('')}</div>` : ''}</div>`;
     }).join('');
   }
   function kerfHTML(m, i) {
-    if (m.busy) return `<div class="prop"><div class="kThink"><i class="kDots"><b></b><b></b><b></b></i><span>Reading the screen and the code…</span></div></div>`;
-    if (m.error) return `<div class="prop err"><span class="note warn">${esc(m.error)}</span></div>`;
+    if (m.busy) return `<div class="prop">${stepsHTML(m, true)}<div class="kLive"><i class="kSpin"><b></b><b></b><b></b><b></b></i><span class="kT" data-since="${m.started || Date.now()}">${liveText(m.started)}</span></div></div>`;
+    if (m.error) return `<div class="prop err">${stepsHTML(m)}<span class="note warn">${esc(m.error)}</span></div>`;
     const p = m.proposal;
     const badge = { partial: 'Partly possible', not_yet: 'Not possible in Kerf yet', needs_developer: 'For developers' }[p.scope];
     const byNote = p.notes?.length && p.edits.length + p.notes.length > 1;
     const n = chosen(m).length;
     const status = STATUS[m.status] ? `<span class="kStatus ${m.status}">${m.status === 'applied' ? ico('check', 12) : ''}${STATUS[m.status]}</span>` : '';
-    return `<div class="prop${byNote ? ' byNote' : ''}">${badge ? `<span class="badge">${badge}</span>` : ''}<p class="kText">${esc(p.message)}</p>
-      ${byNote ? `<div class="ngs">${notesHTML(m, i)}</div>` : p.edits.length ? `<div class="edits"><div class="edH">${p.edits.length} proposed change${p.edits.length === 1 ? '' : 's'}</div>${p.edits.map(editRow).join('')}</div>` : ''}
+    const head = m.applying ? `Applying ${n} change${n === 1 ? '' : 's'}…` : m.status === 'applied' ? `Applied ${m.appliedN ?? n} of ${p.edits.length}` : `${p.edits.length} proposed change${p.edits.length === 1 ? '' : 's'}`;
+    return `<div class="prop${byNote ? ' byNote' : ''}">${stepsHTML(m)}${badge ? `<span class="badge">${badge}</span>` : ''}<p class="kText">${esc(p.message)}</p>
+      ${byNote ? `<div class="ngs">${notesHTML(m, i)}</div>` : p.edits.length ? `<div class="edits"><div class="edH">${m.applying ? '<i class="spin"></i>' : ''}${head}</div>${p.edits.map(rowFor(m)).join('')}</div>` : ''}
       ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="amberBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
   }
+  // "Looked at 14 elements · Thought for 9s", which opens to show what Kerf read.
+  function stepsHTML(m, live) {
+    const n = m.lookedN || m.looked?.length || 0;
+    if (!n) return '';
+    const list = (m.looked || []).map((x) => `<li>${esc(x)}</li>`).join('') + (n > (m.looked || []).length ? `<li class="more">and ${n - m.looked.length} more</li>` : '');
+    const done = live ? '' : m.took ? ` · Thought for ${m.took}s` : '';
+    return `<details class="kSteps"><summary>${ico('eye', 12)}<span>Looked at ${n} element${n === 1 ? '' : 's'}${done}</span>${ico('chevR', 10)}</summary><ul>${list}</ul></details>`;
+  }
+  const liveText = (since) => {
+    const t = Math.max(0, Math.floor((Date.now() - (since || Date.now())) / 1000));
+    return `${t < 60 ? `${t}s` : `${Math.floor(t / 60)}m ${t % 60}s`} · ${t < 2 ? 'Reading the screen' : 'Thinking'}`;
+  };
+  // Tick the live timers without re-drawing the conversation.
+  setInterval(() => document.querySelectorAll('[data-since]').forEach((el) => { el.textContent = liveText(+el.dataset.since); }), 1000);
   const replyForm = (where) => composer('replyIn', { form: 'reply', where, placeholder: 'Reply to Kerf…' });
   function renderAsk() {
     const a = $('ask');

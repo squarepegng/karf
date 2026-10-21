@@ -528,3 +528,36 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 /* floating cards (Ask bar, notes): neutral, no amber outline */
 .card{gap:10px;padding:14px;border-radius:16px;border-color:rgba(255,255,255,.08)}
 .card .cardTop{padding:0}
+
+/* ============ Working states (like Claude Code) ============ */
+/* live line: a four-dot spinner, a timer and what Kerf is doing */
+.kLive{display:flex;align-items:center;gap:10px;color:var(--ink3);font:400 13px/18px Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.kSpin{display:grid;grid-template-columns:repeat(2,5px);grid-template-rows:repeat(2,5px);gap:4px;flex:0 0 auto}
+.kSpin b{width:5px;height:5px;border-radius:50%;background:#E8875B;animation:kspin4 1.2s linear infinite}
+.kSpin b:nth-child(1){animation-delay:0s}.kSpin b:nth-child(2){animation-delay:.3s}.kSpin b:nth-child(4){animation-delay:.6s}.kSpin b:nth-child(3){animation-delay:.9s}
+@keyframes kspin4{0%,100%{opacity:.25;transform:scale(.8)}25%{opacity:1;transform:scale(1)}}
+/* step summary: "Looked at 14 elements · Thought for 9s ›" */
+.kSteps{color:var(--ink3);font-size:12px}
+.kSteps summary{display:inline-flex;align-items:center;gap:6px;list-style:none;cursor:pointer;user-select:none}
+.kSteps summary::-webkit-details-marker{display:none}
+.kSteps summary:hover{color:var(--ink2)}
+.kSteps summary svg:last-child{transition:transform .15s}
+.kSteps[open] summary svg:last-child{transform:rotate(90deg)}
+.kSteps ul{margin:8px 0 0;padding:8px 10px 8px 26px;border-left:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:3px;max-height:180px;overflow:auto}
+.kSteps li{color:var(--ink2);line-height:16px}
+.kSteps li.more{color:var(--ink3);list-style:none}
+/* proposed changes as a checklist */
+.edits .ed{flex-direction:row;align-items:flex-start;gap:10px}
+.edB{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.mk{flex:0 0 auto;display:grid;place-items:center;width:16px;height:16px;margin-top:1px;border-radius:50%;font-style:normal;font-size:12px;line-height:1}
+.mk.todo{border:1.5px solid rgba(255,255,255,.28)}
+.mk.run{border:1.5px solid rgba(255,255,255,.15);border-top-color:var(--ink);animation:kspin .8s linear infinite}
+.mk.ok{background:#D9D9DE;color:#141416}
+.mk.bad{background:rgba(240,106,95,.18);color:var(--danger)}
+.mk.skip{border:1.5px dashed rgba(255,255,255,.2)}
+.ed.skip .edB{opacity:.45}
+.ed.ok .edB b{color:var(--ink2)}
+.edH{display:flex;align-items:center;gap:8px}
+.edH .spin{width:10px;height:10px}
+.ngE .ed{display:flex;flex-direction:row;gap:10px}
+.kSteps ul{list-style:none;padding-left:14px}
