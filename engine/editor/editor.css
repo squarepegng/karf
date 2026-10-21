@@ -737,3 +737,14 @@ body.resizing,body.resizing *{cursor:col-resize!important;user-select:none!impor
 body.resizing #frame{pointer-events:none}
 .layer .nm,.layer .tx{min-width:0}
 .rz{user-select:none;-webkit-user-select:none}
+
+/* Layers can be narrower than its widest row: rows shorten with an ellipsis instead of widening the panel */
+aside.side{min-width:0}
+#layers .tree{overflow-x:hidden}
+#layers .layer{min-width:0;overflow:hidden}
+#layers .layer>.tw,#layers .layer>.ind,#layers .layer>svg{flex-shrink:0}
+#layers .layer .nm{flex:0 1 auto;white-space:nowrap}
+#layers .layer .tx{flex:1 1 0;white-space:nowrap}
+#layers .lhead{min-width:0}
+#layers .lpage{min-width:0;flex:0 1 auto}
+#layers .layer .ind{background-image:repeating-linear-gradient(to right,transparent 0 5px,rgba(255,255,255,.07) 5px 6px,transparent 6px 12px)}
