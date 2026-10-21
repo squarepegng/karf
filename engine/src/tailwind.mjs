@@ -47,6 +47,16 @@ export function buildTheme(t) {
     opacity: byValue(t.opacity, (v) => Math.round(parseFloat(v) * 100)),
     shadow: Object.keys(t.boxShadow || {}),
     colors: flattenColors(t.colors),
+    byKey: {
+      spacing: Object.fromEntries(Object.entries(t.spacing || {}).map(([k, v]) => [k, toPx(v)])),
+      radius: Object.fromEntries(Object.entries(t.borderRadius || {}).map(([k, v]) => [k, toPx(v)])),
+      fontSize: Object.fromEntries(Object.entries(t.fontSize || {}).map(([k, v]) => [k, toPx(v)])),
+      lineHeight: Object.fromEntries(Object.entries(t.lineHeight || {}).map(([k, v]) => [k, toPx(v)])),
+      fontWeight: Object.fromEntries(Object.entries(t.fontWeight || {}).map(([k, v]) => [k, Number(v)])),
+      opacity: Object.fromEntries(Object.entries(t.opacity || {}).map(([k, v]) => [k, Math.round(parseFloat(v) * 100)])),
+      borderWidth: Object.fromEntries(Object.entries(t.borderWidth || {}).map(([k, v]) => [k, toPx(v)])),
+    },
+    gradientPrefix: t.backgroundImage && !('gradient-to-r' in t.backgroundImage) ? 'bg-linear-to-' : 'bg-gradient-to-',
     keys: {
       fontSize: Object.keys(t.fontSize || {}),
       fontWeight: Object.keys(t.fontWeight || {}),
@@ -86,6 +96,8 @@ export function matcher(prop, th) {
   const corner = (c) => (cls) => cls === `rounded-${c}` || cls.startsWith(`rounded-${c}-`);
   switch (prop) {
     case 'bg': return (c) => c.startsWith('bg-') && isColor(c.slice(3), th);
+    case 'gradient': return (c) => /^bg-(gradient|linear)-to-/.test(c) || /^(from|via|to)-/.test(c);
+    case 'clipText': return (c) => c === 'bg-clip-text' || c === 'text-transparent';
     case 'color': return (c) => c.startsWith('text-') && isColor(c.slice(5), th);
     case 'borderC': return (c) => c.startsWith('border-') && isColor(c.slice(7), th);
     case 'fontSize': return (c) => c.startsWith('text-') && (fs.has(c.slice(5)) || /^\[[\d.]+(px|rem|em)\]$/.test(c.slice(5)));
@@ -98,8 +110,17 @@ export function matcher(prop, th) {
     case 'borderW': return (c) => c === 'border' || (c.startsWith('border-') && (th.keys.borderWidth.includes(c.slice(7)) || /^\[[\d.]+px\]$/.test(c.slice(7))));
     case 'gap': return (c) => c.startsWith('gap-');
     case 'padX': return (c) => /^(px|pl|pr|ps|pe)-/.test(c);
+    case 'mX': return (c) => /^-?(mx|ml|mr|ms|me)-/.test(c);
+    case 'mY': return (c) => /^-?(my|mt|mb)-/.test(c);
+    case 'w': return (c) => /^w-/.test(c) || c === 'flex-1' || c === 'grow' || c === 'flex-auto';
+    case 'h': return (c) => /^h-/.test(c) || c === 'flex-1';
+    case 'layout': return (c) => ['flex', 'inline-flex', 'flex-row', 'flex-col', 'flex-row-reverse', 'flex-col-reverse', 'block', 'inline-block', 'grid', 'inline-grid'].includes(c);
+    case 'alignItems': return (c) => /^items-(start|center|end|stretch|baseline)$/.test(c);
+    case 'justify': return (c) => /^justify-(start|center|end|between|around|evenly|normal|stretch)$/.test(c);
+    case 'wrap': return (c) => /^flex-(wrap|nowrap|wrap-reverse)$/.test(c);
     case 'padY': return (c) => /^(py|pt|pb)-/.test(c);
     case 'radius': return (c) => c === 'rounded' || c.startsWith('rounded-');
+    case 'fit': return (c) => /^object-(cover|contain|fill|none|scale-down)$/.test(c);
     case 'rTL': return corner('tl');
     case 'rTR': return corner('tr');
     case 'rBR': return corner('br');
@@ -118,6 +139,23 @@ function scale(prefix, map, px, unit = 'px') {
 export function classFor(prop, v, th) {
   switch (prop) {
     case 'padX': return scale('px', th.spacing, v);
+    case 'mX': case 'mY': {
+      const pre = prop === 'mX' ? 'mx' : 'my';
+      if (v === 'auto') return `${pre}-auto`;
+      const n = Number(v);
+      return n < 0 ? '-' + scale(pre, th.spacing, -n) : scale(pre, th.spacing, n);
+    }
+    case 'w': case 'h': {
+      if (v === 'hug') return `${prop}-fit`;
+      if (v === 'fill') return prop === 'w' ? 'w-full' : 'h-full';
+      if (v === 'grow') return 'flex-1'; // Fill along a flex parent’s direction: take the remaining space
+      if (v === 'auto') return `${prop}-auto`;
+      return scale(prop, th.spacing, Number(v));
+    }
+    case 'layout': return v === 'row' ? 'flex flex-row' : v === 'col' ? 'flex flex-col' : v === 'grid' ? 'grid' : 'block';
+    case 'alignItems': return `items-${v}`;
+    case 'justify': return `justify-${v}`;
+    case 'wrap': return v === 'wrap' ? 'flex-wrap' : 'flex-nowrap';
     case 'padY': return scale('py', th.spacing, v);
     case 'gap': return scale('gap', th.spacing, v);
     case 'radius': return scale('rounded', th.radius, v);
@@ -132,7 +170,18 @@ export function classFor(prop, v, th) {
     case 'fontWeight': { const k = th.fontWeight[String(v)]; return k ? `font-${k}` : `font-[${v}]`; }
     case 'opacity': { const k = th.opacity[v]; return k != null ? `opacity-${k}` : `opacity-[${v / 100}]`; }
     case 'align': return `text-${v}`;
+    case 'fit': return `object-${v}`;
     case 'shadow': return v === 'none' ? 'shadow-none' : v === 'DEFAULT' ? 'shadow' : `shadow-${v}`;
+    case 'gradient': {
+      // "r primary positive" or "br primary via-color positive": direction, then from (via) to.
+      const [dir, ...stops] = String(v).trim().split(/\s+/);
+      const c = (x) => (x.startsWith('#') ? `[${x}]` : x);
+      const out = [`${th.gradientPrefix || 'bg-gradient-to-'}${dir}`, `from-${c(stops[0])}`];
+      if (stops.length > 2) out.push(`via-${c(stops[1])}`);
+      out.push(`to-${c(stops[stops.length - 1])}`);
+      return out.join(' ');
+    }
+    case 'clipText': return 'bg-clip-text text-transparent';
     case 'bg': case 'color': case 'borderC': {
       const pre = { bg: 'bg', color: 'text', borderC: 'border' }[prop];
       if (String(v).startsWith('#')) return `${pre}-[${v}]`;
@@ -150,10 +199,30 @@ export function applyOps(list, ops, th) {
   let out = list.slice();
   const removed = [];
   const added = [];
-  for (const { prop, value } of ops) {
+  const changes = [];
+  for (const op of ops) {
+    const prop = op.prop;
+    let value = op.value;
+    const removedBefore = removed.length;
+    const base0 = (c) => !c.includes(':');
+    const also = prop === 'gradient' ? matcher('bg', th) : prop === 'bg' && value !== 'transparent' ? matcher('gradient', th) : prop === 'clipText' && value ? matcher('color', th) : null;
+    if (also) out = out.filter((c) => !(base0(c) && also(c) && removed.push(c)));
+    if (prop === 'color') out = out.filter((c) => !(base0(c) && c === 'text-transparent' && removed.push(c)));
+    if ((prop === 'gradient' || prop === 'clipText') && (value === 'none' || value === 'off' || value === false)) value = null;
     const m = matcher(prop, th);
     const base = (c) => !c.includes(':');
     // p-5 sets both axes: changing one axis splits it so the other is kept.
+    if ((prop === 'mX' || prop === 'mY')) {
+      const i = out.findIndex((c) => base(c) && /^-?m-/.test(c));
+      if (i > -1) {
+        const neg = out[i].startsWith('-');
+        const keep = (neg ? '-' : '') + (prop === 'mX' ? 'my-' : 'mx-') + out[i].replace(/^-?m-/, '');
+        removed.push(out[i]);
+        added.push(keep);
+        out.splice(i, 1, keep);
+      }
+    }
+    if (prop === 'layout' && value === 'none') value = null;
     if (prop === 'padX' || prop === 'padY') {
       const i = out.findIndex((c) => base(c) && /^p-/.test(c));
       if (i > -1) {
@@ -178,6 +247,39 @@ export function applyOps(list, ops, th) {
       else out.splice(at, 0, cls);
       added.push(cls);
     }
+    // Before/after in design terms, for labels like "Size 24 → 36".
+    const mine = removed.slice(removedBefore).filter((c) => matcher(prop, th)(c.replace(/^-/, '')) || matcher(prop, th)(c));
+    const pickFrom = prop === 'layout' ? mine.find((c) => /^flex-(row|col)/.test(c)) || mine[0] : mine[0];
+    changes.push({ prop, from: pickFrom ? valueOfClass(prop, pickFrom, th) : null, to: value ?? null });
   }
-  return { classes: out, removed, added };
+  return { classes: out, removed, added, changes };
+}
+
+const PREFIX = { padX: ['px', 'p'], padY: ['py', 'p'], mX: ['mx', 'm'], mY: ['my', 'm'], gap: ['gap'], radius: ['rounded'], rTL: ['rounded-tl'], rTR: ['rounded-tr'], rBR: ['rounded-br'], rBL: ['rounded-bl'], fontSize: ['text'], lineHeight: ['leading'], borderW: ['border'], opacity: ['opacity'], w: ['w'], h: ['h'] };
+const SCALE = { padX: 'spacing', padY: 'spacing', mX: 'spacing', mY: 'spacing', gap: 'spacing', w: 'spacing', h: 'spacing', radius: 'radius', rTL: 'radius', rTR: 'radius', rBR: 'radius', rBL: 'radius', fontSize: 'fontSize', lineHeight: 'lineHeight', borderW: 'borderWidth', opacity: 'opacity' };
+export function valueOfClass(prop, cls, th) {
+  if (!cls) return null;
+  const neg = cls.startsWith('-');
+  const c = neg ? cls.slice(1) : cls;
+  if (prop === 'bg' || prop === 'color' || prop === 'borderC') return c.replace(/^(bg|text|border)-/, '').replace(/^\[|\]$/g, '');
+  if (prop === 'fontWeight') { const k = c.replace(/^font-/, ''); return th.byKey?.fontWeight?.[k] ?? k.replace(/^\[|\]$/g, ''); }
+  if (prop === 'shadow') return c === 'shadow' ? 'default' : c.replace(/^shadow-/, '');
+  if (prop === 'align') return c.replace(/^text-/, '');
+  if (prop === 'fit') return c.replace(/^object-/, '');
+  if (prop === 'alignItems') return c.replace(/^items-/, '');
+  if (prop === 'justify') return c.replace(/^justify-/, '');
+  if (prop === 'wrap') return c === 'flex-wrap' ? 'wrap' : 'no wrap';
+  if (prop === 'layout') return { 'flex-row': 'row', 'flex-col': 'column', flex: 'row', grid: 'grid', block: 'none' }[c] || c;
+  if (prop === 'w' || prop === 'h') { const k = c.slice(2); if (k === 'fit') return 'hug'; if (k === 'full') return 'fill'; }
+  if (prop === 'gradient') return c;
+  for (const p of PREFIX[prop] || []) {
+    if (c === p) return SCALE[prop] === 'borderWidth' ? th.byKey?.borderWidth?.DEFAULT : SCALE[prop] === 'radius' ? th.byKey?.radius?.DEFAULT : null;
+    if (c.startsWith(p + '-')) {
+      const k = c.slice(p.length + 1);
+      const arb = k.match(/^\[(-?[\d.]+)(px|%|em)?\]$/);
+      const v = arb ? Number(arb[1]) : th.byKey?.[SCALE[prop]]?.[k];
+      return v == null ? k : neg ? -v : v;
+    }
+  }
+  return null;
 }

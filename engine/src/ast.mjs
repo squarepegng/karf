@@ -48,7 +48,9 @@ export function tagSource(code, file, root) {
     const intrinsic = name.type === 'JSXIdentifier' && /^[a-z]/.test(name.name);
     const attr = intrinsic ? 'data-kerf' : 'data-kerf-use';
     if (node.attributes.some((a) => a.type === 'JSXAttribute' && a.name.name === attr)) return;
-    s.appendLeft(name.end, ` ${attr}="${rel}:${node.loc.start.line}:${node.loc.start.column}"`);
+    // Component usages also carry their name, for the Layers panel.
+    const label = intrinsic ? '' : ` data-kerf-n="${code.slice(name.start, name.end)}"`;
+    s.appendLeft(name.end, ` ${attr}="${rel}:${node.loc.start.line}:${node.loc.start.column}"${label}`);
     count++;
   });
   if (!count) return null;

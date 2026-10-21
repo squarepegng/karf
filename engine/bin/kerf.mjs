@@ -28,4 +28,4 @@ const server = await vite.createServer({
 });
 await server.listen();
 server.printUrls();
-console.log('  Kerf attached: elements are tagged, editor API at /__kerf');
+console.log(`  Kerf editor: ${server.resolvedUrls?.local?.[0] || "http://localhost:5173/"}__kerf/`);

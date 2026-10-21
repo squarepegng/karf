@@ -4,14 +4,20 @@
   "private": true,
   "type": "module",
   "description": "Kerf Phase 1: tag rendered elements with their source, and edit Tailwind classes in that source safely.",
-  "bin": { "kerf": "./bin/kerf.mjs" },
+  "bin": {
+    "kerf": "./bin/kerf.mjs"
+  },
   "scripts": {
     "dev": "node bin/kerf.mjs",
     "test": "node --test test/engine.test.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@babel/parser": "^7.26.3",
-    "magic-string": "^0.30.17"
+    "magic-string": "^0.30.17",
+    "zod": "^4.6.7"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
