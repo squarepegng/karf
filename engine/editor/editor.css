@@ -426,7 +426,7 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .hdl.corner{width:9px;height:9px;border-radius:2px;background:#fff;border:1.5px solid var(--select);cursor:nwse-resize}
 .hdl.size{background:#fff;border-radius:999px}
 
-/* menus (Kerf, pages, zoom, right-click) */
+/* menus (Tovi, pages, zoom, right-click) */
 .menu{position:fixed;z-index:60;min-width:220px;max-width:320px;padding:4px;background:#1E1E21;border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .menu .mi{display:flex;align-items:center;gap:8px;width:100%;height:28px;padding:0 8px 0 4px;border:0;border-radius:6px;background:transparent;color:var(--ink);text-align:left;white-space:nowrap}
 .menu .mi:hover:not([disabled]){background:var(--select);color:#fff}
@@ -475,7 +475,7 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 #canvas.present{background-image:none;background-color:#141416}
 
 /* ============ Chat, Claude-style ============ */
-/* Kerf's reply is plain text on the background: no box, no outline */
+/* Tovi's reply is plain text on the background: no box, no outline */
 .prop,.prop.err,.prop.byNote{display:flex;flex-direction:column;gap:12px;padding:0;background:transparent;border:0;border-radius:0}
 .kText{margin:0;color:var(--ink);font:400 13px/21px Geist,system-ui,sans-serif;white-space:pre-wrap}
 .prop.err .note.warn{font-size:13px;line-height:20px}
@@ -530,7 +530,7 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .card .cardTop{padding:0}
 
 /* ============ Working states (like Claude Code) ============ */
-/* live line: a four-dot spinner, a timer and what Kerf is doing */
+/* live line: a four-dot spinner, a timer and what Tovi is doing */
 .kLive{display:flex;align-items:center;gap:10px;color:var(--ink3);font:400 13px/18px Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .kSpin{display:grid;grid-template-columns:repeat(2,5px);grid-template-rows:repeat(2,5px);gap:4px;flex:0 0 auto}
 .kSpin b{width:5px;height:5px;border-radius:50%;background:var(--select);animation:kspin4 1.2s linear infinite}
@@ -657,7 +657,7 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .ngH .mk.cbox{margin-left:2px}
 .applyBtn{height:30px;padding:0 14px;border-radius:8px;font-weight:500}
 .applyBtn[disabled]{opacity:.45}
-/* "Partly possible" / "Partly": quiet, with a small amber dot for Kerf's judgement */
+/* "Partly possible" / "Partly": quiet, with a small amber dot for Tovi's judgement */
 .prop .badge,.nSt.part{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.06);color:var(--ink2)}
 .prop .badge::before,.nSt.part::before{content:'';width:6px;height:6px;border-radius:3px;background:var(--intent)}
 .edits .ed .reach{color:var(--ink2)}
@@ -706,7 +706,7 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .kcCtx{max-width:120px}
 #panel .scroll,.chatScroll{overflow-x:hidden}
 
-/* Kerf's floating card: drag by the header, collapse to a slim bar */
+/* Tovi's floating card: drag by the header, collapse to a slim bar */
 .card .cardTop{gap:6px;cursor:grab;user-select:none;margin:-4px -4px 0;padding:2px 2px 2px 4px;border-radius:10px}
 .card .cardTop:hover{background:rgba(255,255,255,.03)}
 body.dragging,body.dragging *{cursor:grabbing!important;user-select:none!important}

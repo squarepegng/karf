@@ -1,4 +1,4 @@
-// Kerf's AI: a designer's request plus the code behind the elements they point at
+// Tovi's AI: a designer's request plus the code behind the elements they point at
 // goes to Claude, which answers with the same property edits the panel makes.
 // Nothing is written here; the editor shows the proposal and applies it on approval.
 import { designName } from './labels.mjs';
@@ -30,7 +30,7 @@ function apiKey() {
 }
 
 const Proposal = z.object({
-  scope: z.enum(['done', 'partial', 'not_yet', 'needs_developer']).describe('done: edits cover the request. partial: edits cover part of it and the rest needs something Kerf cannot change yet. not_yet: it is a visual change but nothing in the toolset can do it yet. needs_developer: it changes behavior, data, logic or backend.'),
+  scope: z.enum(['done', 'partial', 'not_yet', 'needs_developer']).describe('done: edits cover the request. partial: edits cover part of it and the rest needs something Tovi cannot change yet. not_yet: it is a visual change but nothing in the toolset can do it yet. needs_developer: it changes behavior, data, logic or backend.'),
   message: z.string().describe('One or two plain sentences to the designer: what you changed and how far it reaches, or why it needs a developer'),
   suggest: z.object({
     mode: z.enum(['improve', 'explore']),
@@ -48,7 +48,7 @@ const Proposal = z.object({
       ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('For w/h: hug, fill or px. For layout: row, col or none. A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
       text: z.string().nullable().describe('New text, only when the element’s text is editable and the request asks to change wording; otherwise null'),
       props: z.array(z.object({ name: z.string(), value: z.string() })).describe('Component property changes, only names listed as editable for that element, with one of its allowed values; [] if none'),
-      target: z.string().nullable().describe('For style edits: where to make the change. null lets Kerf choose (where the property is set now). Otherwise one of the element’s listed style targets: "element" (only this element), "table:NAME:KEY" (that entry of a style table, so every element using it), "table:NAME:*" (every entry), "css:NAME" (that CSS class everywhere), "const:NAME"'),
+      target: z.string().nullable().describe('For style edits: where to make the change. null lets Tovi choose (where the property is set now). Otherwise one of the element’s listed style targets: "element" (only this element), "table:NAME:KEY" (that entry of a style table, so every element using it), "table:NAME:*" (every entry), "css:NAME" (that CSS class everywhere), "const:NAME"'),
       action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'replace', 'group', 'ungroup', 'image', 'token', 'code']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit. token changes a design-system colour everywhere; code is a last-resort code change'),
       token: z.object({
         name: z.string().describe('A colour token name from the list'),
@@ -73,8 +73,8 @@ const Proposal = z.object({
   ),
 });
 
-const SYSTEM = `You are the design assistant inside Kerf, a Figma-style editor that changes a team's real React + Tailwind code.
-A designer points at elements on a live screen and says what should change. You answer with property edits on those elements; Kerf turns each edit into the right Tailwind class in the source and shows your proposal for approval before writing anything.
+const SYSTEM = `You are the design assistant inside Tovi, a Figma-style editor that changes a team's real React + Tailwind code.
+A designer points at elements on a live screen and says what should change. You answer with property edits on those elements; Tovi turns each edit into the right Tailwind class in the source and shows your proposal for approval before writing anything.
 
 Choose the best approach first, as a senior product designer who also reads code would:
 1. What does the designer really mean? Read the request against the screen. "Too bright" on a dark screen means lower contrast so it sits in the dark theme (a darker, quieter fill, softer text, a subtler border), not just darker text. "Make it pop" means more contrast or emphasis against what's around it.
@@ -101,13 +101,13 @@ How to work:
 - To arrange some siblings differently from the rest (e.g. put an input and a button side by side while the label stays above), group them: action group on the first one, groupWith the others, and groupClass for the new frame's layout. Then set Fill width on the child that should take the remaining space. Ungroup removes a plain wrapper and keeps its children.
 - New elements must fit the design: reuse the project's components where one fits, and use the project's tokens and scales in their classes.
 - Layout works like Figma auto layout: layout row/col/none (direction), alignItems start/center/end/stretch, justify start/center/end/between, wrap wrap/nowrap, gap, padX/padY, margins mX/mY (px or auto), and width/height w/h as hug, fill or a px size.
-- To put a new picture in an image (a photo, a drawing, "an illustration of…", "a picture of…"), use action image with imageSrc "photo: <4 to 12 words of what it shows>" for real photographs, or "illustration: <…>" for drawn or flat art. Kerf shows the designer options to pick from. Never say you can't create images.
+- To put a new picture in an image (a photo, a drawing, "an illustration of…", "a picture of…"), use action image with imageSrc "photo: <4 to 12 words of what it shows>" for real photographs, or "illustration: <…>" for drawn or flat art. Tovi shows the designer options to pick from. Never say you can't create images.
 - action token changes a design-system colour everywhere it's used: token.name from the token list, token.value #RRGGBB, token.theme light, dark or both.
 - action code is the last resort for visual changes no other action can make (classes computed in an unusual way, inline styles): code.file is the file shown for that element or its style sources, code.find an exact snippet of code you were shown that occurs once, code.replace the new text. Keep it minimal and visual only: never change logic, data, handlers or imports.
 - Always do what you can. If part of a request needs something not in your toolset yet (free positioning, animation, hover states, new pages), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
-- needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Kerf cannot make them yet; use not_yet for those.
+- needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Tovi cannot make them yet; use not_yet for those.
 - This can be a conversation: earlier turns are included. Read follow-ups ("smaller", "undo that", "try again but warmer") against what you proposed before and whether it was applied.
-- Never say whether anything changed ("Nothing changed yet", "I haven't changed anything", "No edits"): Kerf shows that itself, next to your reply. When the designer is only asking a question, just answer it.
+- Never say whether anything changed ("Nothing changed yet", "I haven't changed anything", "No edits"): Tovi shows that itself, next to your reply. When the designer is only asking a question, just answer it.
 - The message must describe only the edits you actually return. Write it for a designer, not a developer: plain words, no class names.`;
 
 function themeSummary(theme) {
@@ -209,7 +209,7 @@ const IMG_TYPES = /^image\/(jpeg|png|gif|webp)$/;
 const nameFor = (t) => designName(t.tag, t.text, { icon: !!t.lib });
 const noteOf = (e, t) => (Number.isInteger(e.note) && e.note > 0 ? e.note : Number.isInteger(t.note) ? t.note : null);
 
-// How far Kerf may go beyond the project's design system, chosen by the designer.
+// How far Tovi may go beyond the project's design system, chosen by the designer.
 const MODES = {
   system: 'Mode: On system. Use the project\'s own tokens and scales. If the design system itself is why the screen looks weak (a muddy or clashing palette, poor contrast, inconsistent type or spacing), still answer on-system but set suggest to { mode: "improve", why }.',
   improve: 'Mode: Improve the system. The designer thinks the current design system is part of the problem. Fix the foundation first: change colour tokens (action token) where the palette is weak, keeping each token\'s role (surface, content, primary…) and WCAG AA contrast, for the theme being shown (or both when it suits both). Then make element or source edits so the screen follows one clear type scale and a consistent spacing rhythm. In the message, describe the new direction in one sentence.',
@@ -224,7 +224,7 @@ const PRESETS = {
 
 export async function propose({ request, targets, history = [], images = [], tokens = [], webRoot = null, screen = null, context = null, mode = 'system', direction = null }, theme, library) {
   const key = apiKey();
-  if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
+  if (!key) throw new KerfError('Add your Anthropic key on Tovi’s start page (localhost:4100) to use AI.');
   if (!request || !String(request).trim()) throw new KerfError('Say or type what should change.');
   if (!targets?.length) throw new KerfError('Nothing on screen to work with. Select something or draw a note first.');
 
@@ -276,9 +276,9 @@ export async function propose({ request, targets, history = [], images = [], tok
       ],
     });
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError) throw new KerfError('Anthropic didn’t accept the saved key. Save a new one on Kerf’s start page.');
+    if (e instanceof Anthropic.AuthenticationError) throw new KerfError('Anthropic didn’t accept the saved key. Save a new one on Tovi’s start page.');
     if (e instanceof Anthropic.RateLimitError) throw new KerfError('Claude is busy right now. Try again in a moment.');
-    if (e instanceof Anthropic.APIError) { console.error('Kerf AI error:', e.status, e.message); throw new KerfError(`Claude couldn’t answer (${e.status}). Try again.`); }
+    if (e instanceof Anthropic.APIError) { console.error('Tovi AI error:', e.status, e.message); throw new KerfError(`Claude couldn’t answer (${e.status}). Try again.`); }
     throw e;
   }
   if (res.stop_reason === 'refusal') throw new KerfError('Claude declined this request. Try rewording it as a visual change.');

@@ -1,5 +1,5 @@
 // The Vite plugin: tags elements while the app runs in dev, and exposes a
-// small local API the Kerf editor calls to read and change source files.
+// small local API the Tovi editor calls to read and change source files.
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -26,11 +26,11 @@ function readBody(req) {
 const EDITOR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../editor');
 const ASSETS = { '/': ['index.html', 'text/html; charset=utf-8'], '/index.html': ['index.html', 'text/html; charset=utf-8'], '/editor.js': ['editor.js', 'text/javascript'], '/editor.css': ['editor.css', 'text/css'] };
 
-// Kerf for one web app: tags JSX so elements map back to source, and serves the editor and its API.
+// Tovi for one web app: tags JSX so elements map back to source, and serves the editor and its API.
 // Used by the Vite plugin below and by the Next.js runner.
 export async function createKerf(webRoot) {
   let theme = await loadTheme(webRoot);
-  // A token change in tailwind.config changes the theme Kerf reads.
+  // A token change in tailwind.config changes the theme Tovi reads.
   const setToken = async ({ name, hex, which = 'both', source = 'hand' }) => {
     const files = tokenEdit(webRoot, theme, name, hex, which);
     const r = editor.applyFiles(files, `token:${name}`, { token: { name, hex, which }, source }, { action: `Colour “${name}”${which === 'both' || which === 'all' ? '' : ` (${which})`} → ${String(hex).toUpperCase()}` });

@@ -1,5 +1,5 @@
 // What a designer can pick from: the project's own components, the icons in
-// its icon libraries, and images uploaded through Kerf.
+// its icon libraries, and images uploaded through Tovi.
 import fs from 'node:fs';
 import path from 'node:path';
 

@@ -26,7 +26,7 @@ export async function searchPhotos(q, orientation) {
   u.searchParams.set('content_filter', 'high');
   if (['landscape', 'portrait', 'squarish'].includes(orientation)) u.searchParams.set('orientation', orientation);
   const r = await fetch(u, { headers: { Authorization: `Client-ID ${key}`, 'Accept-Version': 'v1' } });
-  if (r.status === 401) throw new KerfError('Unsplash didn’t accept the saved key. Save the Access Key again on Kerf’s start page.');
+  if (r.status === 401) throw new KerfError('Unsplash didn’t accept the saved key. Save the Access Key again on Tovi’s start page.');
   if (r.status === 403) throw new KerfError('Unsplash’s hourly limit is reached. Try again in a little while.');
   if (!r.ok) throw new KerfError(`Unsplash couldn’t search right now (${r.status}).`);
   const j = await r.json();
@@ -76,7 +76,7 @@ const Drawings = z.object({
 
 export async function illustrate({ prompt, width = 1200, height = 900, palette = [], direction = '', count = 3 }) {
   const key = envKey('ANTHROPIC_API_KEY');
-  if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to draw illustrations.');
+  if (!key) throw new KerfError('Add your Anthropic key on Tovi’s start page (localhost:4100) to draw illustrations.');
   const ask = String(prompt || '').trim().slice(0, 600);
   if (!ask) throw new KerfError('Describe the illustration you want.');
   const w = Math.max(100, Math.min(2400, Math.round(+width || 1200))), h = Math.max(100, Math.min(2400, Math.round(+height || 900)));
@@ -100,9 +100,9 @@ Rules for every SVG:
       messages: [{ role: 'user', content: `Draw ${n} distinct illustration${n > 1 ? 's' : ''} (different compositions or viewpoints) of: ${ask}\n\nSite palette: ${palette.length ? palette.map((p) => `${p.name} ${p.hex}`).join(', ') : 'choose a calm, harmonious palette'}\n${direction ? `Design direction: ${direction}\n` : ''}Canvas: ${w}×${h}.` }],
     });
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError) throw new KerfError('Anthropic didn’t accept the saved key. Save a new one on Kerf’s start page.');
+    if (e instanceof Anthropic.AuthenticationError) throw new KerfError('Anthropic didn’t accept the saved key. Save a new one on Tovi’s start page.');
     if (e instanceof Anthropic.RateLimitError) throw new KerfError('Claude is busy right now. Try again in a moment.');
-    if (e instanceof Anthropic.APIError) { console.error('Kerf illustrate error:', e.status, e.message); throw new KerfError(`Claude couldn’t draw this (${e.status}). Try again.`); }
+    if (e instanceof Anthropic.APIError) { console.error('Tovi illustrate error:', e.status, e.message); throw new KerfError(`Claude couldn’t draw this (${e.status}). Try again.`); }
     throw e;
   }
   if (res.stop_reason === 'refusal') throw new KerfError('Claude declined to draw this. Try describing it differently.');

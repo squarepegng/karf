@@ -1,5 +1,5 @@
 // Open a project from a GitHub link or a folder: fetch it, find the web app
-// inside, install it, and start it with Kerf attached.
+// inside, install it, and start it with Tovi attached.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,24 +41,24 @@ function installedMajor(dir, name) {
   return null;
 }
 
-// Can Kerf open this app? Returns null if yes, or a plain reason why not.
+// Can Tovi open this app? Returns null if yes, or a plain reason why not.
 export function appProblem(dir) {
   const d = deps(readJson(path.join(dir, 'package.json')));
   const tw = TW_CONFIGS.find((f) => fs.existsSync(path.join(dir, f)));
-  if (!d.react) return 'Kerf works with React apps, and this one doesn’t use React.';
-  if (d['react-scripts']) return 'This app uses Create React App. Kerf supports apps built with Vite or Next.js.';
-  if (Object.keys(d).some((k) => k.startsWith('@remix-run/'))) return 'This is a Remix app. Kerf supports apps built with Vite or Next.js; Remix is not supported yet.';
-  if (d.astro) return 'This is an Astro site. Kerf supports React apps built with Vite or Next.js.';
-  if (d.gatsby) return 'This is a Gatsby site. Kerf supports apps built with Vite or Next.js.';
-  if (!d.next && !d.vite) return 'Kerf supports apps built with Vite or Next.js, and couldn’t tell how this one is built.';
-  if (d.next && (installedMajor(dir, 'next') ?? major(d.next)) < 13) return 'This app uses Next.js 12 or older. Kerf needs Next.js 13 or newer.';
-  if (!d.tailwindcss && !tw) return 'This app isn’t styled with Tailwind CSS, which Kerf uses to change styles.';
-  if ((installedMajor(dir, 'tailwindcss') ?? major(d.tailwindcss)) >= 4) return 'This app uses Tailwind CSS v4. Kerf works with Tailwind v3 today; v4 support is coming.';
-  if (!tw) return 'Kerf couldn’t find this app’s tailwind.config file.';
+  if (!d.react) return 'Tovi works with React apps, and this one doesn’t use React.';
+  if (d['react-scripts']) return 'This app uses Create React App. Tovi supports apps built with Vite or Next.js.';
+  if (Object.keys(d).some((k) => k.startsWith('@remix-run/'))) return 'This is a Remix app. Tovi supports apps built with Vite or Next.js; Remix is not supported yet.';
+  if (d.astro) return 'This is an Astro site. Tovi supports React apps built with Vite or Next.js.';
+  if (d.gatsby) return 'This is a Gatsby site. Tovi supports apps built with Vite or Next.js.';
+  if (!d.next && !d.vite) return 'Tovi supports apps built with Vite or Next.js, and couldn’t tell how this one is built.';
+  if (d.next && (installedMajor(dir, 'next') ?? major(d.next)) < 13) return 'This app uses Next.js 12 or older. Tovi needs Next.js 13 or newer.';
+  if (!d.tailwindcss && !tw) return 'This app isn’t styled with Tailwind CSS, which Tovi uses to change styles.';
+  if ((installedMajor(dir, 'tailwindcss') ?? major(d.tailwindcss)) >= 4) return 'This app uses Tailwind CSS v4. Tovi works with Tailwind v3 today; v4 support is coming.';
+  if (!tw) return 'Tovi couldn’t find this app’s tailwind.config file.';
   return null;
 }
 
-// Find folders that hold a React web app, up to three levels deep, with whether Kerf can open each.
+// Find folders that hold a React web app, up to three levels deep, with whether Tovi can open each.
 export function findApps(repoRoot) {
   const found = [];
   const visit = (dir, depth) => {
@@ -122,7 +122,7 @@ export async function openProject(source, onUpdate = () => {}) {
     step('Looking for a React + Tailwind app');
     const apps = findApps(repoRoot);
     job.apps = apps.map((a) => ({ rel: a.rel, name: a.name, framework: a.framework, problem: a.problem }));
-    if (!apps.length) throw new Error('Kerf didn’t find a React app in this project. It works with React apps built with Vite or Next.js and styled with Tailwind CSS.');
+    if (!apps.length) throw new Error('Tovi didn’t find a React app in this project. It works with React apps built with Vite or Next.js and styled with Tailwind CSS.');
     const app = apps.find((a) => !a.problem);
     if (!app) {
       const a = apps[0];
@@ -136,7 +136,7 @@ export async function openProject(source, onUpdate = () => {}) {
       await run(pm.cmd, pm.args, repoRoot, log);
     }
 
-    step('Starting the app with Kerf');
+    step('Starting the app with Tovi');
     const prev = projects.get(job.id);
     if (prev?.proc && prev.proc.exitCode === null) {
       job.url = prev.url;

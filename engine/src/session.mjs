@@ -32,14 +32,14 @@ export function createSession(webRoot, editor) {
     direction = d.direction || null;
     save();
   }
-  // Never commit Kerf's own folder.
+  // Never commit Tovi's own folder.
   function ignoreInGit() {
     try {
       const root = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd: webRoot, encoding: 'utf8' }).stdout.trim();
       if (!root) return;
       const ex = path.resolve(webRoot, root, 'info', 'exclude');
       const cur = fs.existsSync(ex) ? fs.readFileSync(ex, 'utf8') : '';
-      if (!cur.includes('.kerf/')) { fs.mkdirSync(path.dirname(ex), { recursive: true }); fs.appendFileSync(ex, (cur.endsWith('\n') || !cur ? '' : '\n') + '# Kerf session data\n**/.kerf/\n'); }
+      if (!cur.includes('.kerf/')) { fs.mkdirSync(path.dirname(ex), { recursive: true }); fs.appendFileSync(ex, (cur.endsWith('\n') || !cur ? '' : '\n') + '# Tovi session data\n**/.kerf/\n'); }
     } catch {}
   }
 
@@ -107,7 +107,7 @@ export function createSession(webRoot, editor) {
     // Porcelain lines start with a status column that can be a space, so don't trim them.
     const st = spawnSync('git', ['status', '--porcelain', '--', ...(files.length ? files : ['.'])], { cwd: root, encoding: 'utf8' }).stdout || '';
     const dirty = st.split('\n').filter((l) => l.length > 3).map((l) => l.slice(3));
-    // Images uploaded through Kerf and used in the changed files ship with the PR.
+    // Images uploaded through Tovi and used in the changed files ship with the PR.
     const ups = new Set();
     for (const h of editor.history) {
       let content = '';
@@ -123,7 +123,7 @@ export function createSession(webRoot, editor) {
   const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'design-updates';
   const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
 
-  // Commit Kerf's edits on a kerf/ branch, push it, and open (or update) the pull request.
+  // Commit Tovi's edits on a kerf/ branch, push it, and open (or update) the pull request.
   function pullRequest({ title, body, dryRun }) {
     if (peek) throw new KerfError('Close the before view first.');
     snapshot();
@@ -131,7 +131,7 @@ export function createSession(webRoot, editor) {
     if (!info.git) throw new KerfError('This project isn’t a Git repository, so there’s nothing to open a pull request on.');
     if (!info.files.length) throw new KerfError('There are no changes to send yet.');
     if (!info.remote) throw new KerfError('This project has no GitHub remote to push to.');
-    title = String(title || 'Design updates from Kerf').trim();
+    title = String(title || 'Design updates from Tovi').trim();
     const branch = info.branch.startsWith('kerf/') ? info.branch : `kerf/${slug(title)}-${stamp()}`;
     const plan = { branch, base: info.branch.startsWith('kerf/') ? null : info.branch, files: info.files, title };
     if (dryRun) return { dryRun: true, ...plan };
@@ -139,7 +139,7 @@ export function createSession(webRoot, editor) {
     try { git(['config', 'user.email'], info.root); } catch {
       // No git identity in this copy: use the GitHub account's noreply address if gh knows it.
       const u = hasGh() ? spawnSync('gh', ['api', 'user', '--jq', '.login + " " + (.id|tostring)'], { encoding: 'utf8' }).stdout.trim().split(' ') : [];
-      id.push('-c', `user.name=${u[0] || 'Kerf'}`, '-c', `user.email=${u[1] ? `${u[1]}+${u[0]}` : 'kerf'}@users.noreply.github.com`);
+      id.push('-c', `user.name=${u[0] || 'Tovi'}`, '-c', `user.email=${u[1] ? `${u[1]}+${u[0]}` : 'kerf'}@users.noreply.github.com`);
     }
     if (branch !== info.branch) git(['checkout', '-b', branch], info.root);
     git(['add', '--', ...info.files], info.root);

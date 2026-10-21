@@ -1,6 +1,6 @@
 // Where an element's classes really come from when they aren't one string on the element:
 // style tables (STATUS_STYLES[status]), constants, if/else branches, class objects,
-// and CSS classes built with @apply. Kerf edits the style where it lives, the way a developer would.
+// and CSS classes built with @apply. Tovi edits the style where it lives, the way a developer would.
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseCode } from './ast.mjs';

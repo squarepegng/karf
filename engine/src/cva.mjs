@@ -1,5 +1,5 @@
 // Variant components (shadcn-style `cva(base, { variants: { variant: {...}, size: {...} } })`).
-// Their styles live in the cva() call, so Kerf edits the base string or a variant's string there.
+// Their styles live in the cva() call, so Tovi edits the base string or a variant's string there.
 import { parseCode, walk } from './ast.mjs';
 
 function lit(n) {

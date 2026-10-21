@@ -1,4 +1,4 @@
-// Kerf editor. The team's real app runs in the iframe; this window holds the
+// Tovi editor. The team's real app runs in the iframe; this window holds the
 // editor around it (top bar, layers, design panel, toolbar). The iframe is
 // same-origin, so the editor reads and outlines the app's DOM directly.
 (() => {
@@ -362,8 +362,8 @@
     const n = S.versions.draft.length + S.versions.versions.reduce((a, v) => a + v.changes.length, 0);
     $('top').innerHTML = `<div class="tside">
         <button class="icon${S.layersOpen && S.mode === 'edit' ? ' on' : ''}" data-act="layersToggle" title="Layers" aria-label="Show or hide layers" ${S.mode === 'edit' ? '' : 'disabled'}>${ico('sidebar', 16)}</button>
-        <button class="logoBtn" data-act="kerfMenu" title="Kerf menu" aria-label="Kerf menu" aria-haspopup="menu">${ico('kerf', 16)}${ico('chev', 10)}</button>
-        <span class="crumbs"><span class="proj" title="${esc(p.repo || p.name || '')}">${esc(String(p.name || 'Kerf').split('/').pop())}</span><span class="sep">/</span><button class="pageBtn" data-act="pagesMenu" title="Pages" aria-haspopup="menu">${esc(pageName(S.path))}${ico('chev', 10)}</button></span>
+        <button class="logoBtn" data-act="kerfMenu" title="Tovi menu" aria-label="Tovi menu" aria-haspopup="menu">${ico('kerf', 16)}${ico('chev', 10)}</button>
+        <span class="crumbs"><span class="proj" title="${esc(p.repo || p.name || '')}">${esc(String(p.name || 'Tovi').split('/').pop())}</span><span class="sep">/</span><button class="pageBtn" data-act="pagesMenu" title="Pages" aria-haspopup="menu">${esc(pageName(S.path))}${ico('chev', 10)}</button></span>
       </div>
       <div class="tmid"><div class="bps" role="radiogroup" aria-label="Screen size">${Object.keys(DEVICES).map((d) => `<button class="${S.device === d ? 'on' : ''}" data-act="device" data-v="${d}" role="radio" aria-checked="${S.device === d}" title="${DEV_LABEL[d]} · ${devRange(d)}">${ico(d, 14)}<span>${DEV_LABEL[d]}</span></button>`).join('')}</div></div>
       <div class="tside r">
@@ -373,7 +373,7 @@
       </div>`;
   }
 
-  /* menus: one popover for the Kerf menu, pages, zoom and right-click */
+  /* menus: one popover for the Tovi menu, pages, zoom and right-click */
   function openMenu(items, at) {
     const m = $('menu');
     m.innerHTML = items.map((it, i) => it === '-' ? '<div class="msep"></div>' : it.input ? `<form class="minput" data-mi="${i}"><input placeholder="${esc(it.placeholder || '')}" value="${esc(it.value || '')}" spellcheck="false" aria-label="${esc(it.placeholder || '')}"></form>` : it.head ? `<div class="mhead">${esc(it.head)}</div>` : `<button class="mi${it.on ? ' on' : ''}${it.danger ? ' danger' : ''}" data-mi="${i}" ${it.disabled ? 'disabled' : ''} role="menuitem"><span class="mchk">${it.on ? ico('check', 12) : ''}</span><span class="ml">${esc(it.label)}${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</span>${it.kbd ? `<span class="mk">${esc(it.kbd)}</span>` : ''}</button>`).join('');
@@ -445,7 +445,7 @@
     openMenu([
       { head: dName(el) },
       ...(inf?.text?.editable ? [{ label: 'Edit text', kbd: '↵', run: () => beginText() }] : []),
-      { label: 'Ask Kerf about this…', kbd: '⌘K', run: () => toggleAI(true) },
+      { label: 'Ask Tovi about this…', kbd: '⌘K', run: () => toggleAI(true) },
       { label: 'Select parent', kbd: '⇧↵', disabled: !pick(el.parentElement), run: () => { const p = pick(el.parentElement); if (p) select(p); } },
       '-',
       { label: 'Duplicate', kbd: '⌘D', run: () => structure({ type: 'duplicate' }, { keepSel: true }) },
@@ -460,7 +460,7 @@
     ], at);
   }
   function shortcuts() {
-    const rows = [['Edit / Preview', 'E · P'], ['Annotate', 'A'], ['Ask Kerf', '⌘K'], ['Undo', '⌘Z'], ['Select parent', '⇧↵'], ['Duplicate', '⌘D'], ['Delete', '⌫'], ['Move up / down', '⌥↑ ⌥↓'], ['Group / ungroup', '⌥⌘G · ⇧⌘G'], ['Add element', 'I'], ['Measure spacing', 'hold ⌥'], ['Select several', '⇧ click'], ['Zoom in / out', '⌘+ · ⌘−'], ['Fit / 100%', '⇧1 · ⇧0'], ['Hide panels', '⇧\\']];
+    const rows = [['Edit / Preview', 'E · P'], ['Annotate', 'A'], ['Ask Tovi', '⌘K'], ['Undo', '⌘Z'], ['Select parent', '⇧↵'], ['Duplicate', '⌘D'], ['Delete', '⌫'], ['Move up / down', '⌥↑ ⌥↓'], ['Group / ungroup', '⌥⌘G · ⇧⌘G'], ['Add element', 'I'], ['Measure spacing', 'hold ⌥'], ['Select several', '⇧ click'], ['Zoom in / out', '⌘+ · ⌘−'], ['Fit / 100%', '⇧1 · ⇧0'], ['Hide panels', '⇧\\']];
     const m = $('modal');
     m.hidden = false;
     m.innerHTML = `<section class="dialog keys" role="dialog" aria-modal="true" aria-labelledby="kT"><div class="dh"><h2 id="kT">Keyboard shortcuts</h2><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div><div class="db"><div class="krows">${rows.map(([a, k]) => `<div class="kr"><span>${a}</span><span class="kk">${k}</span></div>`).join('')}</div></div></section>`;
@@ -571,8 +571,8 @@
       </div>
       <span class="div"></span>
       ${S.mode === 'preview'
-        ? `<button class="tb${S.askOpen ? ' on' : ''}" data-act="ask" aria-label="Ask Kerf">${ico('spark', 16)}${tip('Ask Kerf', '⌘K')}</button>`
-        : `<button class="tb${S.tab === 'chat' ? ' on' : ''}" data-act="chatToggle" aria-label="Chat with Kerf">${ico('spark', 16)}${tip('Chat with Kerf', '⌘K')}</button>`}
+        ? `<button class="tb${S.askOpen ? ' on' : ''}" data-act="ask" aria-label="Ask Tovi">${ico('spark', 16)}${tip('Ask Tovi', '⌘K')}</button>`
+        : `<button class="tb${S.tab === 'chat' ? ' on' : ''}" data-act="chatToggle" aria-label="Chat with Tovi">${ico('spark', 16)}${tip('Chat with Tovi', '⌘K')}</button>`}
       ${S.mode === 'edit' ? `<button class="tb" data-act="insertMenu" aria-label="Add element">${ico('plus', 16)}${tip('Add element', 'I')}</button>` : ''}
       <button class="tb${S.tool === 'annotate' ? ' on' : ''}" data-act="tool" data-v="annotate" aria-label="Annotate">${ico('pen', 16)}${tip('Annotate', 'A')}</button>
       ${S.tool === 'annotate' ? `<div class="shapes">${['pin', 'box', 'circle', 'arrow'].map((k, i) => `<button class="tb sm${S.shape === k ? ' on' : ''}" data-act="shape" data-v="${k}" aria-label="${k}">${ico(k, 14)}${tip(k[0].toUpperCase() + k.slice(1), String(i + 1))}</button>`).join('')}</div>` : ''}
@@ -581,7 +581,7 @@
       <button class="tb" data-act="changes" aria-label="Changes">${ico('list', 16)}${S.count ? '<i class="badgeDot" style="box-shadow:0 0 0 2px var(--raised)"></i>' : ''}${tip('Changes this session')}</button>`;
     const h = $('hint');
     h.hidden = true;
-    if (!h.hidden) h.innerHTML = `Use your app normally. Press <span class="kbd">E</span> to edit a screen, <span class="kbd">A</span> to annotate, or <span class="kbd">⌘K</span> to ask Kerf.`;
+    if (!h.hidden) h.innerHTML = `Use your app normally. Press <span class="kbd">E</span> to edit a screen, <span class="kbd">A</span> to annotate, or <span class="kbd">⌘K</span> to ask Tovi.`;
   }
 
   /* ---------- layers ---------- */
@@ -626,7 +626,7 @@
     const st = tree ? tree.scrollTop : 0;
     const changes = S.versions.draft;
     box.innerHTML = `<div class="lhead"><span>Layers</span><button class="lpage" data-act="pagesMenu" title="Pages">${esc(pageName(S.path))}${ico('chev', 10)}</button></div>
-      <div class="tree">${rows.join('') || '<div class="empty">This page has no elements Kerf can edit yet.</div>'}</div>
+      <div class="tree">${rows.join('') || '<div class="empty">This page has no elements Tovi can edit yet.</div>'}</div>
       ${changes.length ? `<button class="lchanges" data-act="history" title="Open version history"><span class="dot"></span><span>${changes.length} unsaved change${changes.length === 1 ? '' : 's'}</span>${ico('chevR', 10)}</button>` : ''}`;
     box.querySelector('.tree').scrollTop = st;
     const onRow = box.querySelector('.layer.on');
@@ -867,7 +867,7 @@
       ${v.map((x) => `<div class="ver${peeking === x.n ? ' on' : ''}"><div class="vh"><span>Version ${x.n}</span><span>${time(x.at)}</span></div>
         ${x.changes.slice(0, 5).map((c) => `<span class="ch">${c.source === 'ai' ? '<span class="src">AI</span> ' : ''}${chLabel(c)}</span>`).join('')}${x.changes.length > 5 ? `<span class="note">and ${x.changes.length - 5} more</span>` : ''}
         <div class="acts"><button class="outline" data-act="peek" data-v="${x.n}">${peeking === x.n ? 'Back to now' : 'Show before'}</button><button class="ghostBtn" data-act="restore" data-v="${x.n - 1}" title="Undo this version and everything after it">Undo from here</button></div></div>`).join('')}
-      ${!v.length && !draft.length ? `<div class="empty"><b>No versions yet</b><span>Each time you go from Edit back to Preview, Kerf saves your changes as a version. Here you can see the screen before a version or undo back to it.</span></div>` : ''}
+      ${!v.length && !draft.length ? `<div class="empty"><b>No versions yet</b><span>Each time you go from Edit back to Preview, Tovi saves your changes as a version. Here you can see the screen before a version or undo back to it.</span></div>` : ''}
       </div>`;
   }
   function renderPeek() {
@@ -934,7 +934,7 @@
     return [...container.children];
   }
   function loop() {
-    try { frameStep(); } catch (e) { if (!loop.warned) { console.warn('Kerf: drawing step failed', e); loop.warned = true; } }
+    try { frameStep(); } catch (e) { if (!loop.warned) { console.warn('Tovi: drawing step failed', e); loop.warned = true; } }
     requestAnimationFrame(loop);
   }
   function frameStep() {
@@ -967,7 +967,7 @@
     try { W = frame.contentWindow; D = frame.contentDocument; } catch { W = D = null; }
     if (!W || !D) return;
     S.sel = null; S.hover = null;
-    // An input the app focuses on load would swallow Kerf's shortcuts (E, A…): release it until the user clicks in the app.
+    // An input the app focuses on load would swallow Tovi's shortcuts (E, A…): release it until the user clicks in the app.
     let touched = false;
     W.addEventListener('pointerdown', () => { touched = true; }, true);
     [0, 300, 1200].forEach((ms) => setTimeout(() => { const a = D.activeElement; if (!touched && a && a !== D.body && /^(input|textarea|select)$/i.test(a.tagName)) a.blur(); }, ms));
@@ -1245,9 +1245,9 @@
     const m = $('modal');
     m.hidden = false;
     m.innerHTML = `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="prT">
-      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="prT">Hand off to developers</h2><span class="note">Kerf sends your changes as one pull request on GitHub. Developers review it before anything goes live.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="prT">Hand off to developers</h2><span class="note">Tovi sends your changes as one pull request on GitHub. Developers review it before anything goes live.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
       <div class="db">
-        ${!p.repo ? `<span class="note warn">This project isn’t connected to a GitHub repository, so Kerf can’t open a pull request for it.</span>` : ''}
+        ${!p.repo ? `<span class="note warn">This project isn’t connected to a GitHub repository, so Tovi can’t open a pull request for it.</span>` : ''}
         <label><span class="secT">Title</span><input class="fld" id="prTitle" value="${esc(title)}"></label>
         <label><span class="secT">Note for your developers <span class="note" style="font-weight:400">(optional)</span></span><textarea class="fld" id="prBody" rows="3" placeholder="Anything they should know, e.g. why you made these changes"></textarea></label>
         <div style="display:flex;align-items:center;gap:8px;color:var(--ink2)"><span class="chip mono" style="color:var(--ink)">${p.branch?.startsWith('kerf/') ? esc(p.branch) : 'kerf/…'}</span>→<span class="chip mono" style="color:var(--ink)">${esc(p.branch?.startsWith('kerf/') ? 'its pull request' : p.branch || 'main')}</span>${p.repo ? `<span class="note">${esc(p.repo)}</span>` : ''}</div>
@@ -1261,7 +1261,7 @@
     btn.innerHTML = '<i class="spin"></i>Sending to GitHub…';
     try {
       const all = S.prAll || [], note = $('prBody').value.trim();
-      const body = `${note ? note + '\n\n' : ''}### What changed\n${all.map((c) => `- ${c.source === 'ai' ? '(AI) ' : ''}${c.name ? `**${c.name}**: ` : ''}${c.label}`).join('\n')}\n\n<details><summary>Code changes</summary>\n\n${all.map((c) => `- \`${c.file}\`: ${c.code || c.label}`).join('\n')}\n</details>\n\nMade with Kerf.`;
+      const body = `${note ? note + '\n\n' : ''}### What changed\n${all.map((c) => `- ${c.source === 'ai' ? '(AI) ' : ''}${c.name ? `**${c.name}**: ` : ''}${c.label}`).join('\n')}\n\n<details><summary>Code changes</summary>\n\n${all.map((c) => `- \`${c.file}\`: ${c.code || c.label}`).join('\n')}\n</details>\n\nMade with Tovi.`;
       const r = await api('/pr', { title: $('prTitle').value, body });
       $('modal').innerHTML = `<section class="dialog" role="dialog" aria-modal="true"><div class="db" style="padding:20px;gap:10px">
         <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:8px;background:var(--raised)">${ico('check', 16)}</span>
@@ -1348,7 +1348,7 @@
     clearTimeout(chatT);
     chatT = setTimeout(() => api('/chat', { messages: S.chat.filter((m) => !m.busy).map(({ targets, ...m }) => m), notes: S.notes }).catch(() => {}), 300);
   }
-  /* style modes: how far Kerf may go beyond the project's design system */
+  /* style modes: how far Tovi may go beyond the project's design system */
   const MODE_LABEL = { system: 'On system', improve: 'Improve the system', explore: 'Explore freely' };
   const PRESET = { calm: ['Calm & precise', 'One accent, lots of space, crisp hierarchy'], warm: ['Warm & editorial', 'Warm neutrals, expressive type, soft corners'], bold: ['Bold & playful', 'Saturated colour, big type, rounded shapes'], minimal: ['Minimal', 'Near-monochrome, few elements, thin lines'] };
   const modeKey = () => `kerf.mode.${S.project?.name || 'app'}`;
@@ -1359,7 +1359,7 @@
   const dirName = () => (S.direction ? PRESET[S.direction.preset]?.[0] || (S.direction.text ? 'Custom' : '') : '');
   function modePill() {
     const m = S.styleMode, d = m !== 'system' && dirName();
-    return `<button type="button" class="kcMode ${m}" data-act2="modeMenu" title="How far Kerf may go beyond your design system">${ico(m === 'system' ? 'comp' : m === 'improve' ? 'spark' : 'pen', 12)}<span>${esc(MODE_LABEL[m])}${d ? ` · ${esc(d)}` : ''}</span>${ico('chev', 10)}</button>`;
+    return `<button type="button" class="kcMode ${m}" data-act2="modeMenu" title="How far Tovi may go beyond your design system">${ico(m === 'system' ? 'comp' : m === 'improve' ? 'spark' : 'pen', 12)}<span>${esc(MODE_LABEL[m])}${d ? ` · ${esc(d)}` : ''}</span>${ico('chev', 10)}</button>`;
   }
   function setStyleMode(m) {
     S.styleMode = m;
@@ -1385,7 +1385,7 @@
     const m = $('modal');
     m.hidden = false;
     m.innerHTML = `<section class="dialog dirD" role="dialog" aria-modal="true" aria-labelledby="dirT">
-      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="dirT">What feel are you going for?</h2><span class="note">Kerf follows this direction when it improves or explores. You can change it anytime.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="dirT">What feel are you going for?</h2><span class="note">Tovi follows this direction when it improves or explores. You can change it anytime.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
       <div class="db">
         <div class="dirGrid">${Object.entries(PRESET).map(([k, [n, sub]]) => `<button class="dirCard${S._dir.preset === k ? ' on' : ''}" data-act2="dirPreset" data-v="${k}"><b>${n}</b><span>${sub}</span></button>`).join('')}</div>
         <label><span class="secT">Describe it <span class="note" style="font-weight:400">(optional)</span></span><textarea class="fld" id="dirText" rows="2" placeholder="e.g. Feel like a premium research tool: confident, quiet, data first">${esc(S._dir.text)}</textarea></label>
@@ -1468,7 +1468,7 @@
     saveChat();
   }
   const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: 'No changes to your app' };
-  // Status is shown by Kerf, not written into the reply: drop a leading "Nothing changed yet." if the model adds one.
+  // Status is shown by Tovi, not written into the reply: drop a leading "Nothing changed yet." if the model adds one.
   const cleanMsg = (t) => { const x = String(t || '').replace(/^\s*(nothing (has )?changed( yet)?|no changes( were)?( made)?( yet)?|i (haven[’']t|have not) changed anything( yet)?)\s*[.:;,—–-]*\s*/i, ''); return x ? x[0].toUpperCase() + x.slice(1) : String(t || ''); };
   const chosen = (m) => m.proposal.edits.filter((e, k) => !(m.off || []).includes(k) && !(m.skip || []).includes(e.note ?? 0) && e.structure?.type !== 'imageAsk');
   // Each proposed change shows where it stands: to do, applying, done, failed or left out.
@@ -1510,7 +1510,7 @@
     }
   }
   const NSTAT = { done: ['Done', 'ok'], partial: ['Partly', 'part'], not_possible: ['Not here', 'no'] };
-  // Notes answered one by one: the mark's number, what was asked, what Kerf did, and its edits.
+  // Notes answered one by one: the mark's number, what was asked, what Tovi did, and its edits.
   function notesHTML(m, i) {
     const p = m.proposal, texts = m.noteTexts || [];
     const count = Math.max(texts.length, ...p.notes.map((n) => n.note), ...p.edits.map((e) => e.note || 0));
@@ -1539,7 +1539,7 @@
     if (m.busy) return `<div class="prop">${stepsHTML(m, true)}<div class="kLive"><i class="kSpin"><b></b><b></b><b></b><b></b></i><span class="kT" data-since="${m.started || Date.now()}">${liveText(m.started)}</span></div></div>`;
     if (m.error) return `<div class="prop err">${stepsHTML(m)}<span class="note warn">${esc(m.error)}</span></div>`;
     const p = m.proposal;
-    const badge = { partial: 'Partly possible', not_yet: 'Not possible in Kerf yet', needs_developer: 'For developers' }[p.scope];
+    const badge = { partial: 'Partly possible', not_yet: 'Not possible in Tovi yet', needs_developer: 'For developers' }[p.scope];
     const byNote = p.notes?.length && p.edits.length + p.notes.length > 1;
     const n = chosen(m).length;
     const status = STATUS[m.status] ? `<span class="kStatus ${m.status}">${m.status === 'applied' ? ico('check', 12) : m.status === 'info' ? '<i class="kNo"></i>' : ''}${STATUS[m.status]}</span>` : '';
@@ -1553,7 +1553,7 @@
       ${suggest}${keep}
       ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="primary applyBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${p.mode === 'explore' ? (n < p.edits.length ? `Try ${n} of ${p.edits.length}` : 'Try this look') : n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
   }
-  // "Looked at 14 elements · Thought for 9s", which opens to show what Kerf read.
+  // "Looked at 14 elements · Thought for 9s", which opens to show what Tovi read.
   function stepsHTML(m, live) {
     const n = m.lookedN || m.looked?.length || 0;
     if (!n) return '';
@@ -1567,7 +1567,7 @@
   };
   // Tick the live timers without re-drawing the conversation.
   setInterval(() => document.querySelectorAll('[data-since]').forEach((el) => { el.textContent = liveText(+el.dataset.since); }), 1000);
-  /* Kerf's floating card: drag it by its header, or collapse it to a slim bar so the page stays visible */
+  /* Tovi's floating card: drag it by its header, or collapse it to a slim bar so the page stays visible */
   S.cardPos = {};
   S.cardMin = false;
   function cardShell(where, label, m, body) {
@@ -1604,18 +1604,18 @@
   });
   document.addEventListener('pointerup', () => { if (cardDrag) { cardDrag = null; document.body.classList.remove('dragging'); } });
   document.addEventListener('dblclick', (e) => { if (e.target.closest?.('[data-drag]') && !e.target.closest('button')) { S.cardMin = !S.cardMin; renderAI(); } });
-  const replyForm = (where) => composer('replyIn', { form: 'reply', where, placeholder: 'Reply to Kerf…' });
+  const replyForm = (where) => composer('replyIn', { form: 'reply', where, placeholder: 'Reply to Tovi…' });
   function renderAsk() {
     const a = $('ask');
     a.hidden = !(S.askOpen && S.mode === 'preview');
     if (a.hidden) return;
     const m = S.card && S.card.where === 'ask' ? S.card : null;
     if (m) {
-      a.innerHTML = cardShell('ask', 'Kerf', m, () => `${kerfHTML(m, S.chat.indexOf(m))}${m.busy ? '' : replyForm('ask')}`);
+      a.innerHTML = cardShell('ask', 'Tovi', m, () => `${kerfHTML(m, S.chat.indexOf(m))}${m.busy ? '' : replyForm('ask')}`);
       placeCard(a, 'ask');
       if (!m.busy) setTimeout(() => { $('replyIn')?.focus(); syncKC('replyIn'); }, 0);
     } else {
-      a.innerHTML = `${composer('askIn', { form: 'ask', big: true, lead: `<span class="spark">${ico('spark', 16)}</span>`, placeholder: 'Ask Kerf to change something on this screen' })}
+      a.innerHTML = `${composer('askIn', { form: 'ask', big: true, lead: `<span class="spark">${ico('spark', 16)}</span>`, placeholder: 'Ask Tovi to change something on this screen' })}
         <div class="askHints">${['Make this page feel more premium', 'Make the text easier to read', 'Tighten the spacing'].map((s) => `<button data-act2="askHint" data-v="${s}">${s}</button>`).join('')}</div>`;
       setTimeout(() => { $('askIn')?.focus(); syncKC('askIn'); }, 0);
     }
@@ -1623,7 +1623,7 @@
   function chatHTML() {
     const ctx = S.sel ? esc(dName(S.sel.el)) : 'Whole screen';
     const msgs = S.chat.map((m, i) => (m.role === 'user' ? `<div class="uMsg"><span class="uCtx">${esc(m.ctx)}</span>${m.atts?.length ? `<div class="uAtt">${m.atts.map((a) => `<img src="${a.thumb}" alt="${esc(a.name)}" title="${esc(a.name)}">`).join('')}</div>` : ''}<div class="bub">${esc(m.shown || m.text)}</div></div>` : `<div class="kMsg">${kerfHTML(m, i)}</div>`)).join('');
-    return `<div class="chatScroll" id="chatScroll">${msgs || `<div class="chatEmpty"><span class="ceMark">${ico('spark', 20)}</span><b>What should change?</b><span>Select something, or ask about the whole screen. Kerf proposes the edit first, and you approve it.</span><div class="ceHints">${['Make this feel more premium', 'Improve the contrast', 'Tighten the spacing'].map((t) => `<button data-act2="chatHint" data-v="${t}">${t}</button>`).join('')}</div></div>`}</div>
+    return `<div class="chatScroll" id="chatScroll">${msgs || `<div class="chatEmpty"><span class="ceMark">${ico('spark', 20)}</span><b>What should change?</b><span>Select something, or ask about the whole screen. Tovi proposes the edit first, and you approve it.</span><div class="ceHints">${['Make this feel more premium', 'Improve the contrast', 'Tighten the spacing'].map((t) => `<button data-act2="chatHint" data-v="${t}">${t}</button>`).join('')}</div></div>`}</div>
       <div class="comp">${composer('chatIn', { form: 'chat', ctx, placeholder: 'Describe a change, or follow up…' })}</div>`;
   }
   function sendChat() {
@@ -1644,7 +1644,7 @@
       <div class="kcRow">${o.lead || ''}<textarea id="${id}" rows="1" placeholder="${esc(o.placeholder)}" aria-label="${esc(o.placeholder)}">${esc(S.drafts[id] || '')}</textarea></div>
       <div class="kcBar">
         <button type="button" class="kcB" data-act2="attach" data-id="${id}" title="Attach images · or paste / drop them here" aria-label="Attach images">${ico('clip', 15)}</button>
-        ${o.ctx ? `<span class="kcCtx" title="What Kerf will look at">${ico(S.sel ? 'frame' : 'desktop', 12)}${o.ctx}</span>` : ''}
+        ${o.ctx ? `<span class="kcCtx" title="What Tovi will look at">${ico(S.sel ? 'frame' : 'desktop', 12)}${o.ctx}</span>` : ''}
         ${o.form !== 'note' ? modePill() : ''}
         <span class="sp"></span>
         ${SR ? `<button type="button" class="kcB mic${rec ? ' rec' : ''}" data-act2="mic" data-id="${id}" title="${rec ? 'Stop dictation' : 'Dictate, in any language'}" aria-label="${rec ? 'Stop dictation' : 'Dictate'}">${ico('mic', 15)}</button>` : ''}
@@ -1690,7 +1690,7 @@
   const b64 = (file) => new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(file); });
   async function addFiles(id, files) {
     const list = [...files].filter((x) => /^image\/(png|jpeg|gif|webp|svg\+xml|avif)$/.test(x.type));
-    if (!list.length) { toast('Kerf can read images: PNG, JPG, GIF, WebP or SVG.', '', true); return; }
+    if (!list.length) { toast('Tovi can read images: PNG, JPG, GIF, WebP or SVG.', '', true); return; }
     const cur = (S.att[id] ||= []);
     for (const file of list) {
       if (cur.length >= 4) { toast('Up to 4 images per message.', '', true); break; }
@@ -1700,7 +1700,7 @@
         const img = await loadImg(url);
         const ext = { 'image/jpeg': 'jpg', 'image/svg+xml': 'svg' }[file.type] || file.type.split('/')[1];
         const name = file.name && file.name !== 'image.png' ? file.name : `pasted-image.${ext}`;
-        // Claude sees a resized copy; the original goes into the project only if Kerf places it in the design.
+        // Claude sees a resized copy; the original goes into the project only if Tovi places it in the design.
         cur.push({ name, type: 'image/jpeg', data: shrink(img, 1568, 0.85).split(',')[1], thumb: shrink(img, 160, 0.8), orig: await b64(file) });
       } catch { toast(`Couldn’t read ${file.name}.`, '', true); } finally { URL.revokeObjectURL(url); }
     }
@@ -1784,10 +1784,10 @@
     // A tray above the toolbar: every note with its number and text, then one clear action.
     if (!chip.hidden) {
       const n = S.notes.length;
-      chip.innerHTML = `<div class="ntHead"><span class="ntTitle">${ico('pen', 13)}${n} note${n === 1 ? '' : 's'} for Kerf</span><button class="ghostBtn sm" data-act2="notesClear" title="Remove all notes">Clear all</button></div>
+      chip.innerHTML = `<div class="ntHead"><span class="ntTitle">${ico('pen', 13)}${n} note${n === 1 ? '' : 's'} for Tovi</span><button class="ghostBtn sm" data-act2="notesClear" title="Remove all notes">Clear all</button></div>
         <div class="ntList">${S.notes.map((x, i) => `<div class="ntRow" data-note="${i + 1}"><i class="nNum">${i + 1}</i><span class="ntText">${esc(x.text)}${x.atts?.length ? ` <em>· ${x.atts.length} image${x.atts.length === 1 ? '' : 's'}</em>` : ''}</span><button class="ntDel" data-act2="noteDel" data-i="${i}" title="Remove this note" aria-label="Remove note ${i + 1}">${ico('x', 12)}</button></div>`).join('')}</div>
         <div class="ntFoot">${modePill()}</div>
-        <button class="primary ntGo" data-act2="notesApply" ${busy ? 'disabled' : ''}>${busy ? '<i class="spin"></i>Kerf is reading your notes…' : `${ico('spark', 14)}Ask Kerf to fix ${n === 1 ? 'this' : `all ${n}`}`}</button>`;
+        <button class="primary ntGo" data-act2="notesApply" ${busy ? 'disabled' : ''}>${busy ? '<i class="spin"></i>Tovi is reading your notes…' : `${ico('spark', 14)}Ask Tovi to fix ${n === 1 ? 'this' : `all ${n}`}`}</button>`;
     }
     const pop = $('notePop');
     pop.hidden = !S.noteDraft;
@@ -1796,7 +1796,7 @@
       const ax = (n.shape === 'arrow' ? n.x2 : n.x + (n.w || 0)) - W.scrollX + 12, ay = (n.shape === 'arrow' ? n.y2 : n.y) - W.scrollY;
       pop.style.transform = `translate(${Math.min(ow - 332 / S.z, Math.max(12, ax))}px,${Math.min(oh - 180 / S.z, Math.max(12, ay))}px) scale(${1 / S.z})`;
       if (!pop.dataset.open) {
-        pop.innerHTML = `<div class="secH"><span>Note ${S.notes.length + 1}</span>${hb('noteDiscard2', 'x', 'Discard', '', 'data-act2="noteDiscard"')}</div>${composer('noteIn', { form: 'note', send: 'Add note', placeholder: 'What should change here?' })}<span class="note">Kerf reads the code under this mark.</span>`;
+        pop.innerHTML = `<div class="secH"><span>Note ${S.notes.length + 1}</span>${hb('noteDiscard2', 'x', 'Discard', '', 'data-act2="noteDiscard"')}</div>${composer('noteIn', { form: 'note', send: 'Add note', placeholder: 'What should change here?' })}<span class="note">Tovi reads the code under this mark.</span>`;
         pop.dataset.open = '1';
         setTimeout(() => { $('noteIn')?.focus(); syncKC('noteIn'); }, 0);
       }
@@ -1804,7 +1804,7 @@
     const res = $('noteRes');
     const m = S.card && S.card.where === 'notes' && !S.card.busy ? S.card : null;
     res.hidden = !m;
-    if (m) { res.innerHTML = cardShell('notes', 'Kerf · notes', m, () => `${kerfHTML(m, S.chat.indexOf(m))}${replyForm('notes')}`); placeCard(res, 'notes'); }
+    if (m) { res.innerHTML = cardShell('notes', 'Tovi · notes', m, () => `${kerfHTML(m, S.chat.indexOf(m))}${replyForm('notes')}`); placeCard(res, 'notes'); }
     else placeCard(res, 'notes', true);
   }
   function renderAI() {
@@ -1928,7 +1928,7 @@
       else if (act === 'pickKind') { if (S.pick) { S.pick.kind = v; S.pick.prompt = $('pickQ')?.value || S.pick.prompt; renderPicker(); if (S.pick.prompt && !(v === 'photo' ? S.pick.photos : S.pick.drawings)) runPicker(); } }
       else if (act === 'pickImg') { if (S.pick) chooseImage(S.pick, +a.dataset.i); }
       else if (act === 'imgOptions') {
-        // A proposed image: open the picker with Kerf's description; the pick fills in this edit.
+        // A proposed image: open the picker with Tovi's description; the pick fills in this edit.
         const m = S.chat[+a.dataset.i], e2 = m?.proposal.edits[+a.dataset.e];
         if (!m || !e2) return;
         const el = D?.querySelector(q(e2.loc));
@@ -2010,7 +2010,7 @@
     setTimeout(async () => {
       if (!D?.querySelector('vite-error-overlay')) return;
       await api('/undo', {}).catch(() => {});
-      toast('That change broke the page, so Kerf undid it.', '', true);
+      toast('That change broke the page, so Tovi undid it.', '', true);
       afterEdit();
       setTimeout(() => D?.querySelector('vite-error-overlay')?.remove(), 1500);
     }, 1500);
@@ -2056,7 +2056,7 @@
     const grid = P.busy
       ? `<div class="pkWait"><i class="kSpin"><b></b><b></b><b></b><b></b></i><span data-since="${P.started}">${liveText(P.started)}</span><span class="note">${P.kind === 'photo' ? 'Searching Unsplash…' : 'Claude is drawing 3 options in your colours. This takes about 30 seconds.'}</span></div>`
       : P.error ? `<div class="pkNone warn">${esc(P.error)}</div>`
-      : P.needsKey ? `<div class="pkNone">Photo search needs a free Unsplash key. Add it on <a href="http://localhost:4100" target="_blank" rel="noopener">Kerf’s start page</a>, then search again.</div>`
+      : P.needsKey ? `<div class="pkNone">Photo search needs a free Unsplash key. Add it on <a href="http://localhost:4100" target="_blank" rel="noopener">Tovi’s start page</a>, then search again.</div>`
       : !res ? `<div class="pkNone">${P.kind === 'photo' ? 'Describe the photo you want, e.g. “hands shaping a clay bowl”.' : 'Describe the illustration, e.g. “a person arranging ceramics on a shelf”.'}</div>`
       : !res.length ? '<div class="pkNone">Nothing found. Try other words.</div>'
       : P.kind === 'photo'
