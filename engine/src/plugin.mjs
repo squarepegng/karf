@@ -105,7 +105,7 @@ export async function createKerf(webRoot) {
           }).filter(Boolean);
           let tokens = [];
           try { tokens = listTokens(webRoot, theme); } catch {}
-          return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images, tokens, webRoot }, theme, library));
+          return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images, tokens, webRoot, screen: body.screen, context: body.context }, theme, library));
         }
         if (route === '/ai/apply') {
           // Apply from the bottom of each file up, structure last per element, so positions stay valid.

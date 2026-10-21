@@ -79,6 +79,12 @@ Choose the best approach first, as a senior product designer who also reads code
 4. Prefer, in order: style edits on the element or its source, then component properties, then token edits (only when the request is about the palette or theme itself, since a token changes every screen), then code edits (only when nothing else can do it).
 Start message with that approach in one plain sentence that says the reach, e.g. "Your status chips take their colours from one table used in 4 files, so I gave all four a darker fill and softer text there."
 
+Work like a sharp collaborator:
+- Resolve references from context: "this", "it", "here" mean the selection (or the element under the note's mark); follow-ups like "more", "smaller", "the other one" refer to your last proposal.
+- Keep sets consistent: when the target is one of a group of similar elements (cards, nav items, list rows, chips), change their shared source or all of them, unless the designer says "only this one".
+- Be decisive: for vague requests ("make it pop", "more premium"), make tasteful, on-system choices and say in one sentence what you chose. Ask one short question (and return no edits) only when two very different readings are equally likely.
+- Keep the message to one or two plain sentences. Don't list every class; the edit list shows the details.
+
 How to work:
 - When the request has numbered notes (the designer marked parts of the screen), answer each note on its own: set note on every edit, and fill notes with one entry per note saying what you changed for it or why it could not be done. Elements tagged (note N) sit under that note's mark. Keep message to one short overall sentence.
 - Only edit elements from the list you are given, by their exact id. Prefer the fewest edits that achieve the request.
@@ -126,6 +132,7 @@ function libSummary(library) {
 function describeTarget(t, i) {
   if (t.imgSrc) t = { ...t, text: `image: ${t.imgSrc}${t.alt ? ` (alt: ${t.alt})` : ''}` };
   const lines = [`[${t.loc}] <${t.tag}>${t.shared ? ' (component definition: editing it changes every place it’s used)' : ''}${t.instance ? ' (this one use of the component: delete, move or restyle just this one here)' : ''}${t.note != null ? ` (note ${t.note})` : ''}`];
+  if (Array.isArray(t.box) && t.box.length === 4) lines.push(`  box: ${t.box.map((n) => Math.round(+n || 0)).join(',')}${t.name ? ` · ${String(t.name).slice(0, 60)}` : ''}`);
   if (t.text) lines.push(`  text: ${JSON.stringify(t.text.slice(0, 100))}${t.textEditable ? ' (editable)' : ' (not editable)'}`);
   if (t.classes?.length) lines.push(`  classes: ${t.classes.join(' ')}`);
   if (t.measured) lines.push(`  measured: ${Object.entries(t.measured).map(([k, v]) => `${k} ${v}`).join(', ')}`);
@@ -197,7 +204,7 @@ const IMG_TYPES = /^image\/(jpeg|png|gif|webp)$/;
 const nameFor = (t) => designName(t.tag, t.text, { icon: !!t.lib });
 const noteOf = (e, t) => (Number.isInteger(e.note) && e.note > 0 ? e.note : Number.isInteger(t.note) ? t.note : null);
 
-export async function propose({ request, targets, history = [], images = [], tokens = [], webRoot = null }, theme, library) {
+export async function propose({ request, targets, history = [], images = [], tokens = [], webRoot = null, screen = null, context = null }, theme, library) {
   const key = apiKey();
   if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
   if (!request || !String(request).trim()) throw new KerfError('Say or type what should change.');
@@ -215,10 +222,21 @@ export async function propose({ request, targets, history = [], images = [], tok
     }
     return saved.get(n);
   };
-  const lastText = `Elements on screen:\n${targets.map(describeTarget).join('\n')}\n\n${imgs.length ? `The designer attached ${imgs.length} image${imgs.length > 1 ? 's' : ''} (above). Treat them as a reference to match, a screenshot pointing at a problem, or an image to put in the design, whichever the request means. To place one, use imageSrc "attachment:N" (or src="attachment:N" in insertJsx).\n\n` : ''}Request:\n${request}`;
-  const lastContent = imgs.length
-    ? [...imgs.flatMap((im, n) => [{ type: 'text', text: `Attachment ${n + 1}: ${String(im.name || 'image').slice(0, 80)}` }, { type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } }]), { type: 'text', text: lastText }]
-    : lastText;
+  // What the designer is looking at: page, screen size, theme and selection, so "this" and "here" resolve.
+  const ctx = context && typeof context === 'object' ? context : {};
+  const where = [
+    ctx.page ? `Page: ${String(ctx.page).slice(0, 80)} (${String(ctx.path || '').slice(0, 120)})` : '',
+    ctx.device ? `Screen size: ${ctx.device}${ctx.width ? `, ${ctx.width}px wide` : ''}${ctx.size ? ` (edits apply ${ctx.size})` : ''}` : '',
+    ctx.theme ? `The app is showing its ${ctx.theme} theme.` : '',
+    ctx.selected ? `Selected: ${String(ctx.selected).slice(0, 80)}. "This", "it" and "here" mean the selection unless the request says otherwise.` : 'Nothing is selected: the request is about the visible screen.',
+  ].filter(Boolean).join('\n');
+  const shot = screen && typeof screen.data === 'string' && screen.data.length < 7e6 && /^image\/(jpeg|png)$/.test(screen.media_type) ? screen : null;
+  const lastText = `${where}\n${shot ? 'The first image is a screenshot of exactly what the designer sees. Use it to judge contrast, alignment, spacing and hierarchy. Element boxes below are x,y,w,h in CSS pixels of that same visible area.\n' : ''}\nElements on screen:\n${targets.map(describeTarget).join('\n')}\n\n${imgs.length ? `The designer attached ${imgs.length} image${imgs.length > 1 ? 's' : ''} (above). Treat them as a reference to match, a screenshot pointing at a problem, or an image to put in the design, whichever the request means. To place one, use imageSrc "attachment:N" (or src="attachment:N" in insertJsx).\n\n` : ''}Request:\n${request}`;
+  const lastContent = [
+    ...(shot ? [{ type: 'text', text: 'Screenshot of the screen:' }, { type: 'image', source: { type: 'base64', media_type: shot.media_type, data: shot.data } }] : []),
+    ...imgs.flatMap((im, n) => [{ type: 'text', text: `Attachment ${n + 1}: ${String(im.name || 'image').slice(0, 80)}` }, { type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } }]),
+    { type: 'text', text: lastText },
+  ];
   const client = new Anthropic({ apiKey: key });
   let res;
   try {
@@ -228,7 +246,8 @@ export async function propose({ request, targets, history = [], images = [], tok
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'medium', format: betaZodOutputFormat(Proposal) },
-      system: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}\n${tokens.length ? `Colour tokens you can change with action token (light / dark values): ${tokens.map((t) => `${t.name} ${t.values.map((v) => `${v.theme} ${v.hex}`).join(' / ')}`).join('; ')}\n` : ''}${libSummary(library)}`,
+      // The instructions and design system are the same on every request: cache them so later requests start faster.
+      system: [{ type: 'text', text: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}\n${tokens.length ? `Colour tokens you can change with action token (light / dark values): ${tokens.map((t) => `${t.name} ${t.values.map((v) => `${v.theme} ${v.hex}`).join(' / ')}`).join('; ')}\n` : ''}${libSummary(library)}`, cache_control: { type: 'ephemeral' } }],
       messages: [
         ...history.slice(-8).map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.text).slice(0, 2000) })),
         { role: 'user', content: lastContent },
@@ -315,5 +334,5 @@ export async function propose({ request, targets, history = [], images = [], tok
     if (ops.length || text || props.length) edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops, text, props, why: e.why, dom: t.dom || [], ...(target ? { target, where: whereOf(target) } : {}) });
   }
   const notes = Array.isArray(p.notes) ? p.notes.filter((n) => Number.isInteger(n.note) && n.note > 0).map((n) => ({ note: n.note, status: n.status, summary: n.summary })) : null;
-  return { scope: p.scope, message: p.message, notes: notes?.length ? notes : null, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } };
+  return { scope: p.scope, message: p.message, notes: notes?.length ? notes : null, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens, cacheRead: res.usage.cache_read_input_tokens || 0, cacheWrite: res.usage.cache_creation_input_tokens || 0 } };
 }

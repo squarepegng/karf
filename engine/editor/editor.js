@@ -154,6 +154,7 @@
 
   async function select(el) {
     S.srcScope = 'key';
+    S.iconQ = null;
     if (!el) { S.multi = []; S.sel = null; S.cpick = null; renderPanel(); renderLayers(); return; }
     const list = [...sameLoc(el)];
     S.sel = { el, def: defOf(el), use: useOf(el), idx: Math.max(0, list.indexOf(el)), repeat: list.length, defInfo: null, useInfo: null };
@@ -322,6 +323,9 @@
     swap: '<path d="M3 5.5h9l-2.5-2.5M13 10.5H4l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
     image: '<rect x="2.5" y="3" width="11" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="6" cy="6.5" r="1.2" fill="currentColor"/><path d="M3 12l3.5-3.5 2.5 2.5 2-2 2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>',
     code: '<path d="M5.5 4.5L2 8l3.5 3.5M10.5 4.5L14 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
+    search: '<circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
+    heading: '<path d="M3.5 3v10M12.5 3v10M3.5 8h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+    button: '<rect x="1.5" y="4.5" width="13" height="7" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M5.5 8h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>',
     zin: '<path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
     clip: '<path d="M10.5 4.5L5.6 9.4a1.4 1.4 0 0 0 2 2l5-5a2.8 2.8 0 0 0-4-4l-5 5a4.2 4.2 0 0 0 6 6l4.4-4.4" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>',
     mic: '<rect x="6" y="2" width="4" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M3.8 7.5a4.2 4.2 0 0 0 8.4 0M8 11.8V14" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>',
@@ -397,6 +401,8 @@
     it?.run?.(v);
   });
   document.addEventListener('pointerdown', (e) => { if (!$('menu').hidden && !e.target.closest('#menu')) closeMenu(); }, true);
+  addEventListener('blur', () => setTimeout(() => { if (document.activeElement === frame) return; closeMenu(); }, 0));
+  addEventListener('resize', () => closeMenu());
   const goTo = (v) => { if (!v) return; if (!v.startsWith('/')) v = '/' + v; frame.src = v; };
   function kerfMenu(at) {
     const p = S.project || {};
@@ -765,6 +771,7 @@
     else if (!el.isConnected) h += `<div class="sec"><span class="note">This element isn’t on screen right now.</span></div>`;
     else {
       h += imageSection(el);
+      if (el.tagName.toLowerCase() === 'svg') h += iconSection(el);
       h += propsSection(inf);
       if (inf.classKind === 'dynamic') h += `<div class="sec"><span class="note warn">${esc(inf.classReason)}</span></div>`;
       if (inf.text?.editable) h += sec('Content', `<label class="inp"><input type="text" data-text="1" value="${esc(inf.text.value)}" aria-label="Text"></label>`);
@@ -933,6 +940,8 @@
       e.preventDefault(); e.stopPropagation();
     };
     ['pointerdown', 'mousedown', 'mouseup', 'pointerup', 'touchstart', 'submit', 'contextmenu', 'auxclick'].forEach((t) => W.addEventListener(t, block, true));
+    W.addEventListener('pointerdown', () => closeMenu(), true);
+    W.addEventListener('scroll', () => closeMenu(), true);
     W.addEventListener('contextmenu', (e) => {
       if (S.mode !== 'edit' || S.tool === 'annotate' || S.editing) return;
       const hit = pick(e.target);
@@ -1253,7 +1262,7 @@
     const def = defOf(el), use = useOf(el);
     const loc = use && (!def || el.tagName.toLowerCase() === 'svg' || el.getAttribute('data-kerf-n')) ? use : def || use;
     const img = el.tagName.toLowerCase() === 'img' ? { imgSrc: el.getAttribute('src'), alt: el.getAttribute('alt') } : {};
-    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note, dom: [...el.classList], name: dName(el), ...img };
+    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note, dom: [...el.classList], name: dName(el), box: (() => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; })(), ...img };
   }
   function uniq(list) {
     const seen = new Set(), out = [];
@@ -1263,7 +1272,8 @@
   const tagged = (root) => (root || D ? [...(root || D).querySelectorAll('[data-kerf],[data-kerf-use]')] : []);
   // If the frame reports no size (a hidden window), treat the whole page as visible.
   const onScreen = (el) => { const r = el.getBoundingClientRect(); const vw = W.innerWidth || 1e5, vh = W.innerHeight || 1e5; return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < vh && r.right > 0 && r.left < vw; };
-  const visibleTargets = () => (D ? uniq(tagged().filter(onScreen).flatMap((el) => targetsOf(el))).slice(0, 90) : []);
+  // Fewer, more relevant elements make Claude faster: what's on screen, biggest first is not useful, document order is.
+  const visibleTargets = () => (D ? uniq(tagged().filter(onScreen).flatMap((el) => targetsOf(el))).slice(0, 64) : []);
   function selectionTargets() {
     const el = S.sel.el, out = [...targetsOf(el)];
     if (activeLoc() !== out[0].loc) out.unshift({ ...out[0], loc: activeLoc() });
@@ -1300,6 +1310,28 @@
     clearTimeout(chatT);
     chatT = setTimeout(() => api('/chat', { messages: S.chat.filter((m) => !m.busy).map(({ targets, ...m }) => m), notes: S.notes }).catch(() => {}), 300);
   }
+  // What the designer is looking at, so Claude can resolve "this" and "here" and judge the screen.
+  function aiContext() {
+    let theme = null;
+    try {
+      const bg = getComputedStyle(D.body).backgroundColor, n = (bg.match(/[\d.]+/g) || []).map(Number);
+      if (n.length >= 3 && !(n.length === 4 && n[3] === 0)) theme = 0.299 * n[0] + 0.587 * n[1] + 0.114 * n[2] < 128 ? 'dark' : 'light';
+    } catch {}
+    return { page: pageName(S.path), path: S.path, device: DEV_LABEL[S.device], width: W?.innerWidth, size: bpParam()?.label?.toLowerCase(), theme, selected: S.sel ? dName(S.sel.el) : null };
+  }
+  // A screenshot of exactly what's on screen (viewport), small and quick; skipped if it takes too long.
+  let h2i = null;
+  async function captureScreen() {
+    if (!D || !W) return null;
+    try {
+      h2i ||= new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://unpkg.com/html-to-image@1.11.11/dist/html-to-image.js'; sc.onload = () => res(window.htmlToImage); sc.onerror = rej; document.head.appendChild(sc); });
+      const lib = await h2i;
+      const w = W.innerWidth, h = W.innerHeight, k = Math.min(1, 1280 / w);
+      const shot = lib.toJpeg(D.documentElement, { width: w, height: h, canvasWidth: Math.round(w * k), canvasHeight: Math.round(h * k), pixelRatio: 1, quality: 0.72, skipFonts: true, cacheBust: false, style: { transform: `translate(${-W.scrollX}px, ${-W.scrollY}px)`, transformOrigin: '0 0' } });
+      const url = await Promise.race([shot, new Promise((r) => setTimeout(() => r(null), 2500))]);
+      return url && url.startsWith('data:image/jpeg') ? { media_type: 'image/jpeg', data: url.split(',')[1] } : null;
+    } catch { h2i = null; return null; }
+  }
   async function runAI(text, targets, where, shown, followUp, atts = []) {
     text = String(text || '').trim() || (atts.length ? 'Use the attached image.' : '');
     if (!text || S.card?.busy) return;
@@ -1312,7 +1344,8 @@
     S.card = m;
     renderAI();
     try {
-      m.proposal = await api('/ai', { request: text, targets, history, images: atts.map((a) => ({ name: a.name, media_type: a.type, data: a.data, orig: a.orig })) });
+      const screen = await captureScreen();
+      m.proposal = await api('/ai', { request: text, targets, history, screen, context: aiContext(), images: atts.map((a) => ({ name: a.name, media_type: a.type, data: a.data, orig: a.orig })) });
       S.amber = m.proposal.edits.map((e) => e.loc);
       if (!m.proposal.edits.length) m.status = 'info';
     } catch (e) { m.error = e.message; }
@@ -1793,8 +1826,8 @@
     const muted = tokenClass('text', ['muted', 'muted-foreground', 'faint'], 'text-gray-500');
     return [
       { k: 'text', label: 'Text', icon: 'text', jsx: `<p className="text-sm ${muted}">New text</p>` },
-      { k: 'heading', label: 'Heading', icon: 'text', jsx: `<h2 className="text-2xl font-semibold ${ink}">New heading</h2>` },
-      { k: 'button', label: has('Button') ? 'Button (your component)' : 'Button', icon: 'frame', jsx: has('Button') ? '<Button>Button</Button>' : `<button className="rounded-md px-4 py-2 text-sm font-medium ${tokenClass('bg', ['primary'], 'bg-gray-900')} ${tokenClass('text', ['primary-fg', 'primary-foreground'], 'text-white')}">Button</button>` },
+      { k: 'heading', label: 'Heading', icon: 'heading', jsx: `<h2 className="text-2xl font-semibold ${ink}">New heading</h2>` },
+      { k: 'button', label: 'Button', yours: has('Button'), icon: 'button', jsx: has('Button') ? '<Button>Button</Button>' : `<button className="rounded-md px-4 py-2 text-sm font-medium ${tokenClass('bg', ['primary'], 'bg-gray-900')} ${tokenClass('text', ['primary-fg', 'primary-foreground'], 'text-white')}">Button</button>` },
       { k: 'image', label: 'Image…', icon: 'image', image: true },
       { k: 'icon', label: 'Icon…', icon: 'spark', iconPick: true },
       { k: 'frame', label: 'Frame', icon: 'frame', jsx: `<div className="flex flex-col gap-3 rounded-lg ${tokenClass('border', ['border'], 'border-gray-200')} border p-4"><p className="text-sm ${muted}">New frame</p></div>` },
@@ -1804,20 +1837,38 @@
   const defaultPos = () => (S.sel && S.sel.el.children.length && !['p', 'span', 'button', 'a', 'label', 'svg'].includes(S.sel.el.tagName.toLowerCase()) ? 'inside' : 'after');
   async function openInsert() {
     if (!S.sel) { toast('Select where the new element should go, then add it.', '', true); return; }
-    const list = await templates();
-    const comps = (S.components || []).filter((c) => !['Button'].includes(c.name));
+    S._tpls = await templates();
+    const pos = S.insertPos || 'after';
     const m = $('modal');
     m.hidden = false;
-    m.innerHTML = `<section class="dialog" role="dialog" aria-modal="true" aria-labelledby="insT" style="width:440px">
-      <div class="dh"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="insT">Add an element</h2><span class="note">It goes ${S.insertPos === 'inside' ? 'inside' : S.insertPos === 'before' ? 'before' : 'after'} <b>${esc(nameOf(S.sel.el))}</b>.</span></div><button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
-      <div class="db">
-        <div class="seg">${['before', 'after', 'inside'].map((p) => `<button data-act="insPos" data-v="${p}" class="${(S.insertPos || 'after') === p ? 'on' : ''}">${p[0].toUpperCase() + p.slice(1)}</button>`).join('')}</div>
-        <div class="grid3">${list.map((t, i) => `<button class="tile" data-act="insTpl" data-v="${i}">${ico(t.icon, 18)}<span>${esc(t.label)}</span></button>`).join('')}</div>
-        ${comps.length ? `<div class="secT">Your components</div><label class="inp"><input id="compQ" placeholder="Search components" autocomplete="off"></label><div class="clist" id="compList">${compRows(comps, '')}</div>` : ''}
-      </div></section>`;
-    S._tpls = list;
+    m.innerHTML = `<section class="dialog ins" role="dialog" aria-modal="true" aria-labelledby="insT">
+      <div class="insHead"><div class="insTitle"><h2 id="insT">Add</h2><span class="note">${pos === 'inside' ? 'inside' : pos} <b>${esc(dName(S.sel.el))}</b></span></div>
+        <div class="seg insPos">${[['before', 'Before'], ['after', 'After'], ['inside', 'Inside']].map(([p, n]) => `<button data-act="insPos" data-v="${p}" class="${pos === p ? 'on' : ''}">${n}</button>`).join('')}</div>
+        <button class="ib" data-act="closeModal" aria-label="Close">${ico('x')}</button></div>
+      <label class="insSearch">${ico('search', 14)}<input id="compQ" placeholder="Search elements and components" autocomplete="off" spellcheck="false"></label>
+      <div class="insBody" id="insBody">${insBody('')}</div></section>`;
+    setTimeout(() => $('compQ')?.focus(), 0);
   }
-  const compRows = (comps, q) => comps.filter((c) => c.name.toLowerCase().includes(q.toLowerCase())).slice(0, 60).map((c) => `<button class="crow" data-act="insComp" data-v="${esc(c.name)}">${ico('comp', 12)}<span>${esc(c.name)}</span><span class="note mono">${esc(c.file.replace(/^src\//, ''))}</span></button>`).join('');
+  // Basics as small tiles, then the project's components grouped by folder, with names in plain words.
+  function insBody(q) {
+    const ql = q.trim().toLowerCase();
+    const hit = (t) => !ql || t.toLowerCase().includes(ql);
+    const tiles = (S._tpls || []).map((t, i) => ({ t, i })).filter(({ t }) => hit(t.label));
+    const groups = new Map();
+    for (const c of (S.components || []).filter((c) => c.name !== 'Button')) {
+      const label = camelWords(c.name);
+      if (!hit(label) && !hit(c.name)) continue;
+      const dir = (c.file.split('/').slice(-2, -1)[0] || 'components').replace(/[-_]/g, ' ');
+      const g = dir.length <= 3 ? dir.toUpperCase() : dir[0].toUpperCase() + dir.slice(1);
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push({ c, label });
+    }
+    const sorted = [...groups.entries()].sort((a, b) => (a[0] === 'UI' ? -1 : b[0] === 'UI' ? 1 : a[0].localeCompare(b[0])));
+    const out = [];
+    if (tiles.length) out.push(`<div class="insSec"><div class="insT">Basics</div><div class="insTiles">${tiles.map(({ t, i }) => `<button class="itile" data-act="insTpl" data-v="${i}"><span class="ii">${ico(t.icon, 16)}</span><span>${esc(t.label.replace(/…$/, ''))}</span>${t.yours ? '<i class="yours">Yours</i>' : ''}</button>`).join('')}</div></div>`);
+    for (const [g, items] of sorted) out.push(`<div class="insSec"><div class="insT">${esc(g)}<span>${items.length}</span></div><div class="insList">${items.sort((a, b) => a.label.localeCompare(b.label)).slice(0, 80).map(({ c, label }) => `<button class="crow" data-act="insComp" data-v="${esc(c.name)}" title="${esc(c.name)} · ${esc(c.file)}">${ico('comp', 13)}<span>${esc(label)}</span></button>`).join('')}</div></div>`);
+    return out.join('') || `<div class="insNone">Nothing matches “${esc(q)}”.</div>`;
+  }
   const CHILD_TEXT = /^(Button|Badge|Label|CardTitle|CardDescription|Tag|Chip|Link|Heading|Title|Text)$/;
   async function insertJsx(jsx) {
     $('modal').hidden = true;
@@ -1847,8 +1898,9 @@
   }
   document.addEventListener('input', (e) => {
     if (e.target.id === 'iconQ') searchIcons(e.target.value, e.target.dataset.mode);
-    if (e.target.id === 'compQ') $('compList').innerHTML = compRows((S.components || []).filter((c) => c.name !== 'Button'), e.target.value);
+    if (e.target.id === 'compQ') $('insBody').innerHTML = insBody(e.target.value);
   });
+  document.addEventListener('keydown', (e) => { if (e.target.id === 'compQ' && e.key === 'Enter') { e.preventDefault(); $('insBody')?.querySelector('button')?.click(); } });
   document.addEventListener('change', (e) => {
     if (e.target.dataset.alt) structure({ type: 'image', alt: e.target.value }, { keepSel: true });
   });
@@ -1879,8 +1931,50 @@
       else insertJsx(`<${v} className="h-5 w-5" />`);
     }
     else if (act === 'swapComp') { $('modal').hidden = true; structure({ type: 'swap', to: v }, { keepSel: true }); }
+    else if (act === 'iconUpload') {
+      // Your own icon: an uploaded SVG takes this icon's place at the same size.
+      const file = await pickFile();
+      if (!file) return;
+      if (!/svg|png|webp/i.test(file.type)) { toast('Pick an SVG (or a PNG) for the icon.', '', true); return; }
+      const src = await upload(file);
+      const cls = ((S.sel?.useInfo || S.sel?.defInfo)?.classes || []).filter((c) => /^(h|w|size|shrink|flex|m[trblxy]?|-?m[trblxy]?)-/.test(c)).join(' ') || 'h-4 w-4';
+      if (src) structure({ type: 'replace', jsx: `<img src="${src}" alt="" className="${cls}" />` });
+    }
     else if (act === 'imgUpload') { const src = await upload(await pickFile()); if (src) structure({ type: 'image', src }, { keepSel: true }); }
     else if (act === 'imgLink') { const u = prompt('Image link (https://…)'); if (u && /^https?:\/\//.test(u)) structure({ type: 'image', src: u.trim() }, { keepSel: true }); }
+  });
+  /* the icon panel: what this icon is, swap it from the library, or use your own SVG */
+  S.iconQ = null;
+  S.iconRes = null;
+  const libName = (lib) => ({ 'lucide-react': 'Lucide', '@phosphor-icons/react': 'Phosphor', 'phosphor-react': 'Phosphor' })[lib] || lib || '';
+  const iconGrid = (list) => (list.length ? list.slice(0, 48).map((i) => `<button class="icell" data-act="pickIcon" data-v="${esc(i.name)}" data-mode="swap" title="${esc(camelWords(i.name))} · ${esc(libName(i.lib))}"><img src="${iconSrc(i)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></button>`).join('') : '<span class="note">No icons match.</span>');
+  let iconPT;
+  function loadIconsP(q, lib) {
+    clearTimeout(iconPT);
+    iconPT = setTimeout(async () => {
+      const list = await api('/icons?q=' + encodeURIComponent(q) + (lib ? '&lib=' + encodeURIComponent(lib) : '')).catch(() => []);
+      S.iconRes = { q, lib, list };
+      const g = $('iconGridP');
+      if (g) g.innerHTML = iconGrid(list);
+    }, 120);
+  }
+  function iconSection(el) {
+    const name = el.getAttribute('data-kerf-n') || '', lib = S.sel?.useInfo?.lib || '';
+    const q = S.iconQ ?? (camelWords(name).split(' ')[0] || '').toLowerCase();
+    const res = S.iconRes && S.iconRes.q === q && S.iconRes.lib === lib ? S.iconRes.list : null;
+    if (!res) loadIconsP(q, lib);
+    const now = name && /^[A-Z]/.test(name)
+      ? `<span class="icNow"><img src="${iconSrc({ name, lib: lib || 'lucide-react' })}" alt="" onerror="this.style.visibility='hidden'"></span><span class="icMeta"><b>${esc(camelWords(name))}</b><span class="note">${esc(libName(lib) || 'Icon')}</span></span>`
+      : `<span class="icNow">${ico('spark', 16)}</span><span class="icMeta"><b>Custom icon</b><span class="note">Drawn in the code</span></span>`;
+    return sec('Icon', `<div class="icRow">${now}</div>
+      <label class="insSearch sm">${ico('search', 12)}<input id="iconQp" value="${esc(q)}" placeholder="Search ${esc(libName(lib) || 'icons')}" autocomplete="off" spellcheck="false" aria-label="Search icons"></label>
+      <div class="igrid p" id="iconGridP">${res ? iconGrid(res) : '<span class="note">Loading icons…</span>'}</div>
+      <button class="outline full" data-act="iconUpload">${ico('image', 12)}Use your own SVG…</button>`);
+  }
+  document.addEventListener('input', (e) => {
+    if (e.target.id !== 'iconQp') return;
+    S.iconQ = e.target.value;
+    loadIconsP(e.target.value, S.sel?.useInfo?.lib || '');
   });
   async function openSwapComponent() {
     if (!S.components) S.components = await api('/components').catch(() => []);

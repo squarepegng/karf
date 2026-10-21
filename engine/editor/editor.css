@@ -533,7 +533,7 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 /* live line: a four-dot spinner, a timer and what Kerf is doing */
 .kLive{display:flex;align-items:center;gap:10px;color:var(--ink3);font:400 13px/18px Geist,system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .kSpin{display:grid;grid-template-columns:repeat(2,5px);grid-template-rows:repeat(2,5px);gap:4px;flex:0 0 auto}
-.kSpin b{width:5px;height:5px;border-radius:50%;background:#E8875B;animation:kspin4 1.2s linear infinite}
+.kSpin b{width:5px;height:5px;border-radius:50%;background:var(--select);animation:kspin4 1.2s linear infinite}
 .kSpin b:nth-child(1){animation-delay:0s}.kSpin b:nth-child(2){animation-delay:.3s}.kSpin b:nth-child(4){animation-delay:.6s}.kSpin b:nth-child(3){animation-delay:.9s}
 @keyframes kspin4{0%,100%{opacity:.25;transform:scale(.8)}25%{opacity:1;transform:scale(1)}}
 /* step summary: "Looked at 14 elements · Thought for 9s ›" */
@@ -563,3 +563,47 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .kSteps ul{list-style:none;padding-left:14px}
 .kStatus.info{color:var(--ink3);font-size:11px}
 .kNo{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink3);opacity:.7}
+
+/* ============ Add panel (like Figma's / Framer's insert menu) ============ */
+.dialog.ins{width:min(400px,calc(100% - 32px));max-height:min(640px,calc(100vh - 80px));display:flex;flex-direction:column;padding:0;overflow:hidden}
+.insHead{display:flex;align-items:center;gap:10px;padding:14px 14px 10px 16px}
+.insTitle{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.insTitle h2{margin:0;font:600 14px/18px Geist,system-ui,sans-serif}
+.insTitle .note{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.insTitle b{color:var(--ink2);font-weight:500}
+.insPos{flex:0 0 auto}
+.insPos button{height:24px;padding:0 8px;font-size:11px}
+.insSearch{display:flex;align-items:center;gap:8px;margin:0 14px 8px;height:34px;padding:0 10px;border-radius:10px;background:var(--raised);border:1px solid transparent;color:var(--ink3)}
+.insSearch:focus-within{border-color:rgba(255,255,255,.18)}
+.insSearch input{flex:1;min-width:0;background:transparent;border:0;outline:none;color:var(--ink);font-size:13px}
+.insBody{flex:1;min-height:0;overflow:auto;padding:4px 8px 12px;scrollbar-width:thin}
+.insSec{padding:6px 6px 8px}
+.insT{display:flex;align-items:center;justify-content:space-between;padding:4px 4px 8px;color:var(--ink3);font:500 11px/14px Geist,system-ui,sans-serif}
+.insT span{color:var(--ink3);opacity:.7}
+.insTiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.itile{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:10px;height:72px;padding:10px;border:1px solid rgba(255,255,255,.07);border-radius:10px;background:rgba(255,255,255,.025);color:var(--ink);text-align:left;font-size:12px}
+.itile:hover{background:var(--raised);border-color:rgba(255,255,255,.14)}
+.itile .ii{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:rgba(255,255,255,.06);color:var(--ink2)}
+.itile:hover .ii{color:var(--ink)}
+.itile .yours{position:absolute;top:8px;right:8px;padding:1px 5px;border-radius:4px;background:rgba(156,107,255,.16);color:#B693FF;font:500 9px/12px Geist,system-ui,sans-serif;font-style:normal}
+.insList{display:flex;flex-direction:column}
+.insList .crow{height:30px;gap:10px;padding:0 8px;border-radius:7px;font-size:12px}
+.insList .crow svg{color:#B693FF}
+.insList .crow:hover{background:var(--raised)}
+.insNone{padding:24px 8px;text-align:center;color:var(--ink3)}
+
+/* icon panel */
+.icRow{display:flex;align-items:center;gap:10px}
+.icNow{display:grid;place-items:center;width:36px;height:36px;border-radius:8px;background:var(--raised);color:var(--ink)}
+.icNow img{width:18px;height:18px;filter:invert(1)}
+.icMeta{display:flex;flex-direction:column;gap:1px;min-width:0}
+.icMeta b{font-weight:500}
+.insSearch.sm{margin:0;height:30px;border-radius:8px}
+.insSearch.sm input{font-size:12px}
+.igrid.p{grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;max-height:200px}
+.igrid.p .icell{padding:0;height:36px;justify-content:center;background:rgba(255,255,255,.03)}
+.igrid.p .icell img{width:16px;height:16px}
+.outline.full{width:100%;display:flex;align-items:center;justify-content:center;gap:6px}
+.dialog .insSearch,.sec .insSearch{flex-direction:row;align-items:center;gap:8px}
+.insSearch input{text-align:left;height:100%;padding:0}
+.insSearch svg{flex:0 0 auto}
