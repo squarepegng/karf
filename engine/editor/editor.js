@@ -701,7 +701,7 @@
   }
   // The app's colour tokens, like Figma's local styles: change one and every screen follows.
   S.tokens = null;
-  const loadTokens = () => api('/tokens').then((t) => { S.tokens = t; if (S.mode === 'edit' && !S.sel) renderPanel(); }).catch(() => { S.tokens = []; });
+  const loadTokens = () => api('/tokens').then((t) => { S.tokens = t; if (S.mode === 'edit' && !S.sel) renderPanel(); renderAI(); }).catch(() => { S.tokens = []; });
   function paletteHTML() {
     if (S.tokens == null) { loadTokens(); return ''; }
     if (!S.tokens.length) return '';
@@ -1530,6 +1530,43 @@
   };
   // Tick the live timers without re-drawing the conversation.
   setInterval(() => document.querySelectorAll('[data-since]').forEach((el) => { el.textContent = liveText(+el.dataset.since); }), 1000);
+  /* Kerf's floating card: drag it by its header, or collapse it to a slim bar so the page stays visible */
+  S.cardPos = {};
+  S.cardMin = false;
+  function cardShell(where, label, m, body) {
+    const p = m.proposal, n = p ? chosen(m).length : 0;
+    const mini = m.busy ? `<span class="cmLive"><i class="kSpin"><b></b><b></b><b></b><b></b></i><span data-since="${m.started || Date.now()}">${liveText(m.started)}</span></span>`
+      : m.error ? `<span class="note warn">Couldn’t answer</span>`
+      : m.status === 'pending' && p?.edits.length ? `<span class="cmTxt">${p.edits.length} proposed change${p.edits.length === 1 ? '' : 's'}${m.previewing ? ' · previewing' : ''}</span><button class="primary applyBtn sm" data-act2="decide" data-i="${S.chat.indexOf(m)}" data-v="apply" ${n ? '' : 'disabled'}>Apply ${n === p.edits.length ? (n === 1 ? 'change' : n) : `${n} of ${p.edits.length}`}</button>`
+      : `<span class="cmTxt">${esc(STATUS[m.status] || 'Reply ready')}</span>`;
+    return `<div class="card${S.cardMin ? ' min' : ''}" data-card="${where}"><div class="cardTop" data-drag="${where}" title="Drag to move · double-click to ${S.cardMin ? 'expand' : 'collapse'}"><span class="grip" aria-hidden="true"></span><span class="note">${label}</span>${S.cardMin ? mini : '<span class="sp"></span>'}
+      ${hb('cardMin2', S.cardMin ? 'chevR' : 'chev', S.cardMin ? 'Expand' : 'Collapse', '', 'data-act2="cardMin"')}${hb('closeCard2', 'x', 'Close', '', 'data-act2="closeCard"')}</div>${S.cardMin ? '' : `<div class="cardBody">${body()}</div>`}</div>`;
+  }
+  // Keep a card where the designer left it (inside the canvas area); reset when it closes.
+  function placeCard(box, where, reset) {
+    const pos = S.cardPos[where];
+    if (reset || !pos) { Object.assign(box.style, { left: '', top: '', bottom: '', transform: '' }); return; }
+    const st = $('stage').getBoundingClientRect(), w = box.offsetWidth || 400, h = box.offsetHeight || 80;
+    const x = Math.max(8, Math.min(st.width - w - 8, pos.x)), y = Math.max(8, Math.min(st.height - h - 8, pos.y));
+    Object.assign(box.style, { left: x + 'px', top: y + 'px', bottom: 'auto', transform: 'none' });
+  }
+  let cardDrag = null;
+  document.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest?.('[data-drag]');
+    if (!h || e.target.closest('button')) return;
+    const box = h.closest('#ask,#noteRes'), st = $('stage').getBoundingClientRect(), r = box.getBoundingClientRect();
+    cardDrag = { where: h.dataset.drag, box, dx: e.clientX - r.left, dy: e.clientY - r.top, st };
+    h.setPointerCapture(e.pointerId);
+    document.body.classList.add('dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!cardDrag) return;
+    S.cardPos[cardDrag.where] = { x: e.clientX - cardDrag.st.left - cardDrag.dx, y: e.clientY - cardDrag.st.top - cardDrag.dy };
+    placeCard(cardDrag.box, cardDrag.where);
+  });
+  document.addEventListener('pointerup', () => { if (cardDrag) { cardDrag = null; document.body.classList.remove('dragging'); } });
+  document.addEventListener('dblclick', (e) => { if (e.target.closest?.('[data-drag]') && !e.target.closest('button')) { S.cardMin = !S.cardMin; renderAI(); } });
   const replyForm = (where) => composer('replyIn', { form: 'reply', where, placeholder: 'Reply to Kerf…' });
   function renderAsk() {
     const a = $('ask');
@@ -1537,7 +1574,8 @@
     if (a.hidden) return;
     const m = S.card && S.card.where === 'ask' ? S.card : null;
     if (m) {
-      a.innerHTML = `<div class="card"><div class="cardTop"><span class="note">Kerf</span>${hb('closeCard2', 'x', 'Close', '', 'data-act2="closeCard"')}</div>${kerfHTML(m, S.chat.indexOf(m))}${m.busy ? '' : replyForm('ask')}</div>`;
+      a.innerHTML = cardShell('ask', 'Kerf', m, () => `${kerfHTML(m, S.chat.indexOf(m))}${m.busy ? '' : replyForm('ask')}`);
+      placeCard(a, 'ask');
       if (!m.busy) setTimeout(() => { $('replyIn')?.focus(); syncKC('replyIn'); }, 0);
     } else {
       a.innerHTML = `${composer('askIn', { form: 'ask', big: true, lead: `<span class="spark">${ico('spark', 16)}</span>`, placeholder: 'Ask Kerf to change something on this screen' })}
@@ -1729,7 +1767,8 @@
     const res = $('noteRes');
     const m = S.card && S.card.where === 'notes' && !S.card.busy ? S.card : null;
     res.hidden = !m;
-    if (m) res.innerHTML = `<div class="card"><div class="cardTop"><span class="note">Kerf · notes</span>${hb('closeCard2', 'x', 'Close', '', 'data-act2="closeCard"')}</div>${kerfHTML(m, S.chat.indexOf(m))}${replyForm('notes')}</div>`;
+    if (m) { res.innerHTML = cardShell('notes', 'Kerf · notes', m, () => `${kerfHTML(m, S.chat.indexOf(m))}${replyForm('notes')}`); placeCard(res, 'notes'); }
+    else placeCard(res, 'notes', true);
   }
   function renderAI() {
     renderAsk();
@@ -1792,7 +1831,8 @@
       if (act === 'askHint') runAI(v, visibleTargets(), 'ask');
       else if (act === 'chatHint') runAI(v, S.sel ? selectionTargets() : visibleTargets(), 'chat');
       else if (act === 'decide') decide(S.chat[+a.dataset.i], v);
-      else if (act === 'closeCard') { if (S.card?.status === 'pending') S.card.status = 'discarded'; S.card = null; S.amber = []; renderAI(); }
+      else if (act === 'cardMin') { S.cardMin = !S.cardMin; renderAI(); }
+      else if (act === 'closeCard') { S.cardMin = false; S.cardPos = {}; if (S.card?.previewing) { S.card.previewing = false; previewTokens(S.card, false); } if (S.card?.status === 'pending') S.card.status = 'discarded'; S.card = null; S.amber = []; renderAI(); }
       else if (act === 'modeMenu') { const r = a.getBoundingClientRect(); modeMenu({ x: r.left, y: r.top - 230 }); }
       else if (act === 'suggestRun' || act === 'keepLook') {
         const m = S.chat[+a.dataset.i];

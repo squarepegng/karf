@@ -705,3 +705,17 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .kcCtx,.kcMode{min-width:0;flex:0 1 auto}
 .kcCtx{max-width:120px}
 #panel .scroll,.chatScroll{overflow-x:hidden}
+
+/* Kerf's floating card: drag by the header, collapse to a slim bar */
+.card .cardTop{gap:6px;cursor:grab;user-select:none;margin:-4px -4px 0;padding:2px 2px 2px 4px;border-radius:10px}
+.card .cardTop:hover{background:rgba(255,255,255,.03)}
+body.dragging,body.dragging *{cursor:grabbing!important;user-select:none!important}
+.grip{width:8px;height:12px;flex:0 0 auto;background-image:radial-gradient(rgba(255,255,255,.35) 1px,transparent 1.2px);background-size:4px 4px;opacity:.7}
+.cardTop .sp{flex:1}
+.cardBody{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 240px);overflow:auto;scrollbar-width:thin}
+.card.min{padding:8px 8px 8px 12px;border-radius:14px}
+.card.min .cardTop{margin:0;padding:0}
+.cmTxt{flex:1;min-width:0;color:var(--ink);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmLive{flex:1;display:flex;align-items:center;gap:8px;color:var(--ink3);font-size:12px}
+.applyBtn.sm{height:26px;padding:0 10px;font-size:12px;border-radius:7px}
+.ask:has(.card.min),.noteRes:has(.card.min){width:auto;min-width:320px;max-width:min(520px,calc(100% - 32px))}
