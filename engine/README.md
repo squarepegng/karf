@@ -72,6 +72,16 @@ Either way, the app's repo and config are not modified.
 - **Uses the team's own scale.** It reads the app's Tailwind config, so 8px
   becomes `rounded-lg`, Bold becomes `font-bold` and `surface-2` stays a
   token. Values off the scale become arbitrary classes and are flagged.
+- **Finds where a style really lives.** If an element's classes come from a
+  style table (`STATUS_STYLES[status]`), a constant, an if/else, a class object
+  or a CSS class built with `@apply`, Kerf follows them there and changes them
+  at the source. The panel says where ("Styles come from CONFIDENCE_STYLES
+  “verified” in lib/format.ts") and lets you pick the reach: *Only this one*,
+  *All “verified”* or *All 4*. One undo covers every file a change touches.
+- **Edits the design system.** With nothing selected, the panel shows the app's
+  colour tokens with their light and dark values. Change one and every screen
+  follows. Kerf edits the CSS variable (or the Tailwind config) in the format it
+  was written in.
 - **Edits per screen size.** "All sizes", or only mobile, tablet or desktop.
   These use mobile-first `md:`/`lg:` classes, and the other sizes keep how they looked.
 - **Is safe.**
@@ -135,9 +145,16 @@ which is git-ignored. Then:
 
 All three share one conversation, which is saved, so you can follow up anywhere.
 
-Claude (`claude-opus-5-5`) answers with the same edits the panel makes:
-- styles, properties and text
+Claude (`claude-opus-5-5`) first decides the best approach:
+- what the designer really means ("too bright" on a dark screen means lower contrast for the dark theme)
+- where the style lives
+- how far the change should reach (this element, every instance, every status, the palette)
+
+It says that plan in one sentence, then answers with the same edits the panel makes:
+- styles (at the element or its source), properties and text
 - structure: delete, duplicate, move, swap, insert, replace, group, images
+- colour tokens
+- as a last resort, a small code change, shown as a before/after diff. If it breaks the page, Kerf undoes it automatically.
 
 Kerf highlights the targets in amber and writes nothing until you click
 **Apply**. Every applied change can be undone. Requests about behavior or data
@@ -161,6 +178,7 @@ are answered as developer work, with no edits.
 | `POST /__kerf/edit {loc, ops?, text?, props?, cva?, bp?}` | Apply changes, e.g. `ops: [{prop:'radius', value:8}]`, `bp: {mode:'only', start:null, end:'md'}` |
 | `POST /__kerf/structure {loc, op}` | Delete, duplicate, move, swap, insert, replace, group, ungroup, image |
 | `POST /__kerf/undo` | Undo the last edit |
+| `GET /__kerf/tokens`, `POST /__kerf/token {name, hex, which}` | The colour palette; change a token (light, dark or both) |
 | `GET /__kerf/changes` | Every edit made this session |
 | `POST /__kerf/ai`, `/__kerf/ai/apply` | Ask Claude for a proposal; apply it |
 | `GET /__kerf/versions`, `POST /__kerf/version`, `/restore`, `/peek` | Versions |

@@ -87,6 +87,8 @@ All were squash-merged. The old branches `kerf/ai-layer`, `kerf/sprint-1` and `k
 | `src/edit.mjs` | `editElement` (class ops, text, props, cva), `applyResponsive` (per-size edits), `describe`, `createEditor` (history, undo), `parseLoc` (only the app's own .jsx/.tsx, not node_modules) |
 | `src/tailwind.mjs` | `loadTheme` (JS/TS configs; includes `screens`), `buildTheme`, `matcher`, `applyOps` (each design property ↔ Tailwind class) |
 | `src/cva.mjs` | Variant components (shadcn `cva`): base, one variant, or a compound variant |
+| `src/sources.mjs` | Where styles really live: style tables, constants, branches, class objects, `@apply` CSS classes; follows imports. `editSourced` in `edit.mjs` changes them there (scope here / key / all, or an AI target) |
+| `src/tokens.mjs` | Design tokens: reads colour tokens (CSS variables per light/dark selector, or hex in the Tailwind config) and writes them back in their own format |
 | `src/structure.mjs` | Delete, duplicate, move, swap, insert, replace, group/ungroup, image |
 | `src/props.mjs` | Component properties (e.g. icon weight, button variant) |
 | `src/library.mjs` | Icons (lucide, phosphor), project components, uploads to `public/kerf/` |
@@ -130,6 +132,12 @@ cd /Users/mac/Documents/kerf/engine && node bin/kerf.mjs $SP/sm/apps/web   # usu
   - Image attachments (paste, drop or button): Claude sees them and can place one in the design. Mic dictation uses the Web Speech API (Chrome and Safari).
 - **History and PR:** undo, saved versions ("Save as a version", and automatically when going back to Preview), "Show before", Create PR (one PR, plain-language body with code details folded).
 - **Saved sessions:** history, versions and chat survive restarts.
+
+**Edit anywhere (built 2026-10-21):**
+- Styles in style tables, constants, branches and CSS classes are edited at their source, with a reach choice in the panel.
+- A colour palette (light/dark tokens) shows when nothing is selected.
+- The AI chooses the approach and reach first and says it in one sentence. It can also change tokens, or make a last-resort code edit (diff shown, auto-undo if the page breaks).
+- Tested with the Stratemark chip request: Claude added dark-theme colours to all four statuses in `CONFIDENCE_STYLES`, the TypeScript check passed, and undo restored everything.
 
 ## 9. Known gaps and not-verified items
 

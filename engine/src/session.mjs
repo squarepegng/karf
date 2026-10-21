@@ -74,7 +74,7 @@ export function createSession(webRoot, editor) {
     const v = versions.find((x) => x.n === n);
     if (!v) throw new KerfError('That version no longer exists.');
     const before = new Map();
-    for (const h of entries(v.from, editor.history.length)) if (!before.has(h.file)) before.set(h.file, h.before);
+    for (const h of entries(v.from, editor.history.length)) for (const f of [h, ...(h.more || [])]) if (!before.has(f.file)) before.set(f.file, f.before);
     const current = new Map();
     for (const [f, content] of before) { current.set(f, fs.readFileSync(f, 'utf8')); fs.writeFileSync(f, content); }
     peek = { n, current };
@@ -100,7 +100,7 @@ export function createSession(webRoot, editor) {
     branch = git(['rev-parse', '--abbrev-ref', 'HEAD'], root);
     try { remote = git(['remote', 'get-url', 'origin'], root); } catch {}
     const m = remote.match(/github\.com[:/]([^/]+)\/(.+?)(\.git)?$/);
-    const files = [...new Set(editor.history.map((h) => path.relative(root, h.file)))];
+    const files = [...new Set(editor.history.flatMap((h) => [h, ...(h.more || [])].map((f) => path.relative(root, f.file))))];
     // Porcelain lines start with a status column that can be a space, so don't trim them.
     const st = spawnSync('git', ['status', '--porcelain', '--', ...(files.length ? files : ['.'])], { cwd: root, encoding: 'utf8' }).stdout || '';
     const dirty = st.split('\n').filter((l) => l.length > 3).map((l) => l.slice(3));

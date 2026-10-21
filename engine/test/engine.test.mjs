@@ -309,3 +309,56 @@ test('all sizes sets the base value and removes size overrides', () => {
 test('an existing override at the end screen is left alone', () => {
   assert.equal(rsp('px-4 md:px-6', [{ prop: 'padX', value: 8 }], { mode: 'only', start: null, end: 'md' }), 'md:px-6 px-2');
 });
+
+// Styles that live outside the element: a status table in another file, like Stratemark's chips.
+import fs0 from 'node:fs';
+import os0 from 'node:os';
+import path0 from 'node:path';
+import { createEditor } from '../src/edit.mjs';
+function chipProject() {
+  const root = fs0.mkdtempSync(path0.join(os0.tmpdir(), 'kerf-src-'));
+  fs0.mkdirSync(path0.join(root, 'src/lib'), { recursive: true });
+  fs0.writeFileSync(path0.join(root, 'src/lib/cn.ts'), "import { twMerge } from 'tailwind-merge';\nexport function cn(...a: string[]) { return twMerge(a.join(' ')); }\n");
+  fs0.writeFileSync(path0.join(root, 'src/lib/format.ts'), "export const STYLES: Record<string, string> = {\n  verified: 'border-surface bg-surface text-content',\n  estimated: 'border-muted bg-muted text-content',\n};\n");
+  fs0.writeFileSync(path0.join(root, 'src/Badge.tsx'), "import { cn } from '@/lib/cn';\nimport { STYLES } from '@/lib/format';\nexport function Badge({ c }: { c: string }) {\n  return <span className={cn('chip', STYLES[c], 'cursor-help')}>x</span>;\n}\n");
+  return root;
+}
+const editorFor = (root) => createEditor(root, () => th, { findIcon: () => null, componentList: () => new Map() });
+const chipLoc = 'src/Badge.tsx:4:9';
+const dom = ['chip', 'border-surface', 'bg-surface', 'text-content', 'cursor-help'];
+
+test('a style from a status table is changed in the table, for that status', () => {
+  const root = chipProject(), ed = editorFor(root);
+  const d = ed.describe(chipLoc, dom);
+  assert.equal(d.classKind, 'sourced');
+  assert.equal(d.sources.find((s) => s.kind === 'table').key, 'verified');
+  ed.edit(chipLoc, { ops: [{ prop: 'bg', value: 'primary' }], dom });
+  const t = fs0.readFileSync(path0.join(root, 'src/lib/format.ts'), 'utf8');
+  assert.match(t, /verified: 'border-surface bg-primary text-content'/);
+  assert.match(t, /estimated: 'border-muted bg-muted text-content'/);
+  ed.undo();
+  assert.match(fs0.readFileSync(path0.join(root, 'src/lib/format.ts'), 'utf8'), /verified: 'border-surface bg-surface text-content'/);
+});
+test('a table target can change every status, or one other status', () => {
+  const root = chipProject(), ed = editorFor(root);
+  ed.edit(chipLoc, { ops: [{ prop: 'padX', value: 8 }], dom, target: 'table:STYLES:*' });
+  const t = fs0.readFileSync(path0.join(root, 'src/lib/format.ts'), 'utf8');
+  assert.equal((t.match(/px-2/g) || []).length, 2);
+  ed.edit(chipLoc, { ops: [{ prop: 'color', value: 'muted' }], dom, target: 'table:STYLES:estimated' });
+  assert.match(fs0.readFileSync(path0.join(root, 'src/lib/format.ts'), 'utf8'), /estimated: 'border-muted bg-muted text-muted px-2'/);
+});
+test('"only this one" adds an override after the table when cn merges classes', () => {
+  const root = chipProject(), ed = editorFor(root);
+  ed.edit(chipLoc, { ops: [{ prop: 'bg', value: 'primary' }], dom, scope: 'here' });
+  assert.match(fs0.readFileSync(path0.join(root, 'src/Badge.tsx'), 'utf8'), /cn\('chip', STYLES\[c\], 'cursor-help bg-primary'\)/);
+  assert.match(fs0.readFileSync(path0.join(root, 'src/lib/format.ts'), 'utf8'), /verified: 'border-surface bg-surface text-content'/);
+});
+
+import { valueToHex, hexToValue } from '../src/tokens.mjs';
+test('colour tokens are read and written in the format the app uses', () => {
+  assert.equal(valueToHex('15 118 110', 'rgb'), '#0F766E');
+  assert.equal(hexToValue('#14B8A6', '45 200 182', 'rgb'), '20 184 166');
+  assert.equal(hexToValue('#14B8A6', '45, 200, 182', 'rgb'), '20, 184, 166');
+  assert.equal(valueToHex(hexToValue('#14B8A6', '173 58% 39%', 'hsl'), 'hsl'), '#14B8A6');
+  assert.equal(hexToValue('#14b8a6', '#2DC8B6'), '#14B8A6');
+});

@@ -153,6 +153,7 @@
   const sameLoc = (el) => (D ? D.querySelectorAll(defOf(el) ? `[data-kerf="${CSS.escape(defOf(el))}"]` : `[data-kerf-use="${CSS.escape(useOf(el))}"]`) : []);
 
   async function select(el) {
+    S.srcScope = 'key';
     if (!el) { S.multi = []; S.sel = null; S.cpick = null; renderPanel(); renderLayers(); return; }
     const list = [...sameLoc(el)];
     S.sel = { el, def: defOf(el), use: useOf(el), idx: Math.max(0, list.indexOf(el)), repeat: list.length, defInfo: null, useInfo: null };
@@ -168,7 +169,8 @@
   async function loadInfo() {
     const s = S.sel;
     if (!s) return;
-    const get = (loc) => (loc ? api('/inspect', { loc }).catch((e) => ({ error: e.message })) : null);
+    const dom = [...s.el.classList];
+    const get = (loc) => (loc ? api('/inspect', { loc, dom }).catch((e) => ({ error: e.message })) : null);
     const [d, u] = await Promise.all([get(s.def), get(s.use)]);
     if (S.sel !== s) return;
     s.defInfo = d;
@@ -201,13 +203,13 @@
     try {
       if (S.multi.length) {
         // Several selected: apply the same change to each one, in a safe order.
-        const edits = [{ loc, ...change, cva: cvaParam(), name: dName(S.sel.el) }, ...S.multi.map((m) => ({ loc: locOf(m), ...change, name: dName(m.el) }))];
-        const r = await api('/ai/apply', { edits: edits.map((e) => ({ loc: e.loc, ops: e.ops || [], props: e.props || [], text: e.text, name: e.name, bp: bpParam() })) });
+        const edits = [{ loc, ...change, cva: cvaParam(), name: dName(S.sel.el), dom: [...S.sel.el.classList] }, ...S.multi.map((m) => ({ loc: locOf(m), ...change, name: dName(m.el), dom: [...m.el.classList] }))];
+        const r = await api('/ai/apply', { edits: edits.map((e) => ({ loc: e.loc, ops: e.ops || [], props: e.props || [], text: e.text, name: e.name, dom: e.dom, bp: bpParam() })) });
         S.count = r.n;
         const ok = r.results.filter((x) => x.ok && x.changed).length;
         toast(`${ok} element${ok === 1 ? '' : 's'} · ${(r.results.find((x) => x.summary)?.summary.labels || []).join(' · ')}`, r.results.some((x) => !x.ok) ? r.results.find((x) => !x.ok).error : '', false, true);
       } else {
-        const r = await api('/edit', { loc, ...change, cva: cvaParam(), bp: bpParam(), name: S.sel ? dName(S.sel.el) : null });
+        const r = await api('/edit', { loc, ...change, cva: cvaParam(), bp: bpParam(), dom: S.sel ? [...S.sel.el.classList] : [], scope: S.srcScope || 'key', name: S.sel ? dName(S.sel.el) : null });
         if (r.changed) {
           S.count = r.n;
           const sm = r.summary;
@@ -547,6 +549,38 @@
     const dev = S.device;
     return S.sizeOnly[dev] ? { mode: 'only', start: r[0], end: r[1], label: `Only on ${dev}` } : { mode: 'all', label: 'All sizes' };
   }
+  // Where this element's styles really live (a style table, a constant), and how far a change reaches.
+  function sourceHTML(inf) {
+    if (inf?.classKind !== 'sourced') return '';
+    const tb = inf.sources.find((x) => x.kind === 'table'), src = tb || inf.sources.find((x) => x.kind === 'const');
+    if (!src) return '';
+    const what = tb ? `${tb.name} “${tb.key ?? '?'}”` : src.name;
+    const used = src.usedIn ? ` · used in ${src.usedIn} file${src.usedIn === 1 ? '' : 's'}` : '';
+    const opts = [['here', 'Only this one'], ['key', tb ? `All “${tb.key ?? '…'}”` : 'Everywhere'], ...(tb ? [['all', `All ${tb.entries.length}`]] : [])];
+    const sc = S.srcScope || 'key';
+    return `<div class="srcRow"><span class="note">Styles come from <b>${esc(what)}</b> in ${esc(src.file)}${used}</span><div class="seg">${opts.map(([v, n]) => `<button data-act="srcScope" data-v="${v}" class="${sc === v ? 'on' : ''}" title="${v === 'here' ? 'Change only this element' : v === 'key' ? `Change it in ${esc(src.name)}${tb ? ` for “${esc(tb.key)}”` : ''}, everywhere it’s used` : `Change every entry of ${esc(tb.name)}`}">${esc(n)}</button>`).join('')}</div></div>`;
+  }
+  // The app's colour tokens, like Figma's local styles: change one and every screen follows.
+  S.tokens = null;
+  const loadTokens = () => api('/tokens').then((t) => { S.tokens = t; if (S.mode === 'edit' && !S.sel) renderPanel(); }).catch(() => { S.tokens = []; });
+  function paletteHTML() {
+    if (S.tokens == null) { loadTokens(); return ''; }
+    if (!S.tokens.length) return '';
+    const themes = [...new Set(S.tokens.flatMap((t) => t.values.map((v) => v.theme)))].slice(0, 3);
+    return `<div class="sec palette"><div class="secH"><span>Colours</span><span class="note">${themes.map((x) => esc(x[0].toUpperCase() + x.slice(1))).join(' · ')}</span></div><span class="note">Your design system. Changing one updates every screen that uses it.</span>
+      ${S.tokens.map((t) => `<div class="tok"><span class="tn">${esc(t.name)}</span><span class="sw">${themes.map((th) => { const v = t.values.find((x) => x.theme === th) || (th !== 'all' && t.values.find((x) => x.theme === 'all')); return v ? `<label class="swatch" style="background:${esc(v.hex)}" title="${esc(t.name)} · ${esc(th)} · ${esc(v.hex)}"><input type="color" value="${esc(v.hex.slice(0, 7))}" data-token="${esc(t.name)}" data-theme="${esc(v.theme)}" aria-label="${esc(t.name)} ${esc(th)}"></label>` : '<span class="swatch none"></span>'; }).join('')}</span></div>`).join('')}</div>`;
+  }
+  document.addEventListener('change', async (e) => {
+    const i = e.target.closest?.('[data-token]');
+    if (!i) return;
+    try {
+      const r = await api('/token', { name: i.dataset.token, hex: i.value.toUpperCase(), which: i.dataset.theme === 'all' ? 'both' : i.dataset.theme });
+      if (r.changed) { S.count = r.n; toast(r.summary.labels?.[0] || 'Colour changed', 'Every screen using it updates', false, true); }
+      S.tokens = null;
+      afterEdit();
+      renderPanel();
+    } catch (err) { toast(err.message, '', true); }
+  });
   function sizeHTML(inf) {
     if (!sizeRange() || inf?.classKind === 'cva') return '';
     const dev = S.device, only = S.sizeOnly[dev];
@@ -582,7 +616,7 @@
     }
     const s = S.sel;
     if (!s) {
-      p.innerHTML = tabsHTML() + `<div class="empty"><b>Nothing selected</b><span>Click anything in your app, or pick a layer on the left. Double-click text to retype it. Every change here is written to your code.</span></div>`;
+      p.innerHTML = tabsHTML() + `<div class="scroll"><div class="empty"><b>Nothing selected</b><span>Click anything in your app, or pick a layer on the left. Double-click text to retype it. Every change here is written to your code.</span></div>${paletteHTML()}</div>`;
       return;
     }
     const el = s.el, inf = info();
@@ -590,6 +624,7 @@
     const loc = activeLoc();
     let h = `<div class="sec head"><div class="secH"><span class="nm">${ico(layerIcon(el))}${esc(dName(el))}</span><span class="hbs">${hb('copyLoc', 'code', `Code: ${loc.replace(/:(\d+):\d+$/, ':$1')} (click to copy)`)}${hb('parent', 'up', 'Select parent')}</span></div>
       ${scopeHTML(s, name)}
+      ${sourceHTML(inf)}
       ${sizeHTML(inf)}
       ${S.multi.length ? `<span class="note">+${S.multi.length} more selected: changes apply to all ${S.multi.length + 1}.</span>` : ''}
       ${s.repeat > 1 ? `<span class="note">Repeated ×${s.repeat} by the same code: edits apply to all of them.</span>` : ''}
@@ -877,6 +912,7 @@
       case 'changes': S.changesOpen = !S.changesOpen; renderChanges(); break;
       case 'toastClose': $('toast').hidden = true; break;
       case 'scope': S.scope = v; S.cpick = null; renderPanel(); break;
+      case 'srcScope': S.srcScope = v; renderPanel(); break;
       case 'sizeOnly': S.sizeOnly[S.device] = v === 'true'; renderPanel(); break;
       case 'reveal': S.reveal = { el: S.sel?.el, ...(S.reveal?.el === S.sel?.el ? S.reveal : {}), [v]: true }; renderPanel(); break;
       case 'saveVersion': api('/version', {}).then((v) => { S.versions = v; renderPanel(); renderTop(); toast(`Saved version ${v.versions.length}`); }).catch((e) => toast(e.message, '', true)); break;
@@ -1045,7 +1081,7 @@
   const UNIT = { w: 'px', h: 'px', mX: 'px', mY: 'px', fontSize: 'px', lineHeight: 'px', radius: 'px', rTL: 'px', rTR: 'px', rBR: 'px', rBL: 'px', padX: 'px', padY: 'px', gap: 'px', borderW: 'px', opacity: '%', letterSpacing: '%' };
   const WORDS = { fill: 'Fill', grow: 'Fill', hug: 'Hug', auto: 'Auto', row: 'Horizontal', col: 'Vertical', none: 'Off', true: 'On', false: 'Off' };
   const opLabel = (o) => { const v = String(o.value); if (o.prop === 'fontWeight') return `Weight ${({ 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semibold', 700: 'Bold', 800: 'Extra bold' })[v] || v}`; return `${PROP_NAMES[o.prop] || o.prop} ${WORDS[v] || v}${/^-?[\d.]+$/.test(v) ? UNIT[o.prop] || '' : ''}`; };
-  const structLabel = (st) => ({ group: `Group into a frame (${st.className || ''})`, ungroup: 'Ungroup', replace: `Replace with: ${(st.jsx || '').slice(0, 60)}`, delete: 'Delete', duplicate: 'Duplicate', move: `Move ${st.dir || 'to ' + st.index}`, swap: `Swap → ${st.to}`, insert: `Add ${st.position}: ${(st.jsx || '').slice(0, 60)}`, image: [st.src && `Image → ${st.src}`, st.alt != null && `Alt “${st.alt}”`].filter(Boolean).join(' · ') })[st.type];
+  const structLabel = (st) => ({ token: `Colour “${st.name}”${st.which && st.which !== 'both' ? ` (${st.which})` : ''} → ${st.hex}`, code: `Code change in ${String(st.file || '').split('/').pop()}`, group: `Group into a frame (${st.className || ''})`, ungroup: 'Ungroup', replace: `Replace with: ${(st.jsx || '').slice(0, 60)}`, delete: 'Delete', duplicate: 'Duplicate', move: `Move ${st.dir || 'to ' + st.index}`, swap: `Swap → ${st.to}`, insert: `Add ${st.position}: ${(st.jsx || '').slice(0, 60)}`, image: [st.src && `Image → ${st.src}`, st.alt != null && `Alt “${st.alt}”`].filter(Boolean).join(' · ') })[st.type];
   const editLabel = (e) => e.structure ? structLabel(e.structure) : [...e.ops.map(opLabel), ...(e.props || []).map((p) => `${p.name}: ${p.value}`), ...(e.text ? [`“${e.text}”`] : [])].join(' · ');
   function measure(el) {
     const c = cs(el);
@@ -1062,7 +1098,7 @@
     const def = defOf(el), use = useOf(el);
     const loc = use && (!def || el.tagName.toLowerCase() === 'svg' || el.getAttribute('data-kerf-n')) ? use : def || use;
     const img = el.tagName.toLowerCase() === 'img' ? { imgSrc: el.getAttribute('src'), alt: el.getAttribute('alt') } : {};
-    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note, ...img };
+    return { loc, shared: !!(def && use), measured: measure(el), text: (el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 100), note, dom: [...el.classList], ...img };
   }
   function uniq(list) {
     const seen = new Set(), out = [];
@@ -1133,7 +1169,9 @@
     if (!m || m.status !== 'pending') return;
     S.amber = [];
     if (v === 'apply') {
+      const hadError = !!D?.querySelector('vite-error-overlay');
       const r = await api('/ai/apply', { edits: chosen(m).map((e) => (e.structure ? e : { ...e, bp: bpParam() })) }).catch((e) => ({ error: e.message }));
+      if (!r.error && chosen(m).some((e) => e.structure?.type === 'code')) guard(hadError);
       if (r.error) { toast(r.error, '', true); renderAI(); return; }
       const ok = r.results.filter((x) => x.ok && x.changed).length, bad = r.results.filter((x) => !x.ok);
       S.count = r.n;
@@ -1147,7 +1185,7 @@
   }
   const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: '' };
   const chosen = (m) => m.proposal.edits.filter((e) => !(m.skip || []).includes(e.note ?? 0));
-  const editRow = (e) => `<div class="ed"><div class="edT"><b>${esc(e.name || e.tag)}</b><span class="mono">${esc(editLabel(e))}</span></div>${e.why ? `<span>${esc(e.why)}</span>` : ''}</div>`;
+  const editRow = (e) => `<div class="ed"><div class="edT"><b>${esc(e.name || e.tag)}</b><span class="mono">${esc(editLabel(e))}</span></div>${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div>`;
   const NSTAT = { done: ['Done', 'ok'], partial: ['Partly', 'part'], not_possible: ['Not here', 'no'] };
   // Notes answered one by one: the mark's number, what was asked, what Kerf did, and its edits.
   function notesHTML(m, i) {
