@@ -362,3 +362,14 @@ test('colour tokens are read and written in the format the app uses', () => {
   assert.equal(valueToHex(hexToValue('#14B8A6', '173 58% 39%', 'hsl'), 'hsl'), '#14B8A6');
   assert.equal(hexToValue('#14b8a6', '#2DC8B6'), '#14B8A6');
 });
+
+test('a new class string is added after the last argument even with a trailing comma', () => {
+  const root = fs0.mkdtempSync(path0.join(os0.tmpdir(), 'kerf-tc-'));
+  fs0.mkdirSync(path0.join(root, 'src/lib'), { recursive: true });
+  fs0.writeFileSync(path0.join(root, 'src/lib/cn.ts'), "import { twMerge } from 'tailwind-merge';\nexport function cn(...a: string[]) { return twMerge(a.join(' ')); }\n");
+  fs0.writeFileSync(path0.join(root, 'src/Chip.tsx'), "import { cn } from '@/lib/cn';\nexport function Chip({ on }: { on: boolean }) {\n  return (\n    <button\n      className={cn(\n        'rounded-full px-2',\n        on ? 'bg-primary text-content' : 'bg-surface text-muted',\n      )}\n    >x</button>\n  );\n}\n");
+  const ed = editorFor(root);
+  ed.edit('src/Chip.tsx:4:4', { ops: [{ prop: 'bg', value: '#2A2350' }], dom: ['rounded-full', 'px-2', 'bg-surface', 'text-muted'], target: 'element' });
+  const out = fs0.readFileSync(path0.join(root, 'src/Chip.tsx'), 'utf8');
+  assert.match(out, /'bg-surface text-muted',\n        'bg-\[#2A2350\]',\n      \)\}/);
+});

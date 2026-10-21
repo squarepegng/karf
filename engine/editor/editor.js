@@ -1509,12 +1509,13 @@
     const status = STATUS[m.status] ? `<span class="kStatus ${m.status}">${m.status === 'applied' ? ico('check', 12) : m.status === 'info' ? '<i class="kNo"></i>' : ''}${STATUS[m.status]}</span>` : '';
     const toks = p.edits.filter((e) => e.structure?.type === 'token'), rest = p.edits.filter((e) => e.structure?.type !== 'token');
     const suggest = p.suggest && m.status !== 'applied' ? `<div class="kSuggest"><span>${esc(p.suggest.why)}</span><button data-act2="suggestRun" data-i="${i}" data-v="${p.suggest.mode}">${p.suggest.mode === 'improve' ? 'Improve the system instead' : 'Explore freely instead'} →</button></div>` : '';
-    const keep = p.mode === 'explore' && m.status === 'applied' ? `<div class="kSuggest"><span>Like this look?</span><button data-act2="keepLook" data-i="${i}">Make it part of the design system →</button></div>` : '';
+    // Explore is a try-on: keep it, undo it, or turn it into the design system.
+    const keep = p.mode === 'explore' && m.status === 'applied' ? (m.kept ? `<div class="kSuggest"><span>Kept. Want it everywhere?</span><button data-act2="keepLook" data-i="${i}">Make it part of the design system →</button></div>` : `<div class="tryOn"><span>Trying this look on your screen.</span><div class="acts"><button class="ghostBtn" data-act2="tryUndo" data-i="${i}">Undo</button><button class="primary applyBtn" data-act2="tryKeep" data-i="${i}">Keep it</button></div><button class="linkBtn" data-act2="keepLook" data-i="${i}">Make it part of the design system →</button></div>`) : '';
     const head = m.applying ? `Applying ${n} change${n === 1 ? '' : 's'}…` : m.status === 'applied' ? `Applied ${m.appliedN ?? n} of ${p.edits.length}` : `${p.edits.length} proposed change${p.edits.length === 1 ? '' : 's'}`;
     return `<div class="prop${byNote ? ' byNote' : ''}">${stepsHTML(m)}${badge ? `<span class="badge">${badge}</span>` : ''}<p class="kText">${esc(cleanMsg(p.message))}</p>
       ${byNote ? `<div class="ngs">${notesHTML(m, i)}</div>` : toks.length ? `<div class="edits sys"><div class="edH">${ico('comp', 12)}Design system · ${toks.length} colour${toks.length === 1 ? '' : 's'}${m.status === 'pending' ? `<button class="pvBtn${m.previewing ? ' on' : ''}" data-act2="tokPreview" data-i="${i}">${ico('eye', 12)}${m.previewing ? 'Previewing' : 'Preview'}</button>` : ''}</div>${toks.map(rowFor(m)).join('')}</div>${rest.length ? `<div class="edits"><div class="edH">On this screen · ${rest.length}</div>${rest.map(rowFor(m)).join('')}</div>` : ''}` : p.edits.length ? `<div class="edits"><div class="edH">${m.applying ? '<i class="spin"></i>' : ''}${head}</div>${p.edits.map(rowFor(m)).join('')}</div>` : ''}
       ${suggest}${keep}
-      ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="primary applyBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
+      ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="primary applyBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${p.mode === 'explore' ? (n < p.edits.length ? `Try ${n} of ${p.edits.length}` : 'Try this look') : n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
   }
   // "Looked at 14 elements · Thought for 9s", which opens to show what Kerf read.
   function stepsHTML(m, live) {
@@ -1844,6 +1845,18 @@
           else runAI(u.text, m.targets?.length ? m.targets : S.sel ? selectionTargets() : visibleTargets(), m.where, u.shown, true);
         };
         if ((act === 'keepLook' || v !== 'system') && !S.direction) { S._afterDir = go; openDirection(); } else go();
+      }
+      else if (act === 'tryKeep') { const m = S.chat[+a.dataset.i]; if (m) { m.kept = true; renderAI(); saveChat(); } }
+      else if (act === 'tryUndo') {
+        const m = S.chat[+a.dataset.i];
+        if (!m) return;
+        (async () => {
+          let undone = 0;
+          for (let k = 0; k < (m.appliedN || 0); k++) { const r = await api('/undo', {}).catch(() => null); if (!r?.undone) break; S.count = r.n; undone++; }
+          m.status = 'discarded';
+          toast(undone ? `Undid the look (${undone} change${undone === 1 ? '' : 's'})` : 'Nothing to undo');
+          afterEdit(); renderAI(); saveChat();
+        })();
       }
       else if (act === 'tokPreview') {
         const m = S.chat[+a.dataset.i];

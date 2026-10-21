@@ -187,7 +187,17 @@ export function editSourced({ file, code, src, ops, theme, scope = 'key', target
     if (w.new) {
       if (!text) continue;
       const s = ms(file), e = src.expr;
-      if (src.call) s.appendLeft(src.call.end - 1, src.call.arguments.length ? `, '${text}'` : `'${text}'`);
+      // Right after the last argument, so a trailing comma (cn(a, b,)) stays valid.
+      if (src.call) {
+        const args = src.call.arguments, last = args[args.length - 1];
+        if (!last) s.appendLeft(src.call.end - 1, `'${text}'`);
+        else {
+          // Arguments on their own lines get the new one on its own line too, at the same indent.
+          const lineStart = code.lastIndexOf('\n', last.start - 1) + 1, indent = code.slice(lineStart, last.start);
+          const multiline = code.slice(src.call.start, last.start).includes('\n') && /^\s*$/.test(indent);
+          s.appendLeft(last.end, multiline ? `,\n${indent}'${text}'` : `, '${text}'`);
+        }
+      }
       else if (e.type === 'TemplateLiteral') s.appendLeft(e.end - 1, ` ${text}`);
       else s.overwrite(e.start, e.end, `\`\${${code.slice(e.start, e.end)}} ${text}\``);
       continue;
