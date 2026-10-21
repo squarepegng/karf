@@ -1344,7 +1344,9 @@
     renderAI();
     saveChat();
   }
-  const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: '' };
+  const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: 'No changes to your app' };
+  // Status is shown by Kerf, not written into the reply: drop a leading "Nothing changed yet." if the model adds one.
+  const cleanMsg = (t) => { const x = String(t || '').replace(/^\s*(nothing (has )?changed( yet)?|no changes( were)?( made)?( yet)?|i (haven[’']t|have not) changed anything( yet)?)\s*[.:;,—–-]*\s*/i, ''); return x ? x[0].toUpperCase() + x.slice(1) : String(t || ''); };
   const chosen = (m) => m.proposal.edits.filter((e) => !(m.skip || []).includes(e.note ?? 0));
   // Each proposed change shows where it stands: to do, applying, done, failed or left out.
   function rowState(m, e) {
@@ -1389,9 +1391,9 @@
     const badge = { partial: 'Partly possible', not_yet: 'Not possible in Kerf yet', needs_developer: 'For developers' }[p.scope];
     const byNote = p.notes?.length && p.edits.length + p.notes.length > 1;
     const n = chosen(m).length;
-    const status = STATUS[m.status] ? `<span class="kStatus ${m.status}">${m.status === 'applied' ? ico('check', 12) : ''}${STATUS[m.status]}</span>` : '';
+    const status = STATUS[m.status] ? `<span class="kStatus ${m.status}">${m.status === 'applied' ? ico('check', 12) : m.status === 'info' ? '<i class="kNo"></i>' : ''}${STATUS[m.status]}</span>` : '';
     const head = m.applying ? `Applying ${n} change${n === 1 ? '' : 's'}…` : m.status === 'applied' ? `Applied ${m.appliedN ?? n} of ${p.edits.length}` : `${p.edits.length} proposed change${p.edits.length === 1 ? '' : 's'}`;
-    return `<div class="prop${byNote ? ' byNote' : ''}">${stepsHTML(m)}${badge ? `<span class="badge">${badge}</span>` : ''}<p class="kText">${esc(p.message)}</p>
+    return `<div class="prop${byNote ? ' byNote' : ''}">${stepsHTML(m)}${badge ? `<span class="badge">${badge}</span>` : ''}<p class="kText">${esc(cleanMsg(p.message))}</p>
       ${byNote ? `<div class="ngs">${notesHTML(m, i)}</div>` : p.edits.length ? `<div class="edits"><div class="edH">${m.applying ? '<i class="spin"></i>' : ''}${head}</div>${p.edits.map(rowFor(m)).join('')}</div>` : ''}
       ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="amberBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
   }

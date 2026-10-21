@@ -561,3 +561,5 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .edH .spin{width:10px;height:10px}
 .ngE .ed{display:flex;flex-direction:row;gap:10px}
 .kSteps ul{list-style:none;padding-left:14px}
+.kStatus.info{color:var(--ink3);font-size:11px}
+.kNo{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--ink3);opacity:.7}

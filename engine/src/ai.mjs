@@ -96,6 +96,7 @@ How to work:
 - Always do what you can. If part of a request needs something not in your toolset yet (free positioning, animation, hover states, new pages), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
 - needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Kerf cannot make them yet; use not_yet for those.
 - This can be a conversation: earlier turns are included. Read follow-ups ("smaller", "undo that", "try again but warmer") against what you proposed before and whether it was applied.
+- Never say whether anything changed ("Nothing changed yet", "I haven't changed anything", "No edits"): Kerf shows that itself, next to your reply. When the designer is only asking a question, just answer it.
 - The message must describe only the edits you actually return. Write it for a designer, not a developer: plain words, no class names.`;
 
 function themeSummary(theme) {
