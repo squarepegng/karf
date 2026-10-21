@@ -426,8 +426,6 @@
       { label: 'Zoom to fit', kbd: '⇧1', on: S.zoom === 'fit', run: () => setZoom('fit') },
       '-',
       ...[0.5, 1, 2].map((z) => ({ label: `${z * 100}%`, kbd: z === 1 ? '⇧0' : '', on: S.zoom === z, run: () => setZoom(z) })),
-      '-',
-      { label: 'Show device frame', on: S.mockup, disabled: S.device === 'desktop', run: () => { S.mockup = !S.mockup; S.zoom = 'fit'; applyDevice(); tintStatus(); } },
     ], at);
   }
   // Right-click on the canvas: what a designer reaches for, on the element under the cursor.
@@ -467,38 +465,14 @@
   }
 
   // The app keeps its real width (so desktop stays desktop) and is scaled to fit, like a Figma frame.
-  // Phone and tablet are shown inside a device, like a presentation mock-up. The app keeps its exact
-  // width; the status bar and home bar sit outside the app's viewport, so nothing overlaps it.
-  //   b: bezel, s: status bar, hm: home bar, h: screen height, r: corner radius (device px)
-  const MOCK = { mobile: { b: 14, s: 50, hm: 28, h: 844, r: 60 }, tablet: { b: 24, s: 28, hm: 22, h: 1180, r: 44 } };
-  S.mockup = true;
   function applyDevice() {
-    const c = $('canvas'), fb = $('frameBox'), bz = $('bezel');
+    const c = $('canvas'), fb = $('frameBox');
     if (!c) return;
     // Room for the frame's name above it and a margin below, like an artboard.
     const aw = Math.max(80, c.clientWidth - 48), ah = Math.max(80, c.clientHeight - 64);
-    const mk = S.device !== 'desktop' && S.mockup ? MOCK[S.device] : null;
     let zFit, w, z, h, left, top = 44;
-    if (mk) {
-      w = DEVICES[S.device];
-      const ow = w + mk.b * 2, oh = mk.h + mk.b * 2;
-      // Leave room for the toolbar under the device.
-      zFit = Math.max(0.35, Math.min(1, aw / ow, (c.clientHeight - top - 84) / oh));
-      z = S.zoom === 'fit' ? zFit : S.zoom;
-      const bl = Math.max(24, (c.clientWidth - ow * z) / 2);
-      Object.assign(bz.style, { left: bl + 'px', top: top + 'px', width: ow + 'px', height: oh + 'px', transform: `scale(${z})` });
-      for (const [k, v] of Object.entries({ b: mk.b, s: mk.s, hm: mk.hm, r: mk.r })) bz.style.setProperty(`--${k}`, v + 'px');
-      bz.className = `bezel ${S.device}`;
-      bz.hidden = false;
-      left = bl + mk.b * z;
-      h = mk.h - mk.s - mk.hm;
-      Object.assign(fb.style, { width: w + 'px', height: h + 'px', left: left + 'px', top: top + (mk.b + mk.s) * z + 'px', transform: `scale(${z})` });
-      $('sizer').style.width = (bl + ow * z + 24) + 'px';
-      $('sizer').style.height = (top + oh * z + 24) + 'px';
-      $('devLabel').style.left = bl + 'px';
-    } else if (S.mode === 'preview' && S.device === 'desktop' && S.zoom === 'fit') {
+    if (S.mode === 'preview' && S.device === 'desktop' && S.zoom === 'fit') {
       // Preview on desktop: full screen, edge to edge, like presenting the real product.
-      bz.hidden = true;
       zFit = Math.max(0.5, Math.min(1, c.clientWidth / 1024));
       z = zFit;
       w = Math.round(c.clientWidth / z);
@@ -508,7 +482,6 @@
       $('sizer').style.width = '1px';
       $('sizer').style.height = '1px';
     } else {
-      bz.hidden = true;
       // Desktop keeps a desktop width (1024+) by zooming out, but Fit never goes below 50%, so text stays readable.
       zFit = S.device === 'desktop' ? Math.max(0.5, Math.min(1, aw / 1024)) : Math.min(1, aw / DEVICES[S.device]);
       w = S.device === 'desktop' ? Math.round(aw / zFit) : DEVICES[S.device];
@@ -522,35 +495,17 @@
       $('devLabel').style.left = left + 'px';
     }
     fb.style.setProperty('--iz', 1 / z);
-    fb.classList.toggle('dev', S.device !== 'desktop' && !mk);
-    fb.classList.toggle('mock', !!mk);
+    fb.classList.toggle('dev', S.device !== 'desktop');
     const full = S.mode === 'preview' && S.device === 'desktop' && S.zoom === 'fit';
     fb.classList.toggle('full', full);
     // Preview is a presentation: no artboard name, no dotted grid.
     c.classList.toggle('present', S.mode === 'preview');
     $('devLabel').hidden = S.mode === 'preview';
-    $('devLabel').innerHTML = `<b>${mk ? (S.device === 'mobile' ? 'iPhone' : 'iPad') : DEV_LABEL[S.device]}</b><span>${w}${mk ? ` × ${h}` : ''}</span>`;
+    $('devLabel').innerHTML = `<b>${DEV_LABEL[S.device]}</b><span>${w}</span>`;
     const changed = S.z !== z;
     S.z = z;
     if (changed) renderTop();
   }
-  // The status bar takes the app's own background, with dark or light icons to match.
-  function tintStatus() {
-    const bz = $('bezel');
-    if (!D || !bz || bz.hidden) return;
-    const pickBg = (el) => { const v = el && getComputedStyle(el).backgroundColor; return v && !/rgba\(0, 0, 0, 0\)|transparent/.test(v) ? v : null; };
-    const top = D.elementFromPoint(Math.min(20, (W.innerWidth || 40) - 1), 1);
-    let bg = null;
-    for (let el = top; el && !bg; el = el.parentElement) bg = pickBg(el);
-    bg = bg || pickBg(D.body) || pickBg(D.documentElement) || 'rgb(255, 255, 255)';
-    const [r, g, b2] = (bg.match(/[\d.]+/g) || [255, 255, 255]).map(Number);
-    const fg = 0.299 * r + 0.587 * g + 0.114 * b2 > 150 ? '#0B0B0C' : '#FFFFFF';
-    if (bz.style.getPropertyValue('--sb-bg') !== bg) { bz.style.setProperty('--sb-bg', bg); bz.style.setProperty('--sb-fg', fg); }
-    const d = new Date(), date = bz.querySelector('.date');
-    bz.querySelector('.time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
-    if (date) date.textContent = S.device === 'tablet' ? d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) : '';
-  }
-  setInterval(tintStatus, 1500);
   function setZoom(v) {
     const cur = S.z;
     if (v === 'fit') S.zoom = 'fit';
@@ -911,7 +866,7 @@
     } else { S.askOpen = false; if (S.side === 'history') S.side = 'design'; }
     renderAll();
     // Panels open or close with the mode, so the presentation re-fits.
-    setTimeout(() => { applyDevice(); tintStatus(); }, 0);
+    setTimeout(applyDevice, 0);
   }
   function renderAll() {
     renderTop(); renderBar(); renderLayers(); renderPanel(); renderAsk(); renderMarks();
@@ -1025,7 +980,6 @@
     renderAll();
   }
   frame.addEventListener('load', bindApp);
-  frame.addEventListener('load', () => setTimeout(tintStatus, 400));
   addEventListener('resize', () => { if (innerWidth < 1000 && S.layersOpen) { S.layersOpen = false; renderLayers(); renderTop(); } });
 
   // Clicking outside a floating card closes it.
@@ -1127,7 +1081,7 @@
       case 'chatToggle': toggleAI(false); break;
       case 'ask': toggleAI(false); break;
       case 'layersToggle': S.layersOpen = !S.layersOpen; renderLayers(); renderTop(); break;
-      case 'device': S.device = v; S.zoom = 'fit'; applyDevice(); renderTop(); renderPanel(); setTimeout(tintStatus, 50); break;
+      case 'device': S.device = v; S.zoom = 'fit'; applyDevice(); renderTop(); renderPanel(); break;
       case 'zoom': setZoom(v); break;
       case 'kerfMenu': kerfMenu(below(a)); break;
       case 'pagesMenu': pagesMenu(below(a)); break;
