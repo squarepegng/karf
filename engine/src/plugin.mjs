@@ -66,6 +66,10 @@ export async function createKerf(webRoot) {
         }
         if (req.method === 'GET' && route === '/versions') return send(200, session.list());
         if (req.method === 'GET' && route === '/chat') return send(200, session.chat());
+        if (req.method === 'GET' && route === '/icons/suggest') {
+          const u = new URL(req.url, 'http://x').searchParams, lib = u.get('lib') || undefined;
+          return send(200, { used: library.usedIcons(lib).slice(0, 36), similar: library.similarIcons(u.get('name'), lib) });
+        }
         if (req.method === 'GET' && route === '/icons') return send(200, library.searchIcons(new URL(req.url, 'http://x').searchParams.get('q'), 80, new URL(req.url, 'http://x').searchParams.get('lib') || undefined));
         if (req.method === 'GET' && route === '/components') return send(200, [...library.componentList().values()].map((c) => ({ name: c.name, file: c.rel })).sort((a, b) => a.name.localeCompare(b.name)));
         if (req.method === 'GET' && route === '/uploads') return send(200, library.uploads());

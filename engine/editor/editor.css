@@ -607,3 +607,40 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .dialog .insSearch,.sec .insSearch{flex-direction:row;align-items:center;gap:8px}
 .insSearch input{text-align:left;height:100%;padding:0}
 .insSearch svg{flex:0 0 auto}
+
+/* icon: compact swap row + picker popover */
+.icRow.btnRow{width:100%;padding:6px;margin:-2px 0 2px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--ink);text-align:left}
+.icRow.btnRow:hover{background:var(--raised);border-color:rgba(255,255,255,.08)}
+.icRow .icMeta{flex:1}
+.icSwap{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:6px;background:rgba(255,255,255,.06);color:var(--ink2);font-size:11px}
+.icRow.btnRow:hover .icSwap{color:var(--ink)}
+.iconPop{position:fixed;z-index:60;display:flex;flex-direction:column;gap:8px;padding:10px;background:#1E1E21;border:1px solid rgba(255,255,255,.08);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.55)}
+.iconPop[hidden]{display:none}
+.ipBody{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;display:flex;flex-direction:column;gap:6px}
+.ipT{padding:4px 2px 0;color:var(--ink3);font:500 11px/14px Geist,system-ui,sans-serif}
+.ipNone{padding:18px 4px;text-align:center;color:var(--ink3)}
+.iconPop .igrid.p{grid-template-columns:repeat(4,minmax(0,1fr));max-height:none;overflow:visible}
+.iconPop .icell{height:auto;padding:8px 2px 6px;flex-direction:column;gap:5px;background:transparent;border:1px solid transparent}
+.iconPop .icell:hover{background:var(--raised);border-color:rgba(255,255,255,.08)}
+.iconPop .icell.on{border-color:var(--select);background:rgba(43,102,217,.12)}
+.iconPop .icell img{width:18px;height:18px}
+.iconPop .icell span{display:block;font-size:10px;line-height:12px;color:var(--ink3);max-width:100%}
+.ipFoot{border-top:1px solid rgba(255,255,255,.06);padding-top:6px}
+.ipFoot .ghostBtn{display:flex;align-items:center;gap:6px;width:100%;justify-content:center}
+
+/* notes tray: sits above the toolbar, lists every note, one clear action */
+.notesChip{left:50%;bottom:84px;transform:translateX(-50%);width:min(400px,calc(100% - 32px));height:auto;flex-direction:column;align-items:stretch;gap:8px;padding:10px;border-radius:16px;background:#1E1E21;border:1px solid rgba(255,255,255,.08);box-shadow:0 16px 48px rgba(0,0,0,.5)}
+.ntHead{display:flex;align-items:center;justify-content:space-between;padding:0 2px 0 4px}
+.ntTitle{display:inline-flex;align-items:center;gap:6px;color:var(--ink2);font:500 12px/16px Geist,system-ui,sans-serif}
+.ghostBtn.sm{height:24px;padding:0 8px;font-size:11px}
+.ntList{display:flex;flex-direction:column;gap:2px;max-height:180px;overflow:auto}
+.ntRow{display:flex;align-items:flex-start;gap:10px;padding:7px 6px;border-radius:9px}
+.ntRow:hover{background:var(--raised)}
+.ntRow .nNum{margin-top:1px}
+.ntText{flex:1;min-width:0;color:var(--ink);line-height:18px}
+.ntText em{color:var(--ink3);font-style:normal}
+.ntDel{display:grid;place-items:center;width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:var(--ink3);opacity:0}
+.ntRow:hover .ntDel{opacity:1}
+.ntDel:hover{background:var(--line);color:var(--ink)}
+.ntGo{width:100%;justify-content:center;height:34px;border-radius:10px;font-weight:500}
+.ntGo .spin{border-color:rgba(255,255,255,.35);border-top-color:#fff}

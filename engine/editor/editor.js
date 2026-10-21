@@ -155,6 +155,7 @@
   async function select(el) {
     S.srcScope = 'key';
     S.iconQ = null;
+    closeIconPop?.();
     if (!el) { S.multi = []; S.sel = null; S.cpick = null; renderPanel(); renderLayers(); return; }
     const list = [...sameLoc(el)];
     S.sel = { el, def: defOf(el), use: useOf(el), idx: Math.max(0, list.indexOf(el)), repeat: list.length, defInfo: null, useInfo: null };
@@ -772,7 +773,7 @@
     else {
       h += imageSection(el);
       if (el.tagName.toLowerCase() === 'svg') h += iconSection(el);
-      h += propsSection(inf);
+      else h += propsSection(inf);
       if (inf.classKind === 'dynamic') h += `<div class="sec"><span class="note warn">${esc(inf.classReason)}</span></div>`;
       if (inf.text?.editable) h += sec('Content', `<label class="inp"><input type="text" data-text="1" value="${esc(inf.text.value)}" aria-label="Text"></label>`);
       else if (isText(el)) h += sec('Content', `<span class="note">${esc(inf.text?.reason || '')}</span>`);
@@ -940,7 +941,7 @@
       e.preventDefault(); e.stopPropagation();
     };
     ['pointerdown', 'mousedown', 'mouseup', 'pointerup', 'touchstart', 'submit', 'contextmenu', 'auxclick'].forEach((t) => W.addEventListener(t, block, true));
-    W.addEventListener('pointerdown', () => closeMenu(), true);
+    W.addEventListener('pointerdown', () => { closeMenu(); closeIconPop(); }, true);
     W.addEventListener('scroll', () => closeMenu(), true);
     W.addEventListener('contextmenu', (e) => {
       if (S.mode !== 'edit' || S.tool === 'annotate' || S.editing) return;
@@ -1604,6 +1605,8 @@
   const drawMarks = () => { $('marksG').innerHTML = S.notes.map((n, i) => shapeSVG(n, i, false, S.hlNote === i + 1)).join('') + (S.noteDraft ? shapeSVG(S.noteDraft, null, true) : ''); };
   // Hovering a note's answer lights up its mark and the elements it changes.
   document.addEventListener('mouseover', (e) => {
+    const row = e.target.closest?.('.ntRow');
+    if (row || e.target.closest?.('#notesChip')) { const n = row ? +row.dataset.note : null; if (n !== S.hlNote) { S.hlNote = n; drawMarks(); } return; }
     const g = e.target.closest?.('.ng'), n = g ? +g.dataset.ng : null;
     if (n === (S.hlNote ?? null)) return;
     S.hlNote = n;
@@ -1616,8 +1619,14 @@
     $('annoCap').hidden = S.tool !== 'annotate';
     const busy = S.card?.busy && S.card.where === 'notes';
     const chip = $('notesChip');
-    chip.hidden = !S.notes.length || !!S.noteDraft;
-    if (!chip.hidden) chip.innerHTML = `<span>${S.notes.length} note${S.notes.length === 1 ? '' : 's'}</span><button class="ghostBtn" data-act2="notesClear">Clear</button><button class="lightBtn" data-act2="notesApply" ${busy ? 'disabled' : ''}>${busy ? '<i class="spin dark"></i>Reading…' : `${ico('spark', 14)}Apply ${S.notes.length > 1 ? 'all ' + S.notes.length : 'note'}`}</button>`;
+    chip.hidden = !S.notes.length || !!S.noteDraft || !!(S.card && S.card.where === 'notes' && !S.card.busy);
+    // A tray above the toolbar: every note with its number and text, then one clear action.
+    if (!chip.hidden) {
+      const n = S.notes.length;
+      chip.innerHTML = `<div class="ntHead"><span class="ntTitle">${ico('pen', 13)}${n} note${n === 1 ? '' : 's'} for Kerf</span><button class="ghostBtn sm" data-act2="notesClear" title="Remove all notes">Clear all</button></div>
+        <div class="ntList">${S.notes.map((x, i) => `<div class="ntRow" data-note="${i + 1}"><i class="nNum">${i + 1}</i><span class="ntText">${esc(x.text)}${x.atts?.length ? ` <em>· ${x.atts.length} image${x.atts.length === 1 ? '' : 's'}</em>` : ''}</span><button class="ntDel" data-act2="noteDel" data-i="${i}" title="Remove this note" aria-label="Remove note ${i + 1}">${ico('x', 12)}</button></div>`).join('')}</div>
+        <button class="primary ntGo" data-act2="notesApply" ${busy ? 'disabled' : ''}>${busy ? '<i class="spin"></i>Kerf is reading your notes…' : `${ico('spark', 14)}Ask Kerf to fix ${n === 1 ? 'this' : `all ${n}`}`}</button>`;
+    }
     const pop = $('notePop');
     pop.hidden = !S.noteDraft;
     if (S.noteDraft && W) {
@@ -1709,6 +1718,7 @@
       else if (act === 'attX') { (S.att[a.dataset.id] || []).splice(+a.dataset.i, 1); reKC(a.dataset.id); }
       else if (act === 'mic') toggleMic(a.dataset.id);
       else if (act === 'noteDiscard') { S.noteDraft = null; renderMarks(); }
+      else if (act === 'noteDel') { S.notes.splice(+a.dataset.i, 1); S.hlNote = null; renderMarks(); }
       else if (act === 'notesClear') { S.notes = []; if (S.card?.where === 'notes') S.card = null; S.amber = []; renderMarks(); }
       else if (act === 'notesApply') applyNotes();
       return;
@@ -1927,11 +1937,13 @@
     }
     else if (act === 'insComp') insertJsx(CHILD_TEXT.test(v) ? `<${v}>${v}</${v}>` : `<${v} />`);
     else if (act === 'pickIcon') {
-      if (a.dataset.mode === 'swap') { $('modal').hidden = true; structure({ type: 'swap', to: v }, { keepSel: true }); }
+      if (a.dataset.mode === 'swap') { $('modal').hidden = true; closeIconPop(); structure({ type: 'swap', to: v }, { keepSel: true }); }
       else insertJsx(`<${v} className="h-5 w-5" />`);
     }
     else if (act === 'swapComp') { $('modal').hidden = true; structure({ type: 'swap', to: v }, { keepSel: true }); }
+    else if (act === 'iconPick') openIconPop(a);
     else if (act === 'iconUpload') {
+      closeIconPop();
       // Your own icon: an uploaded SVG takes this icon's place at the same size.
       const file = await pickFile();
       if (!file) return;
@@ -1943,38 +1955,63 @@
     else if (act === 'imgUpload') { const src = await upload(await pickFile()); if (src) structure({ type: 'image', src }, { keepSel: true }); }
     else if (act === 'imgLink') { const u = prompt('Image link (https://…)'); if (u && /^https?:\/\//.test(u)) structure({ type: 'image', src: u.trim() }, { keepSel: true }); }
   });
-  /* the icon panel: what this icon is, swap it from the library, or use your own SVG */
-  S.iconQ = null;
-  S.iconRes = null;
+  /* the icon panel: a compact row like Figma's instance swap, plain stroke controls, and a picker */
   const libName = (lib) => ({ 'lucide-react': 'Lucide', '@phosphor-icons/react': 'Phosphor', 'phosphor-react': 'Phosphor' })[lib] || lib || '';
-  const iconGrid = (list) => (list.length ? list.slice(0, 48).map((i) => `<button class="icell" data-act="pickIcon" data-v="${esc(i.name)}" data-mode="swap" title="${esc(camelWords(i.name))} · ${esc(libName(i.lib))}"><img src="${iconSrc(i)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></button>`).join('') : '<span class="note">No icons match.</span>');
-  let iconPT;
-  function loadIconsP(q, lib) {
-    clearTimeout(iconPT);
-    iconPT = setTimeout(async () => {
-      const list = await api('/icons?q=' + encodeURIComponent(q) + (lib ? '&lib=' + encodeURIComponent(lib) : '')).catch(() => []);
-      S.iconRes = { q, lib, list };
-      const g = $('iconGridP');
-      if (g) g.innerHTML = iconGrid(list);
-    }, 120);
-  }
   function iconSection(el) {
     const name = el.getAttribute('data-kerf-n') || '', lib = S.sel?.useInfo?.lib || '';
-    const q = S.iconQ ?? (camelWords(name).split(' ')[0] || '').toLowerCase();
-    const res = S.iconRes && S.iconRes.q === q && S.iconRes.lib === lib ? S.iconRes.list : null;
-    if (!res) loadIconsP(q, lib);
-    const now = name && /^[A-Z]/.test(name)
-      ? `<span class="icNow"><img src="${iconSrc({ name, lib: lib || 'lucide-react' })}" alt="" onerror="this.style.visibility='hidden'"></span><span class="icMeta"><b>${esc(camelWords(name))}</b><span class="note">${esc(libName(lib) || 'Icon')}</span></span>`
-      : `<span class="icNow">${ico('spark', 16)}</span><span class="icMeta"><b>Custom icon</b><span class="note">Drawn in the code</span></span>`;
-    return sec('Icon', `<div class="icRow">${now}</div>
-      <label class="insSearch sm">${ico('search', 12)}<input id="iconQp" value="${esc(q)}" placeholder="Search ${esc(libName(lib) || 'icons')}" autocomplete="off" spellcheck="false" aria-label="Search icons"></label>
-      <div class="igrid p" id="iconGridP">${res ? iconGrid(res) : '<span class="note">Loading icons…</span>'}</div>
-      <button class="outline full" data-act="iconUpload">${ico('image', 12)}Use your own SVG…</button>`);
+    const real = name && /^[A-Z]/.test(name);
+    const props = (S.sel?.useInfo?.props || []).filter((p) => p.editable);
+    const prop = (n) => props.find((p) => p.name === n);
+    const sw = prop('strokeWidth'), abs = prop('absoluteStrokeWidth'), wt = prop('weight');
+    const row = `<button class="icRow btnRow" data-act="iconPick" title="Swap icon" aria-haspopup="dialog">
+        <span class="icNow">${real ? `<img src="${iconSrc({ name, lib: lib || 'lucide-react' })}" alt="" onerror="this.style.visibility='hidden'">` : ico('spark', 16)}</span>
+        <span class="icMeta"><b>${esc(real ? camelWords(name) : 'Custom icon')}</b><span class="note">${esc(real ? libName(lib) || 'Icon' : 'Drawn in the code')}</span></span>
+        <span class="icSwap">Swap${ico('chev', 10)}</span></button>`;
+    const ctl = [
+      sw ? `<div class="kv"><span>Stroke</span><label class="inp"><input type="text" inputmode="decimal" data-propnum="strokeWidth" value="${sw.value ?? ''}" placeholder="2" aria-label="Stroke width"></label></div>` : '',
+      abs ? `<div class="kv"><span title="Keep the lines the same thickness when the icon is resized">Fixed stroke</span><div class="seg"><button data-act="setProp" data-p="absoluteStrokeWidth" data-v="false" class="${abs.value !== true ? 'on' : ''}">Off</button><button data-act="setProp" data-p="absoluteStrokeWidth" data-v="true" class="${abs.value === true ? 'on' : ''}">On</button></div></div>` : '',
+      wt ? `<div class="kv"><span>Weight</span><label class="inp"><select data-propsel="weight" aria-label="Icon weight">${wt.value == null ? '<option value="" selected>Default</option>' : ''}${wt.options.map((o) => `<option${o === wt.value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>${ico('chev', 12)}</label></div>` : '',
+    ].join('');
+    return sec('Icon', row + ctl);
   }
+  // The picker: icons this app already uses, icons like this one, or a search, with names and the current one marked.
+  S.iconSug = null;
+  const iconCells = (list, cur) => list.map((i) => `<button class="icell${i.name === cur ? ' on' : ''}" data-act="pickIcon" data-v="${esc(i.name)}" data-mode="swap" title="${esc(camelWords(i.name))}"><img src="${iconSrc(i)}" alt="" decoding="async" onerror="this.style.visibility='hidden'"><span>${esc(camelWords(i.name))}</span></button>`).join('');
+  function iconPopBody() {
+    const name = S.sel?.el.getAttribute('data-kerf-n') || '', q = (S.iconQ || '').trim();
+    if (q) return S.iconRes?.q === q ? (S.iconRes.list.length ? `<div class="ipT">Results</div><div class="igrid p">${iconCells(S.iconRes.list.slice(0, 60), name)}</div>` : '<div class="ipNone">No icons match.</div>') : '<div class="ipNone">Searching…</div>';
+    if (!S.iconSug) return '<div class="ipNone">Loading…</div>';
+    const used = S.iconSug.used.filter((i) => i.name !== name).slice(0, 18), sim = S.iconSug.similar.slice(0, 24);
+    return `${sim.length ? `<div class="ipT">Like ${esc(camelWords(name) || 'this one')}</div><div class="igrid p">${iconCells(sim, name)}</div>` : ''}${used.length ? `<div class="ipT">Used in this app</div><div class="igrid p">${iconCells(used, name)}</div>` : ''}` || '<div class="ipNone">Search for an icon.</div>';
+  }
+  function openIconPop(anchor) {
+    let pop = $('iconPop');
+    if (!pop) { pop = document.createElement('div'); pop.id = 'iconPop'; pop.className = 'iconPop'; pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Swap icon'); document.body.appendChild(pop); }
+    const lib = S.sel?.useInfo?.lib || '', name = S.sel?.el.getAttribute('data-kerf-n') || '';
+    S.iconQ = '';
+    pop.innerHTML = `<label class="insSearch sm">${ico('search', 12)}<input id="iconQp" placeholder="Search ${esc(libName(lib) || 'icons')}" autocomplete="off" spellcheck="false" aria-label="Search icons"></label><div class="ipBody" id="ipBody">${iconPopBody()}</div><div class="ipFoot"><button class="ghostBtn" data-act="iconUpload">${ico('image', 12)} Use your own SVG…</button></div>`;
+    pop.hidden = false;
+    const r = anchor.getBoundingClientRect(), h = Math.min(460, innerHeight - 24);
+    const below = innerHeight - r.bottom - 12 >= Math.min(h, 360);
+    Object.assign(pop.style, { width: Math.max(260, r.width) + 'px', left: Math.max(8, Math.min(innerWidth - Math.max(260, r.width) - 8, r.left)) + 'px', top: (below ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px', maxHeight: h + 'px' });
+    setTimeout(() => $('iconQp')?.focus(), 0);
+    api('/icons/suggest?name=' + encodeURIComponent(name) + (lib ? '&lib=' + encodeURIComponent(lib) : '')).then((x) => { S.iconSug = x; if (!(S.iconQ || '').trim() && $('ipBody')) $('ipBody').innerHTML = iconPopBody(); }).catch(() => { S.iconSug = { used: [], similar: [] }; });
+  }
+  const closeIconPop = () => { const p = $('iconPop'); if (p) p.hidden = true; };
+  document.addEventListener('pointerdown', (e) => { const p = $('iconPop'); if (p && !p.hidden && !e.target.closest('#iconPop,[data-act="iconPick"]')) closeIconPop(); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeIconPop(); });
+  let iconPT;
   document.addEventListener('input', (e) => {
     if (e.target.id !== 'iconQp') return;
     S.iconQ = e.target.value;
-    loadIconsP(e.target.value, S.sel?.useInfo?.lib || '');
+    const q = e.target.value.trim(), lib = S.sel?.useInfo?.lib || '';
+    if (!q) { $('ipBody').innerHTML = iconPopBody(); return; }
+    clearTimeout(iconPT);
+    iconPT = setTimeout(async () => {
+      const list = await api('/icons?q=' + encodeURIComponent(q) + (lib ? '&lib=' + encodeURIComponent(lib) : '')).catch(() => []);
+      S.iconRes = { q, list };
+      if ((S.iconQ || '').trim() === q && $('ipBody')) $('ipBody').innerHTML = iconPopBody();
+    }, 120);
   });
   async function openSwapComponent() {
     if (!S.components) S.components = await api('/components').catch(() => []);

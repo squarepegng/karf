@@ -107,6 +107,53 @@ export function createLibrary(webRoot) {
     return out.sort((a, b) => a.score - b.score || a.name.length - b.name.length).slice(0, limit).map(({ name, lib }) => ({ name, lib }));
   }
 
+  // Icons the app already imports, most used first, so a swap keeps the app's icon vocabulary.
+  let usedCache = null;
+  function usedIcons(only) {
+    if (!usedCache || Date.now() - usedCache.at > 10000) {
+      const counts = new Map();
+      const libs = Object.keys(iconLibs());
+      const walk = (d) => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+          if (e.name.startsWith('.') || ['node_modules', 'dist', 'build', 'out', 'public'].includes(e.name)) continue;
+          const p = path.join(d, e.name);
+          if (e.isDirectory()) walk(p);
+          else if (/\.[jt]sx?$/.test(e.name)) {
+            const code = fs.readFileSync(p, 'utf8');
+            for (const m of code.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+              if (!libs.includes(m[2])) continue;
+              for (const raw of m[1].split(',')) {
+                const n = raw.trim().split(/\s+as\s+/)[0].replace(/^type\s+/, '').replace(/Icon$/, '');
+                if (/^[A-Z]/.test(n) && iconLibs()[m[2]].has(n)) counts.set(`${m[2]}|${n}`, (counts.get(`${m[2]}|${n}`) || 0) + 1);
+              }
+            }
+          }
+        }
+      };
+      try { walk(srcDir); } catch {}
+      usedCache = { at: Date.now(), list: [...counts].sort((a, b) => b[1] - a[1]).map(([k]) => { const [lib, name] = k.split('|'); return { name, lib }; }) };
+    }
+    return usedCache.list.filter((i) => !only || i.lib === only);
+  }
+  // Icons related to this one: the words in its name, plus a few common synonyms.
+  const RELATED = { tv: ['monitor', 'screen', 'laptop', 'cast'], monitor: ['tv', 'screen', 'laptop'], trash: ['delete', 'bin', 'eraser'], user: ['person', 'profile', 'contact', 'circleuser'], settings: ['cog', 'gear', 'sliders', 'wrench'], cog: ['settings', 'gear', 'sliders'], x: ['close', 'circlex', 'ban'], search: ['scan', 'filter', 'zoomin'], heart: ['star', 'thumbsup', 'bookmark'], star: ['heart', 'sparkle', 'award'], home: ['house', 'building'], mail: ['inbox', 'send', 'message'], bell: ['alarm', 'notification', 'megaphone'], lock: ['key', 'shield', 'unlock'], key: ['lock', 'shield'], shield: ['lock', 'badgecheck'], check: ['circlecheck', 'badgecheck', 'squarecheck'], chevron: ['arrow', 'caret'], arrow: ['chevron', 'move'], plus: ['circleplus', 'squareplus'], calendar: ['clock', 'alarm'], clock: ['timer', 'watch', 'calendar'], phone: ['smartphone', 'call'], camera: ['image', 'video', 'aperture'], image: ['camera', 'picture', 'gallery'], file: ['document', 'folder', 'clipboard'], folder: ['file', 'archive'], chart: ['graph', 'trendingup', 'activity'], globe: ['earth', 'map', 'languages'], sparkles: ['wand', 'star', 'zap'], zap: ['bolt', 'flash', 'sparkles'] };
+  function similarIcons(name, only, limit = 36) {
+    const wordsOf = (n) => String(n || '').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Za-z])([0-9])/g, '$1 $2').toLowerCase().split(/\s+/).filter(Boolean);
+    // Shape and style words ("round", "square", "2") describe how an icon looks, not what it means.
+    const STYLE = new Set(['round', 'square', 'circle', 'minimal', 'off', 'dashed', 'filled', 'simple', 'alt', 'line', 'small', 'big', 'up', 'down', 'left', 'right', '2', '3', '4']);
+    const all = wordsOf(name).filter((w) => w.length > 1 || w === 'x');
+    const own = all.filter((w) => !STYLE.has(w)).length ? all.filter((w) => !STYLE.has(w)) : all;
+    const terms = [...new Set([...own, ...own.flatMap((w) => RELATED[w] || [])])];
+    // Whole words only (so "tv" doesn't match "SplitVertical"); longer terms may match the start of a word.
+    const hit = (n) => { const ws = wordsOf(n); let best = 99; terms.forEach((t, rank) => { if (ws.some((w) => w === t || (t.length >= 4 && w.startsWith(t)))) best = Math.min(best, rank); }); return best; };
+    const out = [];
+    for (const [lib, set] of Object.entries(iconLibs())) {
+      if (only && lib !== only) continue;
+      for (const n of set) { if (n === name) continue; const r = hit(n); if (r < 99) out.push({ name: n, lib, r }); }
+    }
+    return out.sort((a, b) => a.r - b.r || a.name.length - b.name.length).slice(0, limit).map(({ name, lib }) => ({ name, lib }));
+  }
+
   /* uploads go to public/kerf/ so they're served as /kerf/<name> */
   const uploadDir = path.join(webRoot, 'public', 'kerf');
   function saveUpload(name, base64) {
@@ -126,5 +173,5 @@ export function createLibrary(webRoot) {
     return fs.readdirSync(uploadDir).filter((f) => /\.(png|jpe?g|gif|webp|svg|avif)$/i.test(f)).map((f) => `/kerf/${f}`);
   }
 
-  return { iconLibs, findIcon, searchIcons, componentList, importPath, saveUpload, uploads };
+  return { iconLibs, findIcon, searchIcons, usedIcons, similarIcons, componentList, importPath, saveUpload, uploads };
 }
