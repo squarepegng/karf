@@ -1381,7 +1381,7 @@
   const STATUS = { applied: 'Applied', discarded: 'Discarded', failed: 'Couldn’t apply', info: 'No changes to your app' };
   // Status is shown by Kerf, not written into the reply: drop a leading "Nothing changed yet." if the model adds one.
   const cleanMsg = (t) => { const x = String(t || '').replace(/^\s*(nothing (has )?changed( yet)?|no changes( were)?( made)?( yet)?|i (haven[’']t|have not) changed anything( yet)?)\s*[.:;,—–-]*\s*/i, ''); return x ? x[0].toUpperCase() + x.slice(1) : String(t || ''); };
-  const chosen = (m) => m.proposal.edits.filter((e) => !(m.skip || []).includes(e.note ?? 0));
+  const chosen = (m) => m.proposal.edits.filter((e, k) => !(m.off || []).includes(k) && !(m.skip || []).includes(e.note ?? 0));
   // Each proposed change shows where it stands: to do, applying, done, failed or left out.
   function rowState(m, e) {
     const inPlan = chosen(m).includes(e);
@@ -1389,11 +1389,14 @@
     if (m.status === 'applied') return !inPlan ? 'skip' : (m.failed || []).includes(e.loc) ? 'bad' : 'ok';
     if (m.status === 'failed') return 'bad';
     if (m.status === 'discarded') return 'skip';
-    return 'todo';
+    return inPlan ? 'pick' : 'unpick';
   }
-  const MARK = { todo: '<i class="mk todo"></i>', run: '<i class="mk run"></i>', ok: `<i class="mk ok">${'<svg width="10" height="10" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'}</i>`, bad: '<i class="mk bad">×</i>', skip: '<i class="mk skip"></i>' };
-  const rowFor = (m) => (e) => editRow(e, m ? rowState(m, e) : 'todo');
-  const editRow = (e, st = 'todo') => `<div class="ed ${st}">${MARK[st] || ''}<div class="edB"><div class="edT"><b>${esc(e.name || e.tag)}</b><span class="mono">${esc(editLabel(e))}</span></div>${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div></div>`;
+  const CHECK = '<svg width="10" height="10" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const MARK = { pick: `<i class="mk cbox on">${CHECK}</i>`, unpick: '<i class="mk cbox"></i>', todo: '<i class="mk todo"></i>', run: '<i class="mk run"></i>', ok: `<i class="mk ok">${'<svg width="10" height="10" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'}</i>`, bad: '<i class="mk bad">×</i>', skip: '<i class="mk skip"></i>' };
+  const rowFor = (m) => (e) => editRow(e, m ? rowState(m, e) : 'todo', m ? `data-act2="edPick" data-i="${S.chat.indexOf(m)}" data-e="${m.proposal.edits.indexOf(e)}"` : '');
+  // While pending, each row is a checkbox: ticked changes are applied, unticked ones left out.
+  document.addEventListener('keydown', (e) => { const r = e.target.closest?.('[data-act2="edPick"]'); if (r && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); r.click(); } });
+  const editRow = (e, st = 'todo', pick = '') => `<div class="ed ${st}"${st === 'pick' || st === 'unpick' ? ` ${pick} role="checkbox" aria-checked="${st === 'pick'}" tabindex="0" title="${st === 'pick' ? 'Leave this change out' : 'Include this change'}"` : ''}>${MARK[st] || ''}<div class="edB"><div class="edT"><b>${esc(e.name || e.tag)}</b><span class="mono">${esc(editLabel(e))}</span></div>${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div></div>`;
   const NSTAT = { done: ['Done', 'ok'], partial: ['Partly', 'part'], not_possible: ['Not here', 'no'] };
   // Notes answered one by one: the mark's number, what was asked, what Kerf did, and its edits.
   function notesHTML(m, i) {
@@ -1410,10 +1413,12 @@
     const pending = m.status === 'pending';
     return groups.map((g) => {
       const st = NSTAT[g.info?.status] || (g.eds.length ? NSTAT.done : NSTAT.not_possible);
-      const off = (m.skip || []).includes(g.n);
+      const idx = g.eds.map((e) => p.edits.indexOf(e)), offN = idx.filter((k) => (m.off || []).includes(k)).length;
+      const off = (m.skip || []).includes(g.n) || (idx.length > 0 && offN === idx.length);
+      const some = !off && offN > 0;
       return `<div class="ng${off ? ' off' : ''}" data-ng="${g.n}" data-i="${i}">
         <div class="ngH">${g.n ? `<span class="nNum">${g.n}</span>` : '<span class="nNum other">+</span>'}<span class="ngQ">${g.text ? `“${esc(g.text)}”` : g.n ? `Note ${g.n}` : 'Also changed'}</span>${g.info || g.n ? `<span class="nSt ${st[1]}">${st[0]}</span>` : ''}
-        ${pending && g.eds.length ? `<button class="nTog${off ? '' : ' on'}" data-act2="noteSkip" data-i="${i}" data-n="${g.n}" role="switch" aria-checked="${!off}" title="${off ? 'Include these changes' : 'Leave these out'}"><i></i></button>` : ''}</div>
+        ${pending && g.eds.length ? `<button class="mk cbox${off ? '' : some ? ' some' : ' on'}" data-act2="noteSkip" data-i="${i}" data-n="${g.n}" role="checkbox" aria-checked="${off ? 'false' : some ? 'mixed' : 'true'}" title="${off ? 'Include this note’s changes' : 'Leave this note’s changes out'}">${off ? '' : some ? '<b></b>' : CHECK}</button>` : ''}</div>
         ${g.info?.summary ? `<div class="ngS">${esc(g.info.summary)}</div>` : ''}
         ${g.eds.length ? `<div class="ngE">${g.eds.map(rowFor(m)).join('')}</div>` : ''}</div>`;
     }).join('');
@@ -1429,7 +1434,7 @@
     const head = m.applying ? `Applying ${n} change${n === 1 ? '' : 's'}…` : m.status === 'applied' ? `Applied ${m.appliedN ?? n} of ${p.edits.length}` : `${p.edits.length} proposed change${p.edits.length === 1 ? '' : 's'}`;
     return `<div class="prop${byNote ? ' byNote' : ''}">${stepsHTML(m)}${badge ? `<span class="badge">${badge}</span>` : ''}<p class="kText">${esc(cleanMsg(p.message))}</p>
       ${byNote ? `<div class="ngs">${notesHTML(m, i)}</div>` : p.edits.length ? `<div class="edits"><div class="edH">${m.applying ? '<i class="spin"></i>' : ''}${head}</div>${p.edits.map(rowFor(m)).join('')}</div>` : ''}
-      ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="amberBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
+      ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="primary applyBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
   }
   // "Looked at 14 elements · Thought for 9s", which opens to show what Kerf read.
   function stepsHTML(m, live) {
@@ -1706,10 +1711,22 @@
       else if (act === 'chatHint') runAI(v, S.sel ? selectionTargets() : visibleTargets(), 'chat');
       else if (act === 'decide') decide(S.chat[+a.dataset.i], v);
       else if (act === 'closeCard') { if (S.card?.status === 'pending') S.card.status = 'discarded'; S.card = null; S.amber = []; renderAI(); }
+      else if (act === 'edPick') {
+        if (e.target.closest('details')) return;
+        const m = S.chat[+a.dataset.i], k = +a.dataset.e;
+        if (!m || m.status !== 'pending') return;
+        m.off = (m.off || []).includes(k) ? m.off.filter((x) => x !== k) : [...(m.off || []), k];
+        S.amber = chosen(m).map((e) => e.loc);
+        renderAI();
+      }
       else if (act === 'noteSkip') {
         const m = S.chat[+a.dataset.i], n = +a.dataset.n;
         if (!m || m.status !== 'pending') return;
-        m.skip = (m.skip || []).includes(n) ? m.skip.filter((x) => x !== n) : [...(m.skip || []), n];
+        // Tick or untick every change under this note.
+        const idx = m.proposal.edits.map((e, k) => ((e.note ?? 0) === n || (!n && !e.note) ? k : -1)).filter((k) => k > -1);
+        const allOn = idx.every((k) => !(m.off || []).includes(k)) && !(m.skip || []).includes(n);
+        m.skip = (m.skip || []).filter((x) => x !== n);
+        m.off = allOn ? [...new Set([...(m.off || []), ...idx])] : (m.off || []).filter((k) => !idx.includes(k));
         S.amber = chosen(m).map((e) => e.loc);
         renderAI();
       }

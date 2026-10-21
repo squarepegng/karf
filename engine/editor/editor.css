@@ -644,3 +644,21 @@ body.minUI #layers,body.minUI #panel{display:none!important}
 .ntDel:hover{background:var(--line);color:var(--ink)}
 .ntGo{width:100%;justify-content:center;height:34px;border-radius:10px;font-weight:500}
 .ntGo .spin{border-color:rgba(255,255,255,.35);border-top-color:#fff}
+
+/* proposals: ticked changes are applied; blue is the action, amber a quiet hint */
+.mk.cbox{width:16px;height:16px;border-radius:4px;border:1.5px solid rgba(255,255,255,.3);background:transparent;padding:0;cursor:pointer;color:#fff}
+.mk.cbox.on{background:var(--select);border-color:var(--select)}
+.mk.cbox.some{background:var(--select);border-color:var(--select)}
+.mk.cbox.some b{display:block;width:8px;height:2px;border-radius:1px;background:#fff}
+.ed.pick,.ed.unpick{cursor:pointer}
+.ed.pick:hover,.ed.unpick:hover{background:rgba(255,255,255,.03)}
+.ed.unpick .edB{opacity:.45}
+.ed[role="checkbox"]:focus-visible{outline:2px solid var(--select);outline-offset:-2px}
+.ngH .mk.cbox{margin-left:2px}
+.applyBtn{height:30px;padding:0 14px;border-radius:8px;font-weight:500}
+.applyBtn[disabled]{opacity:.45}
+/* "Partly possible" / "Partly": quiet, with a small amber dot for Kerf's judgement */
+.prop .badge,.nSt.part{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.06);color:var(--ink2)}
+.prop .badge::before,.nSt.part::before{content:'';width:6px;height:6px;border-radius:3px;background:var(--intent)}
+.edits .ed .reach{color:var(--ink2)}
+.edits .ed .reach::before{content:'';display:inline-block;width:5px;height:5px;margin-right:6px;border-radius:3px;background:var(--intent);vertical-align:middle}
