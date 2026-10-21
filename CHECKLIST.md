@@ -18,8 +18,8 @@ When you've decided, tell me which items to keep and which to remove. I'll build
 | 1.2 | Sign-in to the tester's app | If the app needs a login or access code, a clear "sign in here once" step, so the preview is signed in too. | Not started | [ ] Keep [ ] Later [ ] Remove |
 | 1.3 | Safer pull requests | Before opening a PR, Kerf checks the code still builds, attaches before/after screenshots, and never writes straight to main. | Partly done (no build check or screenshots yet) | [ ] Keep [ ] Later [ ] Remove |
 | 1.4 | Error reporting and "Report a problem" | Testers can send a report with one click, and you see what failed without asking them. Opt-in. | Not started | [ ] Keep [ ] Later [ ] Remove |
-| 1.5 | Next.js support | Apps built with Next.js can be opened and edited, not just Vite apps. | Done in PR #5 (sample app tested; not yet a real project) | [ ] Keep [ ] Later [ ] Remove |
-| 1.6 | Edit per screen size | Choose "all sizes" or "only on mobile" (or tablet, desktop) so a change on one size doesn't leak onto the others. | Done in PR #5 | [ ] Keep [ ] Later [ ] Remove |
+| 1.5 | Next.js support | Apps built with Next.js can be opened and edited, not just Vite apps. | Done, on main (sample app tested; not yet a real project) | [ ] Keep [ ] Later [ ] Remove |
+| 1.6 | Edit per screen size | Choose "all sizes" or "only on mobile" (or tablet, desktop) so a change on one size doesn't leak onto the others. | Done, on main | [ ] Keep [ ] Later [ ] Remove |
 | 1.7 | Tailwind v4 support | Newer projects that use Tailwind v4 can be opened. Kerf reads Tailwind v3 only today. | Not started | [ ] Keep [ ] Later [ ] Remove |
 
 ## 2. Features that make Kerf stand out
@@ -59,5 +59,5 @@ When you've decided, tell me which items to keep and which to remove. I'll build
 ## Notes for your decision
 
 - **Items 3.2 and 3.3 conflict.** Pick one.
-- **1.5 and 1.6** are finished in PR #5 (PR #3 → #4 → #5 need merging in order).
+- **1.5 and 1.6** are finished and merged into main.
 - **Your call on order:** my recommendation is 2.1 (Match to Figma) first, then 2.3 (states and real content), with 1.1 and 1.3 needed before any tester uses Kerf alone.
