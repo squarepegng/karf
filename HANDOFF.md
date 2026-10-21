@@ -1,7 +1,7 @@
 # Kerf: handoff for the next AI session
 
 **Read this first, then `CLAUDE.md` (product decisions, PRD links, design tokens), then `CHECKLIST.md` (open decisions).**
-Last updated: 2026-10-20.
+Last updated: 2026-10-21.
 
 ---
 
@@ -33,7 +33,7 @@ Kerf lets designers and founders edit their team's **real, running React + Tailw
 | The real product (engine + editor) | `/Users/mac/Documents/kerf/engine` |
 | Original single-file prototype | `index.html` on `main` of `squarepegng/karf`, deployed by Vercel from `main` |
 | Project context and decisions | `/Users/mac/Documents/kerf/CLAUDE.md` |
-| Open decisions checklist | `/Users/mac/Documents/kerf/CHECKLIST.md` (not committed) |
+| Open decisions checklist | `/Users/mac/Documents/kerf/CHECKLIST.md` |
 | The user's own test app: Stratemark | `/Users/mac/Documents/STRATEMARK-app` → GitHub `squarepegng/STRATEMARK-app` (web app in `apps/web`, Vite + React + Tailwind v3) |
 | Kerf's own copy of Stratemark (opened from its GitHub link) | `/Users/mac/Kerf/projects/squarepegng-stratemark-app`. **The user's ~63 unsent Kerf edits live here**, saved in `apps/web/.kerf/session.json`. Do not reset or delete. |
 | PRD | https://claude.ai/code/artifact/dcb2536a-92df-4e67-b457-ef372bced01b |
@@ -56,14 +56,18 @@ cd ~/Documents/kerf/engine && node bin/kerf-home.mjs
 
 ## 5. Branches and pull requests (state right now)
 
-| PR | Branch → base | What's in it | State |
-|---|---|---|---|
-| #1, #2 | → `main` | Prototype Edit mode, early real-app work | **Merged** (user approved) |
-| [#3](https://github.com/squarepegng/karf/pull/3) | `kerf/ai-layer` → `main` | AI (Ask, ⌘K chat, notes with per-note results, image attachments, dictation); component properties; structure edits (delete, duplicate, move, swap, insert, replace, group/ungroup, images); layout tools and on-canvas handles; plain-language changes; saved sessions; cva variant editing; history and Create PR | Open |
-| [#4](https://github.com/squarepegng/karf/pull/4) | `kerf/sprint-1` → `kerf/ai-layer` | Designer names everywhere; panel shows only what fits; Figma-style canvas (zoom, fit, device frames); fixes (disabled elements selectable, autofocus no longer steals shortcuts, plain PR dialog, Save as a version, start-page logs hidden) | Open |
-| [#5](https://github.com/squarepegng/karf/pull/5) | `kerf/sprint-2` → `kerf/sprint-1` | Edit per screen size ("All sizes" / "Mobile only"…); Next.js 13+ support; clear messages for unsupported projects; Tailwind TS configs | Open, **current branch** |
+**`main` is current. It has everything below, and there are no open pull requests.** The local copy is on `main`.
 
-**Merge order: #3, then #4, then #5**, each only after the user approves it. The working copy is on `kerf/sprint-2`. `CHECKLIST.md`, `HANDOFF.md` and an old `files.zip` are untracked.
+| PR | What's in it | State |
+|---|---|---|
+| #1, #2 | Prototype Edit mode; the engine that opens a GitHub project and edits it like Figma | Merged |
+| [#3](https://github.com/squarepegng/karf/pull/3) | AI (Ask, ⌘K chat, notes with per-note results, image attachments, dictation); component properties; structure edits (delete, duplicate, move, swap, insert, replace, group/ungroup, images); layout tools and on-canvas handles; plain-language changes; saved sessions; cva variant editing; history and Create PR | Merged 2026-10-21 |
+| [#4](https://github.com/squarepegng/karf/pull/4) | Designer names everywhere; panel shows only what fits; Figma-style canvas (zoom, fit, device frames); fixes (disabled elements selectable, autofocus no longer steals shortcuts, plain PR dialog, Save as a version, start-page logs hidden) | Merged 2026-10-21 |
+| [#5](https://github.com/squarepegng/karf/pull/5) | Edit per screen size ("All sizes" / "Mobile only"…); Next.js 13+ support; clear messages for unsupported projects; Tailwind TS configs; `HANDOFF.md`, `CHECKLIST.md`, updated README | Merged 2026-10-21 |
+
+All were squash-merged. The old branches `kerf/ai-layer`, `kerf/sprint-1` and `kerf/sprint-2` are fully contained in `main`; don't build on them. Start new work on a fresh branch from `main`.
+
+**Stacked PRs:** after a squash merge, the next PR in the stack conflicts. If `main` matches the merged branch exactly (check with `git diff origin/main origin/<merged-branch>`), run `git merge -s ours origin/main` on the next branch and push. That records the merge without changing any files, and the PR becomes clean.
 
 ## 6. How the engine works (map for a developer)
 
@@ -163,4 +167,4 @@ The user is marking **`CHECKLIST.md`** (Keep / Later / Remove) and will say whic
 7. Full product review, followed by Sprint 1 (designer language, Figma canvas, quick fixes; PR #4) and Sprint 2 (per-size edits, Next.js, unsupported messages; PR #5).
 8. Wrote `CHECKLIST.md` of every suggestion for the user to decide on. They'll come back with choices.
 
-**Next step for whoever picks this up:** wait for the user's checklist choices, or answer their question. Don't start new features unasked. If they approve merges, merge #3, then #4, then #5 (retarget each to `main` as you go). After any engine change, restart their Kerf (kill ports 4100/5173, then run `node bin/kerf-home.mjs` in terminal tab c4) so they get the new code.
+**Next step for whoever picks this up:** wait for the user's checklist choices, or answer their question. Don't start new features unasked. After any engine change, restart their Kerf (kill ports 4100/5173, then run `node bin/kerf-home.mjs` in terminal tab c4) so they get the new code.
