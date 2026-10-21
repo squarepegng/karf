@@ -725,3 +725,15 @@ body.dragging,body.dragging *{cursor:grabbing!important;user-select:none!importa
 .tryOn .acts{justify-content:flex-start}
 .linkBtn{align-self:flex-start;border:0;background:transparent;padding:0;color:#8FB0F0;font:500 12px/16px Geist,system-ui,sans-serif}
 .linkBtn:hover{text-decoration:underline}
+
+/* resizable side panels */
+aside.side.l{flex:0 0 212px}
+.rz{flex:0 0 7px;margin:0 -3px;position:relative;z-index:15;cursor:col-resize;touch-action:none}
+.rz::after{content:'';position:absolute;top:0;bottom:0;left:3px;width:1px;background:transparent;transition:background .12s}
+.rz:hover::after,body.resizing .rz::after{background:var(--select)}
+aside[hidden]+.rz.l{display:none}
+.rz.r:has(+aside[hidden]){display:none}
+body.resizing,body.resizing *{cursor:col-resize!important;user-select:none!important}
+body.resizing #frame{pointer-events:none}
+.layer .nm,.layer .tx{min-width:0}
+.rz{user-select:none;-webkit-user-select:none}

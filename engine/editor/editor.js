@@ -524,6 +524,41 @@
     renderTop();
   }
   new ResizeObserver(() => applyDevice()).observe(document.getElementById('canvas'));
+  // Side panels: drag their inner edge to resize, double-click to reset. Widths are remembered in this browser.
+  const SIDE = { l: { el: 'layers', def: 212, min: 168, max: 420 }, r: { el: 'panel', def: 284, min: 248, max: 520 } };
+  const setSide = (k, w) => { const c = SIDE[k]; w = Math.round(Math.max(c.min, Math.min(c.max, w))); document.getElementById(c.el).style.flexBasis = w + 'px'; return w; };
+  for (const k of Object.keys(SIDE)) { let w = null; try { w = +localStorage.getItem(`kerf.side.${k}`); } catch {} setSide(k, w || SIDE[k].def); }
+  let sideDrag = null;
+  document.addEventListener('pointerdown', (e) => {
+    const h = e.target.closest?.('[data-resize]');
+    if (!h) return;
+    e.preventDefault();
+    h.setPointerCapture(e.pointerId);
+    sideDrag = { k: h.dataset.resize, box: document.getElementById(SIDE[h.dataset.resize].el).getBoundingClientRect() };
+    document.body.classList.add('resizing');
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!sideDrag) return;
+    const w = sideDrag.k === 'l' ? e.clientX - sideDrag.box.left : sideDrag.box.right - e.clientX;
+    sideDrag.w = setSide(sideDrag.k, w);
+    requestAnimationFrame(applyDevice);
+  });
+  const endSide = () => {
+    if (!sideDrag) return;
+    try { if (sideDrag.w) localStorage.setItem(`kerf.side.${sideDrag.k}`, sideDrag.w); } catch {}
+    sideDrag = null;
+    document.body.classList.remove('resizing');
+    applyDevice();
+  };
+  document.addEventListener('pointerup', endSide);
+  document.addEventListener('pointercancel', endSide);
+  document.addEventListener('dblclick', (e) => {
+    const h = e.target.closest?.('[data-resize]');
+    if (!h) return;
+    setSide(h.dataset.resize, SIDE[h.dataset.resize].def);
+    try { localStorage.removeItem(`kerf.side.${h.dataset.resize}`); } catch {}
+    applyDevice();
+  });
   // Pinch or ⌘-scroll zooms the canvas, inside the app too.
   const pinch = (e) => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); setZoom(Math.min(2, Math.max(0.25, Math.round(S.z * Math.exp(-e.deltaY * 0.01) * 100) / 100))); };
   document.getElementById('canvas').addEventListener('wheel', pinch, { passive: false });
