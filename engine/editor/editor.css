@@ -771,9 +771,9 @@ aside.side{min-width:0}
 
 /* notes, Figma-style: a slim floating bar at the mark, then compact tasks in the chat */
 .notePop{width:380px;padding:0;gap:0;background:#232327;border:1px solid rgba(255,255,255,.08);border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
-.notePop .kc.bar{align-items:stretch;background:transparent;border:0;box-shadow:none;padding:12px 12px 10px}
-.notePop .kc.bar textarea{background:transparent;border:0;padding:4px 6px;font-size:14px;line-height:20px}
-.kc.bar .kcBar{margin-top:6px}
+.notePop .kc.slim{align-items:stretch;background:transparent;border:0;box-shadow:none;padding:14px 12px 10px 14px}
+.notePop .kc.slim textarea{background:transparent;border:0;padding:0 2px;font-size:14px;line-height:20px}
+.kc.slim .kcBar{margin:8px 0 0 -6px}
 .sendB.alt{background:var(--raised);color:var(--ink)}
 .sendB.alt:not([disabled]){background:var(--ink);color:var(--canvas)}
 .tasks{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;margin-bottom:10px}

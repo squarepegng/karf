@@ -1640,7 +1640,7 @@
     KC[id] = o;
     const atts = S.att[id] || [];
     const rec = mic?.id === id, has = (S.drafts[id] || '').trim() || atts.length;
-    return `<form class="kc${o.big ? ' big' : ''}${o.bar ? ' bar' : ''}" data-form="${o.form}" data-where="${o.where || ''}" data-kc="${id}">
+    return `<form class="kc${o.big ? ' big' : ''}${o.bar ? ' slim' : ''}" data-form="${o.form}" data-where="${o.where || ''}" data-kc="${id}">
       ${atts.length ? `<div class="kcAtt">${atts.map((a, i) => `<span class="kcThumb" title="${esc(a.name)}"><img src="${a.thumb}" alt="${esc(a.name)}"><button type="button" data-act2="attX" data-id="${id}" data-i="${i}" aria-label="Remove ${esc(a.name)}">${ico('x', 10)}</button></span>`).join('')}</div>` : ''}
       <div class="kcRow">${o.lead || ''}<textarea id="${id}" rows="1" placeholder="${esc(o.placeholder)}" aria-label="${esc(o.placeholder)}">${esc(S.drafts[id] || '')}</textarea></div>
       <div class="kcBar">
@@ -1805,7 +1805,14 @@
     pop.hidden = !S.noteDraft;
     if (S.noteDraft && W) {
       const n = S.noteDraft, ow = $('ov').clientWidth, oh = $('ov').clientHeight;
-      const ax = (n.shape === 'arrow' ? n.x2 : n.x + (n.w || 0)) - W.scrollX + 12, ay = (n.shape === 'arrow' ? n.y2 : n.y) - W.scrollY;
+      let ax = (n.shape === 'arrow' ? n.x2 : n.x + (n.w || 0)) - W.scrollX + 22 / S.z, ay = (n.shape === 'arrow' ? n.y2 : n.y) - W.scrollY - 22 / S.z;
+      // No room to the right of the mark: put the bar under it (or above it near the bottom), so the mark stays visible.
+      if (ax + 392 / S.z > ow) {
+        const left = (n.shape === 'arrow' ? Math.min(n.x, n.x2) : n.x) - W.scrollX, top = (n.shape === 'arrow' ? Math.min(n.y, n.y2) : n.y) - W.scrollY;
+        const bottom = (n.shape === 'arrow' ? Math.max(n.y, n.y2) : n.y + (n.h || 0)) - W.scrollY;
+        ax = left - 16 / S.z;
+        ay = bottom + 120 / S.z < oh ? bottom + 18 / S.z : top - 112 / S.z;
+      }
       pop.style.transform = `translate(${Math.min(ow - 392 / S.z, Math.max(12, ax))}px,${Math.min(oh - 120 / S.z, Math.max(12, ay))}px) scale(${1 / S.z})`;
       if (!pop.dataset.open) {
         pop.innerHTML = composer('noteIn', { form: 'note', bar: true, sendIcon: 'task', sendLabel: 'Add to tasks', placeholder: 'Ask for changes' });
