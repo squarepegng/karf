@@ -283,6 +283,7 @@
     play: '<path d="M5 3.2v9.6l7.5-4.8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>',
     edit: '<rect x="2" y="2" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8.5 8.5l5.2 2-2.3.7-.7 2.3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>',
     undo: '<path d="M4 6h6a3.5 3.5 0 0 1 0 7H6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M6.5 3.5L4 6l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
+    task: '<rect x="2.5" y="2.5" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.2 6h5.6M5.2 8.4h5.6M5.2 10.8h3.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
     list: '<path d="M5.5 4h8M5.5 8h8M5.5 12h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="2.8" cy="4" r=".9" fill="currentColor"/><circle cx="2.8" cy="8" r=".9" fill="currentColor"/><circle cx="2.8" cy="12" r=".9" fill="currentColor"/>',
     up: '<path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
     x: '<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>',
@@ -512,7 +513,7 @@
     $('devLabel').innerHTML = `<b>${DEV_LABEL[S.device]}</b><span>${w}</span>`;
     const changed = S.z !== z;
     S.z = z;
-    if (changed) renderTop();
+    if (changed) { renderTop(); if (S.notes?.length) drawMarks(); }
   }
   function setZoom(v) {
     const cur = S.z;
@@ -1422,7 +1423,7 @@
     if (!text || S.card?.busy) return;
     if (!targets.length) { toast('Nothing on screen to work with yet. Wait for the page to load, or select something.', '', true); return; }
     const history = historyFor();
-    const ctx = followUp ? 'Follow-up' : where === 'chat' && S.sel ? dName(S.sel.el) : where === 'notes' ? `${S.notes.length} note${S.notes.length === 1 ? '' : 's'}` : 'Whole screen';
+    const ctx = followUp ? 'Follow-up' : where === 'chat' && S.sel ? dName(S.sel.el) : where === 'notes' ? `${S.notes.length} task${S.notes.length === 1 ? '' : 's'}` : 'Whole screen';
     S.chat.push({ role: 'user', text, shown: shown || text, ctx, where, atts: atts.map((a) => ({ name: a.name, thumb: a.thumb })) });
     const m = { role: 'kerf', busy: true, status: 'pending', where, targets, noteTexts: where === 'notes' && !followUp ? S.notes.map((n) => n.text) : null, skip: [], started: Date.now(), looked: uniq(targets).map((t) => t.name).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).slice(0, 40), lookedN: targets.length };
     S.chat.push(m);
@@ -1484,7 +1485,7 @@
   const MARK = { pick: `<i class="mk cbox on">${CHECK}</i>`, unpick: '<i class="mk cbox"></i>', todo: '<i class="mk todo"></i>', run: '<i class="mk run"></i>', ok: `<i class="mk ok">${'<svg width="10" height="10" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'}</i>`, bad: '<i class="mk bad">×</i>', skip: '<i class="mk skip"></i>' };
   const rowFor = (m) => (e) => editRow(e, m ? rowState(m, e) : 'todo', m ? `data-act2="edPick" data-i="${S.chat.indexOf(m)}" data-e="${m.proposal.edits.indexOf(e)}"` : '');
   // While pending, each row is a checkbox: ticked changes are applied, unticked ones left out.
-  document.addEventListener('keydown', (e) => { const r = e.target.closest?.('[data-act2="edPick"]'); if (r && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); r.click(); } });
+  document.addEventListener('keydown', (e) => { const r = e.target.closest?.('[data-act2="edPick"]') || (e.target.matches?.('[data-act2="tkOpen"],[data-act2="ngOpen"]') ? e.target : null); if (r && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); r.click(); } });
   const editRow = (e, st = 'todo', pick = '') => `<div class="ed ${st}"${st === 'pick' || st === 'unpick' ? ` ${pick} role="checkbox" aria-checked="${st === 'pick'}" tabindex="0" title="${st === 'pick' ? 'Leave this change out' : 'Include this change'}"` : ''}>${MARK[st] || ''}<div class="edB"><div class="edT"><b>${esc(e.name || e.tag)}</b>${e.structure?.type === 'imageAsk' ? `<span class="mono">${e.structure.kind === 'photo' ? 'New photo' : 'New illustration'}: “${esc(e.structure.prompt)}”</span>` : e.structure?.type === 'image' && e.structure.preview ? `<span class="imgPick"><img src="${esc(e.structure.preview)}" alt=""><span class="mono">${esc(e.structure.alt || 'New image')}</span></span>` : e.structure?.type === 'token' ? tokenChange(e.structure) : `<span class="mono">${esc(editLabel(e))}</span>`}${e.offSystem ? '<i class="offSys">Off-system</i>' : ''}</div>${(e.structure?.type === 'imageAsk' || e.structure?.preview) && pick ? `<button class="outline sm imgOpt" ${pick.replace('data-act2="edPick"', 'data-act2="imgOptions"')}>${e.structure.type === 'imageAsk' ? (e.structure.kind === 'photo' ? 'Show photos' : 'Draw options') : 'Choose another'}</button>` : ''}${e.where ? `<span class="reach">Changes ${esc(e.where)}</span>` : ''}${e.why ? `<span>${esc(e.why)}</span>` : ''}${e.structure?.type === 'code' ? `<details class="code"><summary>Code change in ${esc(e.structure.file)}</summary><pre class="diff"><span class="del">${esc(e.structure.find)}</span><span class="add">${esc(e.structure.replace)}</span></pre></details>` : ''}</div></div>`;
   function tokenChange(st) {
     const t = (S.tokens || []).find((x) => x.name === st.name);
@@ -1528,11 +1529,11 @@
       const idx = g.eds.map((e) => p.edits.indexOf(e)), offN = idx.filter((k) => (m.off || []).includes(k)).length;
       const off = (m.skip || []).includes(g.n) || (idx.length > 0 && offN === idx.length);
       const some = !off && offN > 0;
-      return `<div class="ng${off ? ' off' : ''}" data-ng="${g.n}" data-i="${i}">
-        <div class="ngH">${g.n ? `<span class="nNum">${g.n}</span>` : '<span class="nNum other">+</span>'}<span class="ngQ">${g.text ? `“${esc(g.text)}”` : g.n ? `Note ${g.n}` : 'Also changed'}</span>${g.info || g.n ? `<span class="nSt ${st[1]}">${st[0]}</span>` : ''}
-        ${pending && g.eds.length ? `<button class="mk cbox${off ? '' : some ? ' some' : ' on'}" data-act2="noteSkip" data-i="${i}" data-n="${g.n}" role="checkbox" aria-checked="${off ? 'false' : some ? 'mixed' : 'true'}" title="${off ? 'Include this note’s changes' : 'Leave this note’s changes out'}">${off ? '' : some ? '<b></b>' : CHECK}</button>` : ''}</div>
-        ${g.info?.summary ? `<div class="ngS">${esc(g.info.summary)}</div>` : ''}
-        ${g.eds.length ? `<div class="ngE">${g.eds.map(rowFor(m)).join('')}</div>` : ''}</div>`;
+      const open = (m.openN || []).includes(g.n);
+      const box = pending && g.eds.length ? `<button class="mk cbox${off ? '' : some ? ' some' : ' on'}" data-act2="noteSkip" data-i="${i}" data-n="${g.n}" role="checkbox" aria-checked="${off ? 'false' : some ? 'mixed' : 'true'}" title="${off ? 'Include this task’s changes' : 'Leave this task’s changes out'}">${off ? '' : some ? '<b></b>' : CHECK}</button>` : ico('task', 15);
+      return `<div class="ng tk${off ? ' off' : ''}${open ? ' open' : ''}" data-ng="${g.n}" data-i="${i}">
+        <div class="tkH" data-act2="ngOpen" data-i="${i}" data-n="${g.n}" role="button" tabindex="0" aria-expanded="${open}">${box}<b>${g.n ? `Task ${g.n}` : 'Also'}</b><span class="tkT">${g.text ? esc(g.text) : g.n ? '' : 'changed alongside'}</span>${(g.info || g.n) && st[1] !== 'ok' ? `<span class="nSt ${st[1]}">${st[0]}</span>` : ''}<span class="tkC">${ico(open ? 'chev' : 'chevR', 10)}</span></div>
+        ${open ? `<div class="tkB">${g.info?.summary ? `<p>${esc(g.info.summary)}</p>` : ''}${g.eds.length ? `<div class="ngE">${g.eds.map(rowFor(m)).join('')}</div>` : ''}</div>` : ''}</div>`;
     }).join('');
   }
   function kerfHTML(m, i) {
@@ -1551,7 +1552,7 @@
     return `<div class="prop${byNote ? ' byNote' : ''}">${stepsHTML(m)}${badge ? `<span class="badge">${badge}</span>` : ''}<p class="kText">${esc(cleanMsg(p.message))}</p>
       ${byNote ? `<div class="ngs">${notesHTML(m, i)}</div>` : toks.length ? `<div class="edits sys"><div class="edH">${ico('comp', 12)}Design system · ${toks.length} colour${toks.length === 1 ? '' : 's'}${m.status === 'pending' ? `<button class="pvBtn${m.previewing ? ' on' : ''}" data-act2="tokPreview" data-i="${i}">${ico('eye', 12)}${m.previewing ? 'Previewing' : 'Preview'}</button>` : ''}</div>${toks.map(rowFor(m)).join('')}</div>${rest.length ? `<div class="edits"><div class="edH">On this screen · ${rest.length}</div>${rest.map(rowFor(m)).join('')}</div>` : ''}` : p.edits.length ? `<div class="edits"><div class="edH">${m.applying ? '<i class="spin"></i>' : ''}${head}</div>${p.edits.map(rowFor(m)).join('')}</div>` : ''}
       ${suggest}${keep}
-      ${m.status === 'pending' && p.edits.length ? `<div class="acts"><button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="primary applyBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${p.mode === 'explore' ? (n < p.edits.length ? `Try ${n} of ${p.edits.length}` : 'Try this look') : n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
+      ${m.status === 'pending' && p.edits.length ? `<div class="acts${byNote ? ' tkFoot' : ''}">${byNote ? `<span class="tkN">${ico('spark', 14)}${n} change${n === 1 ? '' : 's'}</span>` : ''}<button class="ghostBtn" data-act2="decide" data-i="${i}" data-v="discard">Discard</button><button class="primary applyBtn" data-act2="decide" data-i="${i}" data-v="apply" ${n ? '' : 'disabled'}>${p.mode === 'explore' ? (n < p.edits.length ? `Try ${n} of ${p.edits.length}` : 'Try this look') : byNote ? 'Apply' : n < p.edits.length ? `Apply ${n} of ${p.edits.length}` : `Apply ${n === 1 ? 'change' : `${n} changes`}`}</button></div>` : status}</div>`;
   }
   // "Looked at 14 elements · Thought for 9s", which opens to show what Tovi read.
   function stepsHTML(m, live) {
@@ -1624,7 +1625,7 @@
     const ctx = S.sel ? esc(dName(S.sel.el)) : 'Whole screen';
     const msgs = S.chat.map((m, i) => (m.role === 'user' ? `<div class="uMsg"><span class="uCtx">${esc(m.ctx)}</span>${m.atts?.length ? `<div class="uAtt">${m.atts.map((a) => `<img src="${a.thumb}" alt="${esc(a.name)}" title="${esc(a.name)}">`).join('')}</div>` : ''}<div class="bub">${esc(m.shown || m.text)}</div></div>` : `<div class="kMsg">${kerfHTML(m, i)}</div>`)).join('');
     return `<div class="chatScroll" id="chatScroll">${msgs || `<div class="chatEmpty"><span class="ceMark">${ico('spark', 20)}</span><b>What should change?</b><span>Select something, or ask about the whole screen. Tovi proposes the edit first, and you approve it.</span><div class="ceHints">${['Make this feel more premium', 'Improve the contrast', 'Tighten the spacing'].map((t) => `<button data-act2="chatHint" data-v="${t}">${t}</button>`).join('')}</div></div>`}</div>
-      <div class="comp">${composer('chatIn', { form: 'chat', ctx, placeholder: 'Describe a change, or follow up…' })}</div>`;
+      <div class="comp">${tasksShown() ? tasksHTML(S.card?.busy && S.card.where === 'notes') : ''}${composer('chatIn', { form: 'chat', ctx, placeholder: 'Describe a change, or follow up…' })}</div>`;
   }
   function sendChat() {
     take('chatIn', (v, atts) => runAI(v, S.sel ? selectionTargets() : visibleTargets(), 'chat', null, false, atts));
@@ -1639,16 +1640,16 @@
     KC[id] = o;
     const atts = S.att[id] || [];
     const rec = mic?.id === id, has = (S.drafts[id] || '').trim() || atts.length;
-    return `<form class="kc${o.big ? ' big' : ''}" data-form="${o.form}" data-where="${o.where || ''}" data-kc="${id}">
+    return `<form class="kc${o.big ? ' big' : ''}${o.bar ? ' bar' : ''}" data-form="${o.form}" data-where="${o.where || ''}" data-kc="${id}">
       ${atts.length ? `<div class="kcAtt">${atts.map((a, i) => `<span class="kcThumb" title="${esc(a.name)}"><img src="${a.thumb}" alt="${esc(a.name)}"><button type="button" data-act2="attX" data-id="${id}" data-i="${i}" aria-label="Remove ${esc(a.name)}">${ico('x', 10)}</button></span>`).join('')}</div>` : ''}
       <div class="kcRow">${o.lead || ''}<textarea id="${id}" rows="1" placeholder="${esc(o.placeholder)}" aria-label="${esc(o.placeholder)}">${esc(S.drafts[id] || '')}</textarea></div>
       <div class="kcBar">
-        <button type="button" class="kcB" data-act2="attach" data-id="${id}" title="Attach images · or paste / drop them here" aria-label="Attach images">${ico('clip', 15)}</button>
+        <button type="button" class="kcB" data-act2="attach" data-id="${id}" title="Attach images · or paste / drop them here" aria-label="Attach images">${ico(o.bar ? 'plus' : 'clip', 15)}</button>
         ${o.ctx ? `<span class="kcCtx" title="What Tovi will look at">${ico(S.sel ? 'frame' : 'desktop', 12)}${o.ctx}</span>` : ''}
         ${o.form !== 'note' ? modePill() : ''}
         <span class="sp"></span>
         ${SR ? `<button type="button" class="kcB mic${rec ? ' rec' : ''}" data-act2="mic" data-id="${id}" title="${rec ? 'Stop dictation' : 'Dictate, in any language'}" aria-label="${rec ? 'Stop dictation' : 'Dictate'}">${ico('mic', 15)}</button>` : ''}
-        ${o.send ? `<button class="lightBtn sm"${has ? '' : ' disabled'}>${o.send}</button>` : `<button class="sendB"${has ? '' : ' disabled'} aria-label="Send">${ico('up', 14)}</button>`}
+        ${o.send ? `<button class="lightBtn sm"${has ? '' : ' disabled'}>${o.send}</button>` : `<button class="sendB${o.sendIcon ? ' alt' : ''}"${has ? '' : ' disabled'} aria-label="${o.sendLabel || 'Send'}" title="${o.sendLabel || 'Send'}">${ico(o.sendIcon || 'up', 14)}</button>`}
       </div></form>`;
   }
   const grow = (t) => { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 168) + 'px'; };
@@ -1753,13 +1754,13 @@
 
   /* annotations */
   function shapeSVG(n, i, draft, hl) {
-    const st = `stroke="${hl ? '#E9B547' : '#2B66D9'}" stroke-width="${hl ? 3 : 2}" fill="${draft ? 'none' : 'rgba(43,102,217,.06)'}"`;
+    const st = `stroke="#2B66D9" stroke-width="${hl ? 3 : 2}" fill="${draft ? 'none' : 'rgba(43,102,217,.06)'}"`;
     let s = '';
     if (n.shape === 'box') s = `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="6" ${st}/>`;
     else if (n.shape === 'circle') s = `<ellipse cx="${n.x + n.w / 2}" cy="${n.y + n.h / 2}" rx="${n.w / 2}" ry="${n.h / 2}" ${st}/>`;
     else if (n.shape === 'arrow') { const a = Math.atan2(n.y2 - n.y, n.x2 - n.x), L = 12; s = `<path d="M${n.x} ${n.y}L${n.x2} ${n.y2}M${n.x2} ${n.y2}L${n.x2 - L * Math.cos(a - 0.5)} ${n.y2 - L * Math.sin(a - 0.5)}M${n.x2} ${n.y2}L${n.x2 - L * Math.cos(a + 0.5)} ${n.y2 - L * Math.sin(a + 0.5)}" stroke="#2B66D9" stroke-width="2.5" fill="none" stroke-linecap="round"/>`; }
     const [bx, by] = n.shape === 'pin' || n.shape === 'arrow' ? [n.x, n.y] : [n.x + n.w, n.y];
-    if (i != null) s += `<g transform="translate(${bx} ${by})"><path d="M0 0h12a12 12 0 0 1 0 24h-0a12 12 0 0 1-12-12z" transform="translate(-4 -20)" fill="#2B66D9"/><text x="8" y="-3" fill="#fff" font-size="11" font-weight="600" font-family="Geist,system-ui,sans-serif" text-anchor="middle">${i + 1}</text></g>`;
+    if (i != null) s += `<g transform="translate(${bx} ${by}) scale(${1 / (S.z || 1)})" style="filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))">${hl ? '<circle r="16" fill="rgba(43,102,217,.28)"/>' : ''}<circle r="11" fill="#2B66D9" stroke="#fff" stroke-width="2"/><text y="4" fill="#fff" font-size="11" font-weight="600" font-family="Geist,system-ui,sans-serif" text-anchor="middle">${i + 1}</text></g>`;
     else if (n.shape === 'pin') s += `<circle cx="${n.x}" cy="${n.y}" r="6" fill="#2B66D9"/>`;
     return s;
   }
@@ -1775,36 +1776,47 @@
     if (m?.proposal && m.status === 'pending') S.amber = (n != null ? m.proposal.edits.filter((x) => (n ? x.note === n : !x.note)) : chosen(m)).map((x) => x.loc);
     drawMarks();
   });
+  // Tasks waiting to go to Tovi: hidden once Tovi has answered them (the answer lists them instead).
+  const tasksShown = () => S.notes.length > 0 && !(S.card && S.card.where === 'notes' && !S.card.busy && S.card.status === 'pending');
+  S.openTask = [];
+  // Compact, like Figma: one line per task, a chevron for the details, one footer with the actions.
+  function tasksHTML(busy) {
+    const n = S.notes.length;
+    return `<div class="tasks">
+      <div class="tkList">${S.notes.map((x, i) => { const open = S.openTask.includes(i); return `<div class="tk ntRow${open ? ' open' : ''}" data-note="${i + 1}">
+        <div class="tkH" data-act2="tkOpen" data-i="${i}" role="button" tabindex="0" aria-expanded="${open}">${ico('task', 15)}<b>Task ${i + 1}</b><span class="tkT">${esc(x.text)}</span><span class="tkC">${ico(open ? 'chev' : 'chevR', 10)}</span><button class="tkX" data-act2="noteDel" data-i="${i}" title="Remove task" aria-label="Remove task ${i + 1}">${ico('x', 12)}</button></div>
+        ${open ? `<div class="tkB"><p>${esc(x.text)}</p>${x.atts?.length ? `<div class="uAtt">${x.atts.map((a) => `<img src="${a.thumb}" alt="${esc(a.name)}">`).join('')}</div>` : ''}<span class="note">${{ pin: 'Pinned', box: 'Boxed', circle: 'Circled', arrow: 'Arrow' }[x.shape] || 'Marked'} on the screen</span></div>` : ''}
+      </div>`; }).join('')}</div>
+      <div class="tkFoot">${busy ? `<span class="tkN"><i class="kSpin"><b></b><b></b><b></b><b></b></i>Tovi is reading ${n === 1 ? 'the task' : `${n} tasks`}…</span>` : `<span class="tkN">${ico('spark', 14)}${n} task${n === 1 ? '' : 's'}</span><button class="ghostBtn" data-act2="notesClear">Discard</button><button class="primary applyBtn" data-act2="notesApply">Send to Tovi</button>`}</div>
+    </div>`;
+  }
+  function refreshTasks() {
+    renderMarks();
+    if (S.mode === 'edit' && S.tab === 'chat') renderPanel();
+  }
   function renderMarks() {
     drawMarks();
     $('annoCap').hidden = S.tool !== 'annotate';
     const busy = S.card?.busy && S.card.where === 'notes';
     const chip = $('notesChip');
-    chip.hidden = !S.notes.length || !!S.noteDraft || !!(S.card && S.card.where === 'notes' && !S.card.busy);
-    // A tray above the toolbar: every note with its number and text, then one clear action.
-    if (!chip.hidden) {
-      const n = S.notes.length;
-      chip.innerHTML = `<div class="ntHead"><span class="ntTitle">${ico('pen', 13)}${n} note${n === 1 ? '' : 's'} for Tovi</span><button class="ghostBtn sm" data-act2="notesClear" title="Remove all notes">Clear all</button></div>
-        <div class="ntList">${S.notes.map((x, i) => `<div class="ntRow" data-note="${i + 1}"><i class="nNum">${i + 1}</i><span class="ntText">${esc(x.text)}${x.atts?.length ? ` <em>· ${x.atts.length} image${x.atts.length === 1 ? '' : 's'}</em>` : ''}</span><button class="ntDel" data-act2="noteDel" data-i="${i}" title="Remove this note" aria-label="Remove note ${i + 1}">${ico('x', 12)}</button></div>`).join('')}</div>
-        <div class="ntFoot">${modePill()}</div>
-        <button class="primary ntGo" data-act2="notesApply" ${busy ? 'disabled' : ''}>${busy ? '<i class="spin"></i>Tovi is reading your notes…' : `${ico('spark', 14)}Ask Tovi to fix ${n === 1 ? 'this' : `all ${n}`}`}</button>`;
-    }
+    chip.hidden = S.mode === 'edit' || !tasksShown() || !!S.noteDraft;
+    if (!chip.hidden) chip.innerHTML = tasksHTML(busy);
     const pop = $('notePop');
     pop.hidden = !S.noteDraft;
     if (S.noteDraft && W) {
       const n = S.noteDraft, ow = $('ov').clientWidth, oh = $('ov').clientHeight;
       const ax = (n.shape === 'arrow' ? n.x2 : n.x + (n.w || 0)) - W.scrollX + 12, ay = (n.shape === 'arrow' ? n.y2 : n.y) - W.scrollY;
-      pop.style.transform = `translate(${Math.min(ow - 332 / S.z, Math.max(12, ax))}px,${Math.min(oh - 180 / S.z, Math.max(12, ay))}px) scale(${1 / S.z})`;
+      pop.style.transform = `translate(${Math.min(ow - 392 / S.z, Math.max(12, ax))}px,${Math.min(oh - 120 / S.z, Math.max(12, ay))}px) scale(${1 / S.z})`;
       if (!pop.dataset.open) {
-        pop.innerHTML = `<div class="secH"><span>Note ${S.notes.length + 1}</span>${hb('noteDiscard2', 'x', 'Discard', '', 'data-act2="noteDiscard"')}</div>${composer('noteIn', { form: 'note', send: 'Add note', placeholder: 'What should change here?' })}<span class="note">Tovi reads the code under this mark.</span>`;
+        pop.innerHTML = composer('noteIn', { form: 'note', bar: true, sendIcon: 'task', sendLabel: 'Add to tasks', placeholder: 'Ask for changes' });
         pop.dataset.open = '1';
         setTimeout(() => { $('noteIn')?.focus(); syncKC('noteIn'); }, 0);
       }
     } else delete pop.dataset.open;
     const res = $('noteRes');
     const m = S.card && S.card.where === 'notes' && !S.card.busy ? S.card : null;
-    res.hidden = !m;
-    if (m) { res.innerHTML = cardShell('notes', 'Tovi · notes', m, () => `${kerfHTML(m, S.chat.indexOf(m))}${replyForm('notes')}`); placeCard(res, 'notes'); }
+    res.hidden = !m || S.mode === 'edit';
+    if (!res.hidden) { res.innerHTML = cardShell('notes', 'Tovi · notes', m, () => `${kerfHTML(m, S.chat.indexOf(m))}${replyForm('notes')}`); placeCard(res, 'notes'); }
     else placeCard(res, 'notes', true);
   }
   function renderAI() {
@@ -1850,7 +1862,8 @@
     take('noteIn', (v, atts) => {
       S.notes.push({ ...S.noteDraft, text: v || 'See the attached image.', atts });
       S.noteDraft = null;
-      renderMarks();
+      if (S.mode === 'edit' && S.tab !== 'chat') { S.tab = 'chat'; renderBar(); }
+      refreshTasks();
     });
   }
   function setTool(t) {
@@ -1958,8 +1971,10 @@
       else if (act === 'attX') { (S.att[a.dataset.id] || []).splice(+a.dataset.i, 1); reKC(a.dataset.id); }
       else if (act === 'mic') toggleMic(a.dataset.id);
       else if (act === 'noteDiscard') { S.noteDraft = null; renderMarks(); }
-      else if (act === 'noteDel') { S.notes.splice(+a.dataset.i, 1); S.hlNote = null; renderMarks(); }
-      else if (act === 'notesClear') { S.notes = []; if (S.card?.where === 'notes') S.card = null; S.amber = []; renderMarks(); }
+      else if (act === 'noteDel') { S.notes.splice(+a.dataset.i, 1); S.openTask = []; S.hlNote = null; refreshTasks(); }
+      else if (act === 'notesClear') { S.notes = []; S.openTask = []; if (S.card?.where === 'notes') S.card = null; S.amber = []; refreshTasks(); }
+      else if (act === 'tkOpen') { const i = +a.dataset.i; S.openTask = S.openTask.includes(i) ? S.openTask.filter((x) => x !== i) : [...S.openTask, i]; refreshTasks(); }
+      else if (act === 'ngOpen') { const m = S.chat[+a.dataset.i], n = +a.dataset.n; if (m) { m.openN = (m.openN || []).includes(n) ? m.openN.filter((x) => x !== n) : [...(m.openN || []), n]; renderAI(); } }
       else if (act === 'notesApply') applyNotes();
       return;
     }

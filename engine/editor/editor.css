@@ -768,3 +768,43 @@ aside.side{min-width:0}
 .imgPick img{width:44px;height:32px;object-fit:cover;border-radius:5px}
 .outline.sm{height:26px;padding:0 10px;font-size:12px;border-radius:7px}
 .imgOpt{align-self:flex-start;margin-top:6px}
+
+/* notes, Figma-style: a slim floating bar at the mark, then compact tasks in the chat */
+.notePop{width:380px;padding:0;gap:0;background:#232327;border:1px solid rgba(255,255,255,.08);border-radius:16px;box-shadow:0 12px 32px rgba(0,0,0,.45)}
+.notePop .kc.bar{align-items:stretch;background:transparent;border:0;box-shadow:none;padding:12px 12px 10px}
+.notePop .kc.bar textarea{background:transparent;border:0;padding:4px 6px;font-size:14px;line-height:20px}
+.kc.bar .kcBar{margin-top:6px}
+.sendB.alt{background:var(--raised);color:var(--ink)}
+.sendB.alt:not([disabled]){background:var(--ink);color:var(--canvas)}
+.tasks{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:14px;background:var(--panel);overflow:hidden;margin-bottom:10px}
+.tkList{display:flex;flex-direction:column;padding:4px;max-height:240px;overflow:auto}
+.tk{border-radius:9px}
+.tk.ntRow{padding:0;gap:0;display:block}
+.tkH{display:flex;align-items:center;gap:8px;min-width:0;height:34px;padding:0 8px;border-radius:9px;cursor:pointer;color:var(--ink2)}
+.tkH:hover{background:var(--raised)}
+.tkH:focus-visible{outline:2px solid var(--select);outline-offset:-2px}
+.tkH>svg{flex:0 0 auto;color:var(--ink2)}
+.tkH b{flex:0 0 auto;font-weight:500;color:var(--ink)}
+.tkT{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--ink2)}
+.tkC{flex:0 0 auto;display:grid;place-items:center;color:var(--ink3)}
+.tkX{flex:0 0 auto;display:grid;place-items:center;width:22px;height:22px;margin-right:-4px;border:0;border-radius:6px;background:transparent;color:var(--ink3);opacity:0}
+.tkH:hover .tkX,.tkX:focus-visible{opacity:1}
+.tkX:hover{background:var(--line);color:var(--ink)}
+.tkB{display:flex;flex-direction:column;gap:8px;padding:2px 10px 10px 32px;color:var(--ink);line-height:18px}
+.tkB .uAtt{justify-content:flex-start}
+.tkB .ngE{margin-left:-22px}
+.tkFoot{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;border-top:1px solid var(--line)}
+.tkN{flex:1;white-space:nowrap;display:inline-flex;align-items:center;gap:8px;color:var(--ink);font-weight:500;min-width:0}
+.tkN svg{color:var(--ink2)}
+.tkN .kSpin{margin-right:2px}
+.tkFoot .ghostBtn{height:30px}
+.notesChip .tasks{margin:0;border:0;background:transparent}
+.notesChip{padding:4px}
+/* Tovi's answer to the tasks uses the same rows */
+.byNote .ngs{gap:0;border:1px solid var(--line);border-radius:14px;padding:4px;background:var(--panel)}
+.ng.tk{padding:0;background:transparent;gap:0}
+.ng.tk:hover{box-shadow:none}
+.ng.tk .tkH .mk{margin:0}
+.ng.tk .nSt{margin-left:auto}
+.acts.tkFoot{border:1px solid var(--line);border-top:0;border-radius:0 0 14px 14px;margin-top:-1px;background:var(--panel)}
+.byNote .ngs:has(+ .acts.tkFoot),.byNote .ngs:has(+ * + .acts.tkFoot){border-radius:14px 14px 0 0}
