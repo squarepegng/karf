@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Kerf's start screen: paste a GitHub link or a folder, and Kerf opens the app
+// Tovi's start screen: paste a GitHub link or a folder, and Tovi opens the app
 // with the editor attached.   node bin/kerf-home.mjs   →  http://localhost:4100
 import http from 'node:http';
 import fs from 'node:fs';
@@ -10,6 +10,13 @@ import { openProject, PROJECTS_DIR, projects, stopAll } from '../src/project.mjs
 const ENV = path.join(path.dirname(fileURLToPath(import.meta.url)), '../.env');
 
 const PORT = Number(process.env.KERF_PORT || 4100);
+// Each key has its own line in .env; saving one never touches the others.
+function setEnv(name, value) {
+  const lines = (fs.existsSync(ENV) ? fs.readFileSync(ENV, 'utf8') : '').split('\n').filter((l) => l && !l.startsWith(name + '='));
+  lines.push(`${name}=${value}`);
+  fs.writeFileSync(ENV, lines.join('\n') + '\n');
+  fs.chmodSync(ENV, 0o600);
+}
 let job = null;
 
 function recent() {
@@ -35,16 +42,23 @@ http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/') return send(res, 200, PAGE, 'text/html; charset=utf-8');
   if (req.method === 'GET' && req.url === '/api/job') return send(res, 200, job && { ...job, repoRoot: undefined });
   if (req.method === 'GET' && req.url === '/api/key-status') {
-    const set = fs.existsSync(ENV) && /^ANTHROPIC_API_KEY=sk-ant-\S+/m.test(fs.readFileSync(ENV, 'utf8'));
-    return send(res, 200, { set });
+    const env = fs.existsSync(ENV) ? fs.readFileSync(ENV, 'utf8') : '';
+    return send(res, 200, { set: /^ANTHROPIC_API_KEY=sk-ant-\S+/m.test(env), unsplash: /^UNSPLASH_ACCESS_KEY=\S+/m.test(env) });
+  }
+  if (req.method === 'POST' && req.url === '/api/unsplash-key') {
+    let body = '';
+    for await (const c of req) body += c;
+    const key = String(JSON.parse(body || '{}').key || '').trim();
+    if (!/^[A-Za-z0-9_-]{30,}$/.test(key)) return send(res, 400, { error: 'That does not look like an Unsplash Access Key. Copy the “Access Key” from your Unsplash app page.' });
+    setEnv('UNSPLASH_ACCESS_KEY', key);
+    return send(res, 200, { ok: true });
   }
   if (req.method === 'POST' && req.url === '/api/key') {
     let body = '';
     for await (const c of req) body += c;
     const key = String(JSON.parse(body || '{}').key || '').trim();
     if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) return send(res, 400, { error: 'That does not look like an Anthropic key. It starts with sk-ant-.' });
-    fs.writeFileSync(ENV, 'ANTHROPIC_API_KEY=' + key + '\n');
-    fs.chmodSync(ENV, 0o600);
+    setEnv('ANTHROPIC_API_KEY', key);
     return send(res, 200, { ok: true });
   }
   if (req.method === 'GET' && req.url === '/api/recent') return send(res, 200, recent());
@@ -53,7 +67,7 @@ http.createServer(async (req, res) => {
     for await (const c of req) body += c;
     const { source } = JSON.parse(body || '{}');
     if (!source || !String(source).trim()) return send(res, 400, { error: 'Paste a GitHub link or a folder path.' });
-    if (job && !job.url && !job.error) return send(res, 409, { error: 'Kerf is already opening a project.' });
+    if (job && !job.url && !job.error) return send(res, 409, { error: 'Tovi is already opening a project.' });
     job = { source, step: 'Starting', log: '' };
     openProject(String(source).trim(), (j) => (job = j));
     return send(res, 202, { ok: true });
@@ -61,17 +75,17 @@ http.createServer(async (req, res) => {
   send(res, 404, { error: 'Not found' });
 }).on('error', (e) => {
   if (e.code !== 'EADDRINUSE') throw e;
-  console.log(`Kerf is already running at http://localhost:${PORT} (or another app is using port ${PORT}).`);
+  console.log(`Tovi is already running at http://localhost:${PORT} (or another app is using port ${PORT}).`);
   console.log(`To use a different port: KERF_PORT=4200 node bin/kerf-home.mjs`);
   process.exit(1);
-}).listen(PORT, () => console.log(`Kerf is ready: http://localhost:${PORT}`));
+}).listen(PORT, () => console.log(`Tovi is ready: http://localhost:${PORT}`));
 
 process.on('SIGINT', () => { stopAll(); process.exit(0); });
 process.on('SIGTERM', () => { stopAll(); process.exit(0); });
 
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kerf</title>
+<title>Tovi</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono&display=swap">
 <style>
 :root{--canvas:#1B1B1E;--panel:#232327;--raised:#2D2D32;--line:#3A3A40;--ink:#EDEDF0;--ink2:#B0B0BA;--ink3:#8B8B95;--select:#2B66D9;--intent:#E9B547;--danger:#F06A5F;color-scheme:dark}
@@ -102,11 +116,12 @@ a.open{display:inline-flex;align-items:center;justify-content:center;height:36px
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 details.logs summary{cursor:pointer;color:#8B8B95;font-size:12px;margin-top:10px}details.logs pre{margin-top:8px}</style></head>
 <body><main>
-<div class="brand"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="5.5" height="10" rx="1.5" fill="#EDEDF0"/><rect x="8.5" y="3" width="5.5" height="10" rx="1.5" fill="#EDEDF0" opacity=".45"/></svg>Kerf</div>
-<div><h1>Open a project</h1><p>Paste a GitHub link or a folder on this computer. Kerf runs your app and opens it with the editor on top. Your code only changes when you edit.</p></div>
+<div class="brand"><svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="5.5" height="10" rx="1.5" fill="#EDEDF0"/><rect x="8.5" y="3" width="5.5" height="10" rx="1.5" fill="#EDEDF0" opacity=".45"/></svg>Tovi</div>
+<div><h1>Open a project</h1><p>Paste a GitHub link or a folder on this computer. Tovi runs your app and opens it with the editor on top. Your code only changes when you edit.</p></div>
 <form id="f"><input id="src" placeholder="github.com/team/app  or  ~/code/app" autocomplete="off" spellcheck="false" aria-label="GitHub link or folder"><button id="go">Open</button></form>
 <span class="hint">Works with React apps built with Vite or Next.js and styled with Tailwind CSS v3. Private repos use your existing GitHub sign-in on this Mac.</span>
 <div class="card" id="keycard"><div class="status" id="keystat"></div><span class="hint">For the AI step. It is saved only on this Mac, in a git-ignored file.</span><form id="kf" style="display:flex;gap:8px"><input id="kin" type="password" placeholder="sk-ant-..." autocomplete="off" spellcheck="false" aria-label="Anthropic API key"><button id="ksave">Save key</button></form><span class="err" id="kerr"></span></div>
+<div class="card" id="ucard"><div class="status" id="ustat"></div><span class="hint">Optional, for finding real photos from Unsplash (free). Create an app at <a href="https://unsplash.com/oauth/applications" target="_blank" rel="noopener">unsplash.com/developers</a> and paste its Access Key.</span><form id="uf" style="display:flex;gap:8px"><input id="uin" type="password" placeholder="Unsplash Access Key" autocomplete="off" spellcheck="false" aria-label="Unsplash Access Key"><button id="usave">Save key</button></form><span class="err" id="uerr"></span></div>
 <div id="job"></div>
 <div class="recent" id="recent"></div>
 </main>
@@ -126,7 +141,7 @@ async function poll(){
   if(!j){return}
   const done=j.url||j.error;
   $('job').innerHTML='<div class="card"><div class="status">'+(j.error?'<span class="err">'+esc(j.error)+'</span>':j.url?'Ready':'<span class="spin"></span>'+esc(j.step))+'</div>'+
-    (j.url?'<a class="open" href="'+esc(j.url)+'">Open in Kerf →</a>':'')+'<details class="logs"'+(j.error||window.__logsOpen?' open':'')+'><summary>Technical details</summary><pre id="log">'+esc(j.log.trim())+'</pre></details></div>';
+    (j.url?'<a class="open" href="'+esc(j.url)+'">Open in Tovi →</a>':'')+'<details class="logs"'+(j.error||window.__logsOpen?' open':'')+'><summary>Technical details</summary><pre id="log">'+esc(j.log.trim())+'</pre></details></div>';
   const dd=document.querySelector('#job details');if(dd)dd.ontoggle=()=>{window.__logsOpen=dd.open};
   const l=$('log');if(l)l.scrollTop=l.scrollHeight;
   if(j.url&&started){location.href=j.url;return}
@@ -139,7 +154,8 @@ async function loadRecent(){
 }
 $('f').addEventListener('submit',e=>{e.preventDefault();const v=$('src').value.trim();if(v)open(v)});
 $('recent').addEventListener('click',e=>{const b=e.target.closest('[data-src]');if(b){$('src').value=b.dataset.src;open(b.dataset.src)}});
-async function loadKey(){const s=await (await fetch('/api/key-status')).json();$('keystat').textContent=s.set?'Anthropic key saved on this Mac':'No Anthropic key yet';}
+async function loadKey(){const s=await (await fetch('/api/key-status')).json();$('keystat').textContent=s.set?'Anthropic key saved on this Mac':'No Anthropic key yet';$('ustat').textContent=s.unsplash?'Unsplash key saved: photo search is on':'Photo search (Unsplash): no key yet';}
+$('uf').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/unsplash-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('uin').value})});const j=await r.json();if(!r.ok){$('uerr').textContent=j.error;return}$('uin').value='';$('uerr').textContent='';loadKey()});
 $('kf').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:$('kin').value})});const j=await r.json();if(!r.ok){$('kerr').textContent=j.error;return}$('kin').value='';$('kerr').textContent='';loadKey()});
 loadKey();loadRecent();poll();
 </script></body></html>`;

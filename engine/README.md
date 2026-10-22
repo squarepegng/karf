@@ -1,4 +1,4 @@
-# Kerf engine
+# Tovi engine
 
 The core idea from the PRD: link every element on screen to the exact line of
 code that made it, then change that code the way a careful developer would.
@@ -22,13 +22,13 @@ cd engine && npm install
 node bin/kerf-home.mjs        # then open http://localhost:4100
 ```
 
-Paste a GitHub link (`github.com/team/app`) or a folder path. Kerf downloads
+Paste a GitHub link (`github.com/team/app`) or a folder path. Tovi downloads
 the repo into `~/Kerf/projects/`, finds the React + Tailwind app inside it
 (monorepos included), installs it with the repo’s own package manager, starts
-it with Kerf attached and opens it. Edits change Kerf’s copy, not your
+it with Tovi attached and opens it. Edits change Tovi’s copy, not your
 original folder or GitHub, until a PR is made.
 
-Kerf opens your app inside its editor at `/__kerf/`:
+Tovi opens your app inside its editor at `/__kerf/`:
 - **Top bar:** project, branch, page, desktop/tablet/mobile, zoom, version history, Create PR.
 - **Left:** Layers. **Right:** Design and Chat.
 - **Bottom:** the toolbar.
@@ -39,7 +39,7 @@ Keys:
 |---|---|
 | **E** / **P** | Edit / preview |
 | **A** | Annotate |
-| **⌘K** | Ask Kerf (Preview), or chat about the selection (Edit) |
+| **⌘K** | Ask Tovi (Preview), or chat about the selection (Edit) |
 | **⌘Z** | Undo |
 | **⌘+** / **⌘−**, pinch | Zoom in / out |
 | **⇧1** / **⇧0** | Fit / 100% |
@@ -54,8 +54,8 @@ node bin/kerf.mjs /path/to/app        # e.g. …/apps/web
 ```
 
 It picks the right runner:
-- **Vite:** loads the app's own `vite.config` with Kerf's plugin first.
-- **Next.js:** `bin/kerf-next.mjs` starts Next's dev server behind a small Kerf server and adds Kerf's tagging loader through Next's own config loading.
+- **Vite:** loads the app's own `vite.config` with Tovi's plugin first.
+- **Next.js:** `bin/kerf-next.mjs` starts Next's dev server behind a small Tovi server and adds Tovi's tagging loader through Next's own config loading.
 
 Either way, the app's repo and config are not modified.
 
@@ -74,21 +74,21 @@ Either way, the app's repo and config are not modified.
   token. Values off the scale become arbitrary classes and are flagged.
 - **Finds where a style really lives.** If an element's classes come from a
   style table (`STATUS_STYLES[status]`), a constant, an if/else, a class object
-  or a CSS class built with `@apply`, Kerf follows them there and changes them
+  or a CSS class built with `@apply`, Tovi follows them there and changes them
   at the source. The panel says where ("Styles come from CONFIDENCE_STYLES
   “verified” in lib/format.ts") and lets you pick the reach: *Only this one*,
   *All “verified”* or *All 4*. One undo covers every file a change touches.
 - **Edits the design system.** With nothing selected, the panel shows the app's
   colour tokens with their light and dark values. Change one and every screen
-  follows. Kerf edits the CSS variable (or the Tailwind config) in the format it
+  follows. Tovi edits the CSS variable (or the Tailwind config) in the format it
   was written in.
 - **Edits per screen size.** "All sizes", or only mobile, tablet or desktop.
   These use mobile-first `md:`/`lg:` classes, and the other sizes keep how they looked.
 - **Is safe.**
   - Every change is re-parsed before it's written. If a change still breaks
-    the page, Kerf undoes it automatically.
-  - Undo refuses to overwrite a file that changed outside Kerf.
-  - Text that comes from data or code is protected, and Kerf says why.
+    the page, Tovi undoes it automatically.
+  - Undo refuses to overwrite a file that changed outside Tovi.
+  - Text that comes from data or code is protected, and Tovi says why.
 
 ## Design panel
 
@@ -126,9 +126,11 @@ Use the action row in the Design panel, or keys:
 - **Swap** an icon (searchable picker with previews, from the same icon library) or a component for another of yours
 - **Add** (I): text, heading, button (your Button if you have one), image (upload), icon, frame, or any of your components, before, after or inside the selection
 - **Images**: replace by upload or link, alt text, cover/contain/fill. Uploads go to `public/kerf/`.
+  - **Find a photo** searches Unsplash (free; save an Access Key on the start page). Tovi credits the photographer.
+  - **Draw one** asks Claude for three flat SVG illustrations in the app's own colours; pick one and it's saved to `public/kerf/`.
 
-Kerf adds and removes imports for you. Elements shown by a condition or
-repeated by a list are protected: Kerf explains and points you to the parent.
+Tovi adds and removes imports for you. Elements shown by a condition or
+repeated by a list are protected: Tovi explains and points you to the parent.
 
 ## AI
 
@@ -138,10 +140,10 @@ which is git-ignored. Then:
 - **Ask bar (Preview):** describe a change to the whole screen.
 - **Chat (Edit, ⌘K):** the same, scoped to the selection, its parents and children.
 - **Notes (A):** draw a pin, box, circle or arrow and write a note. **Apply all**
-  answers each note on its own: what Kerf changed, or why it couldn't, with a
+  answers each note on its own: what Tovi changed, or why it couldn't, with a
   switch to leave any note out.
 - **Attachments and voice:** paste, drop or attach images; Claude sees them and
-  can place one in the design. The mic dictates in your browser's language (Chrome, Safari).
+  can place one in the design. Ask for "an illustration of…" or "a photo of…" and Tovi shows options to pick from. The mic dictates in your browser's language (Chrome, Safari).
 
 All three share one conversation, which is saved, so you can follow up anywhere.
 
@@ -154,9 +156,9 @@ It says that plan in one sentence, then answers with the same edits the panel ma
 - styles (at the element or its source), properties and text
 - structure: delete, duplicate, move, swap, insert, replace, group, images
 - colour tokens
-- as a last resort, a small code change, shown as a before/after diff. If it breaks the page, Kerf undoes it automatically.
+- as a last resort, a small code change, shown as a before/after diff. If it breaks the page, Tovi undoes it automatically.
 
-Kerf highlights the targets in amber and writes nothing until you click
+Tovi highlights the targets in amber and writes nothing until you click
 **Apply**. Every applied change can be undone. Requests about behavior or data
 are answered as developer work, with no edits.
 
@@ -164,7 +166,7 @@ are answered as developer work, with no edits.
 
 - **Saving versions:** a version is saved when you go from Edit back to Preview, or when you click **Save as a version** in History.
 - **History:** shows each version. You can see the screen **before** it, or **undo back** to it.
-- **Create PR:** commits Kerf’s edits on a `kerf/…` branch, pushes it, and opens the pull request with GitHub’s `gh` CLI (or gives you the link to finish on GitHub).
+- **Create PR:** commits Tovi’s edits on a `kerf/…` branch, pushes it, and opens the pull request with GitHub’s `gh` CLI (or gives you the link to finish on GitHub).
   - The PR description lists what changed in plain words, with code details folded away.
   - Creating it again on the same branch updates that pull request.
 - **Saved sessions:** history, versions and chat are kept in the app's `.kerf/` folder (git-ignored), so they survive restarts.
@@ -182,6 +184,7 @@ are answered as developer work, with no edits.
 | `GET /__kerf/changes` | Every edit made this session |
 | `POST /__kerf/ai`, `/__kerf/ai/apply` | Ask Claude for a proposal; apply it |
 | `GET /__kerf/versions`, `POST /__kerf/version`, `/restore`, `/peek` | Versions |
+| `GET /__kerf/images/photos?q=`, `POST /__kerf/images/illustrate {prompt}` | Search Unsplash photos; draw illustration options |
 | `POST /__kerf/pr` | Create or update the pull request |
 
 Style properties: `bg`, `color`, `borderC`, `fontSize`, `fontWeight`,

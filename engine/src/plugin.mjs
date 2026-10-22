@@ -1,5 +1,5 @@
 // The Vite plugin: tags elements while the app runs in dev, and exposes a
-// small local API the Kerf editor calls to read and change source files.
+// small local API the Tovi editor calls to read and change source files.
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,7 @@ import { propose } from './ai.mjs';
 import { createSession } from './session.mjs';
 import { createLibrary } from './library.mjs';
 import { listTokens, tokenEdit } from './tokens.mjs';
+import { searchPhotos, photoUsed, illustrate } from './images.mjs';
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -25,11 +26,11 @@ function readBody(req) {
 const EDITOR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../editor');
 const ASSETS = { '/': ['index.html', 'text/html; charset=utf-8'], '/index.html': ['index.html', 'text/html; charset=utf-8'], '/editor.js': ['editor.js', 'text/javascript'], '/editor.css': ['editor.css', 'text/css'] };
 
-// Kerf for one web app: tags JSX so elements map back to source, and serves the editor and its API.
+// Tovi for one web app: tags JSX so elements map back to source, and serves the editor and its API.
 // Used by the Vite plugin below and by the Next.js runner.
 export async function createKerf(webRoot) {
   let theme = await loadTheme(webRoot);
-  // A token change in tailwind.config changes the theme Kerf reads.
+  // A token change in tailwind.config changes the theme Tovi reads.
   const setToken = async ({ name, hex, which = 'both', source = 'hand' }) => {
     const files = tokenEdit(webRoot, theme, name, hex, which);
     const r = editor.applyFiles(files, `token:${name}`, { token: { name, hex, which }, source }, { action: `Colour “${name}”${which === 'both' || which === 'all' ? '' : ` (${which})`} → ${String(hex).toUpperCase()}` });
@@ -66,6 +67,15 @@ export async function createKerf(webRoot) {
         }
         if (req.method === 'GET' && route === '/versions') return send(200, session.list());
         if (req.method === 'GET' && route === '/chat') return send(200, session.chat());
+        if (req.method === 'GET' && route === '/direction') { const d = session.direction(); return send(200, d ? { ...d, refs: d.refs.map(({ data, ...r }) => r) } : null); }
+        if (req.method === 'GET' && route === '/images/photos') {
+          const u = new URL(req.url, 'http://x').searchParams;
+          return send(200, await searchPhotos(u.get('q'), u.get('orientation')));
+        }
+        if (req.method === 'GET' && route === '/icons/suggest') {
+          const u = new URL(req.url, 'http://x').searchParams, lib = u.get('lib') || undefined;
+          return send(200, { used: library.usedIcons(lib).slice(0, 36), similar: library.similarIcons(u.get('name'), lib) });
+        }
         if (req.method === 'GET' && route === '/icons') return send(200, library.searchIcons(new URL(req.url, 'http://x').searchParams.get('q'), 80, new URL(req.url, 'http://x').searchParams.get('lib') || undefined));
         if (req.method === 'GET' && route === '/components') return send(200, [...library.componentList().values()].map((c) => ({ name: c.name, file: c.rel })).sort((a, b) => a.name.localeCompare(b.name)));
         if (req.method === 'GET' && route === '/uploads') return send(200, library.uploads());
@@ -75,6 +85,7 @@ export async function createKerf(webRoot) {
         if (req.method !== 'POST') return send(404, { error: 'Not found' });
         const body = await readBody(req);
         if (route === '/chat') { session.setChat(body); return send(200, { ok: true }); }
+        if (route === '/direction') { const d = session.setDirection(body); return send(200, d ? { ...d, refs: d.refs.map(({ data, ...r }) => r) } : null); }
         // Every change is saved to .kerf/ so a restart keeps undo, versions and chat.
         const s0 = send;
         const send2 = (status, b) => { if (status === 200 && route !== '/inspect' && route !== '/ai') session.save(); return s0(status, b); };
@@ -89,6 +100,15 @@ export async function createKerf(webRoot) {
         if (route === '/edit') return send2(200, editor.edit(body.loc, { ops: body.ops, text: body.text, props: body.props, cva: body.cva, bp: body.bp, dom: body.dom, scope: body.scope, target: body.target, name: body.name }));
         if (route === '/undo') return send2(200, editor.undo());
         if (route === '/token') return send2(200, await setToken(body));
+        if (route === '/images/photo-used') return send(200, await photoUsed(body.download));
+        if (route === '/images/illustrate') {
+          // The project's own colours (for the theme on screen) and its design direction steer the drawing.
+          let palette = [];
+          try { palette = listTokens(webRoot, theme).map((t) => ({ name: t.name, hex: (t.values.find((v) => v.theme === (body.theme || 'light')) || t.values[0]).hex })); } catch {}
+          const d = session.direction();
+          const PRESET = { calm: 'calm and precise', warm: 'warm and editorial', bold: 'bold and playful', minimal: 'minimal' };
+          return send(200, await illustrate({ prompt: body.prompt, width: body.width, height: body.height, count: body.count, palette, direction: d ? [PRESET[d.preset], d.text].filter(Boolean).join('; ') : '' }));
+        }
         if (route === '/structure') return send2(200, editor.structure(body.loc, body.op, 'hand', body.name));
         if (route === '/upload') {
           try { return send(200, library.saveUpload(body.name, body.data)); } catch (e) { throw new KerfError(e.message); }
@@ -105,7 +125,7 @@ export async function createKerf(webRoot) {
           }).filter(Boolean);
           let tokens = [];
           try { tokens = listTokens(webRoot, theme); } catch {}
-          return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images, tokens, webRoot }, theme, library));
+          return send(200, await propose({ request: body.request, targets, history: body.history, images: body.images, tokens, webRoot, screen: body.screen, context: body.context, mode: body.mode, direction: session.direction() }, theme, library));
         }
         if (route === '/ai/apply') {
           // Apply from the bottom of each file up, structure last per element, so positions stay valid.

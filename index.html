@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Kerf — interactive prototype</title>
+<title>Tovi — interactive prototype</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&family=Hanken+Grotesk:wght@400;500;600&display=swap">
 <style>
@@ -516,7 +516,7 @@ function describe(text){
  var r=localIntents(text,S.sel&&S.sel.k);
  if(r.scope)return 'This needs your developers: it changes how the shop works, not how it looks.';
  var keys=Object.keys(r.changes||{});
- if(!keys.length)return text.trim()?'Kerf will work out the target when you apply.':'Say or type what should change.';
+ if(!keys.length)return text.trim()?'Tovi will work out the target when you apply.':'Say or type what should change.';
  return keys.map(function(k){return META[k].w}).filter(function(v,i,a){return a.indexOf(v)===i}).join(' · ');
 }
 
@@ -570,7 +570,7 @@ function toolbar(){
   items.push('<div style="position:relative">'+tb({act:'insert',icon:'insert',label:'Insert component',key:'I',expanded:S.insert})+(S.insert?insertMenu():'')+'</div>');
  }
  items.push('<div style="position:relative;display:flex">'+tb({act:'tool',v:'annotate',icon:'annotate',label:'Annotate',key:'A',on:S.tool==='annotate'})+tb({act:'flyout',icon:'chev',label:'Annotation shapes',cls:'chev',expanded:S.flyout})+(S.flyout||S.tool==='annotate'?flyout():'')+'</div>');
- items.push(tb({act:S.mode==='edit'?'chatTab':'ask',icon:'ask',label:'Ask Kerf',key:'⌘K',on:(S.mode==='edit'&&S.tab==='chat')||S.ask}));
+ items.push(tb({act:S.mode==='edit'?'chatTab':'ask',icon:'ask',label:'Ask Tovi',key:'⌘K',on:(S.mode==='edit'&&S.tab==='chat')||S.ask}));
  return '<div class="toolbar" role="toolbar" aria-label="Tools">'+items.join('')+'<div class="tbDiv"></div>'+
   '<div class="modes" role="group" aria-label="Mode">'+
   tb({act:'mode',v:'preview',icon:'preview',label:'Preview',key:'P',on:S.mode==='preview',mode:true})+
@@ -600,7 +600,7 @@ function stageCanvas(){
  else if(S.ask)out+=askPop();
  else if(S.toast)out+=toastHTML();
  if(S.notes.length&&!S.noteDraft)out+='<div class="notesChip"><span style="color:var(--ink2);padding-right:6px">'+S.notes.length+' note'+(S.notes.length>1?'s':'')+'</span><button type="button" class="ghost" style="color:var(--ink2);height:32px" data-act="notesClear">Clear</button><button type="button" class="light" style="height:38px;padding:0 14px;display:flex;align-items:center;gap:8px;border-radius:8px" data-act="notesApply"'+(S.busy?' disabled':'')+'>'+ico('ask','#1B1B1E',14)+(S.busy?'Applying…':'Apply '+(S.notes.length>1?'all '+S.notes.length:'note'))+'</button></div>';
- if(S.mode==='preview'&&S.tool==='interact'&&S.versions.length===1&&!S.draft.length&&!S.toast&&!S.ask)out+='<div class="hint">Try the shop, then press <span class="kbd">E</span> to edit a screen, <span class="kbd">A</span> to annotate, or ask Kerf for a change.</div>';
+ if(S.mode==='preview'&&S.tool==='interact'&&S.versions.length===1&&!S.draft.length&&!S.toast&&!S.ask)out+='<div class="hint">Try the shop, then press <span class="kbd">E</span> to edit a screen, <span class="kbd">A</span> to annotate, or ask Tovi for a change.</div>';
  return out;
 }
 function annoLayer(){
@@ -640,10 +640,10 @@ function notePop(){
 }
 function askPop(){
  var sug=['Add a star rating under the title','Make the cards feel more premium','Make the Add to cart buttons solid black','Put the price above the title'];
- return '<div class="float ask" role="dialog" aria-label="Ask Kerf"><div class="compBox" style="padding:8px 8px 8px 10px;flex-direction:row;align-items:center">'+ico('ask','#E9B547',14)+
-  '<input id="askInput" type="text" aria-label="Ask Kerf" placeholder="Ask Kerf to change something…" style="flex:1;min-width:0;background:transparent;border:0;outline:none">'+
+ return '<div class="float ask" role="dialog" aria-label="Ask Tovi"><div class="compBox" style="padding:8px 8px 8px 10px;flex-direction:row;align-items:center">'+ico('ask','#E9B547',14)+
+  '<input id="askInput" type="text" aria-label="Ask Tovi" placeholder="Ask Tovi to change something…" style="flex:1;min-width:0;background:transparent;border:0;outline:none">'+
   '<button type="button" class="icon" data-act="micAsk" aria-label="Talk">'+ico('mic','#B0B0BA',14)+'</button><button type="button" class="icon" style="background:var(--ink)" data-act="askSend" aria-label="Send">'+ico('send','#1B1B1E',14)+'</button></div>'+
-  (S.busy?'<div class="who"><span class="typing"><i></i><i></i><i></i></span>Kerf is working on it</div>':'<div style="display:flex;flex-wrap:wrap;gap:6px">'+sug.map(function(s){return '<button type="button" class="outline" style="height:26px;font-weight:400;color:var(--ink2)" data-act="askSuggest" data-v="'+esc(s)+'">'+s+'</button>'}).join('')+'</div>')+'</div>';
+  (S.busy?'<div class="who"><span class="typing"><i></i><i></i><i></i></span>Tovi is working on it</div>':'<div style="display:flex;flex-wrap:wrap;gap:6px">'+sug.map(function(s){return '<button type="button" class="outline" style="height:26px;font-weight:400;color:var(--ink2)" data-act="askSuggest" data-v="'+esc(s)+'">'+s+'</button>'}).join('')+'</div>')+'</div>';
 }
 function toastHTML(){
  var t=S.toast;
@@ -734,7 +734,7 @@ function designPanel(){
  if(!S.sel)return '<div class="empty"><div style="color:var(--ink);font-weight:500;margin-bottom:4px">Nothing selected</div>Click anything on the screen to select it. Click selected text again to retype it. Drag a product card, price or title to move it.</div>';
  var k=S.sel.k,el=live(),h='';
  h+='<div class="psec head"><div class="psecH"><span class="nm">'+ico(INST[k]||k==='chips'?'comp':'box','#EDEDF0',14)+NAMES[k]+'</span>'+hBtn('pclear','history','Reset changes')+'</div><span class="path mono">'+FILES[k]+'</span>'+
-  (INST[k]?'<div class="ibs txt" role="group" aria-label="Apply to"><button type="button" class="ib" data-act="scope" data-v="all" aria-pressed="'+(S.scope!=='one')+'" title="ProductCard is shared: changes every card on all 4 screens">All instances</button><button type="button" class="ib" data-act="scope" data-v="one" aria-pressed="'+(S.scope==='one')+'" title="Kerf adds a variant to ProductCard in code">This one</button></div>':'')+'</div>';
+  (INST[k]?'<div class="ibs txt" role="group" aria-label="Apply to"><button type="button" class="ib" data-act="scope" data-v="all" aria-pressed="'+(S.scope!=='one')+'" title="ProductCard is shared: changes every card on all 4 screens">All instances</button><button type="button" class="ib" data-act="scope" data-v="one" aria-pressed="'+(S.scope==='one')+'" title="Tovi adds a variant to ProductCard in code">This one</button></div>':'')+'</div>';
  h+=presets(k);
  // position / order
  if(k==='card')h+=psec('Position','<div class="kv"><span>Order</span><div class="ibs"><button type="button" class="ib" data-act="moveCard" data-v="-1" title="Move earlier">'+ico('left','#B0B0BA',14)+'</button><button type="button" class="ib" data-act="moveCard" data-v="1" title="Move later">'+ico('right','#B0B0BA',14)+'</button></div></div><span class="hint2">Or drag the card on the canvas.</span>');
@@ -747,7 +747,7 @@ function designPanel(){
  }
  // content
  if(EDIT_TEXT[k]&&el)h+=psec('Content','<label class="inp"><input type="text" data-textedit="1" value="'+esc(el.textContent)+'" aria-label="Text content"></label>');
- else if(DATA_TEXT[k])h+=psec('Content','<label class="inp lock" title="Comes from data/products.ts. Kerf edits design, not data."><input type="text" value="'+esc(el?el.textContent:'')+'" disabled aria-label="Text from product data"><span class="u">data</span></label>');
+ else if(DATA_TEXT[k])h+=psec('Content','<label class="inp lock" title="Comes from data/products.ts. Tovi edits design, not data."><input type="text" value="'+esc(el?el.textContent:'')+'" disabled aria-label="Text from product data"><span class="u">data</span></label>');
  // typography
  if(TEXTY[k]){
   var fam=el?getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g,''):'';
@@ -780,7 +780,7 @@ function rightPanel(){
 /* ---------- history ---------- */
 function stageHistory(){
  var V=S.versions;
- if(V.length<2)return '<div style="flex:1;display:grid;place-items:center;width:100%"><div style="max-width:320px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center"><span style="font-size:18px;line-height:24px;font-weight:600">No versions yet</span><span style="color:var(--ink2);line-height:18px">Edit a screen, ask Kerf for a change or apply a note. Each one lands here so you can compare and undo it.</span><button type="button" class="outline" data-act="closeHistory">Back to preview</button></div></div>';
+ if(V.length<2)return '<div style="flex:1;display:grid;place-items:center;width:100%"><div style="max-width:320px;text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center"><span style="font-size:18px;line-height:24px;font-weight:600">No versions yet</span><span style="color:var(--ink2);line-height:18px">Edit a screen, ask Tovi for a change or apply a note. Each one lands here so you can compare and undo it.</span><button type="button" class="outline" data-act="closeHistory">Back to preview</button></div></div>';
  var idx=S.hv==null?V.length-1:S.hv;if(idx<1)idx=1;
  var A=V[idx-1],B=V[idx];
  var head='<div class="stageMeta" style="max-width:1000px"><div class="lft"><span style="font-size:13px;line-height:18px;font-weight:600;color:var(--ink)">Version '+B.n+'</span><span>compared with Version '+A.n+'</span></div>'+
@@ -794,7 +794,7 @@ function historyPanel(){
  var V=S.versions;var sel=S.hv==null?V.length-1:S.hv;
  var list=V.slice().reverse().map(function(v){
   var i=v.n-1;var on=i===sel&&i>0;
-  var src=v.source==='ai'?'<span class="srcTag">Kerf AI</span>':v.source==='notes'?'<span class="srcTag">Notes</span>':v.source==='restore'?'<span class="srcTag">Restore</span>':'';
+  var src=v.source==='ai'?'<span class="srcTag">Tovi AI</span>':v.source==='notes'?'<span class="srcTag">Notes</span>':v.source==='restore'?'<span class="srcTag">Restore</span>':'';
   var ch=v.changes.length?v.changes.map(function(c){return '<div style="display:flex;align-items:center;gap:8px;'+(on?'':'color:var(--ink2)')+'"><span class="dot"></span>'+esc(c)+'</div>'}).join(''):'<div style="display:flex;align-items:center;gap:8px;color:var(--ink2)"><span class="dot" style="background:none;border:1px solid var(--ink3)"></span>Session started from main</div>';
   var acts=on?'<div style="display:flex;gap:6px"><button type="button" class="outline" data-act="restore" data-v="'+i+'">Restore this version</button>'+(i===V.length-1?'<button type="button" class="dangerText" data-act="undo" data-v="'+v.n+'">Remove changes</button>':'')+'</div>':'';
   return '<div class="ver'+(on?' on':'')+'" '+(i>0?'role="button" tabindex="0" data-act="selVer" data-v="'+i+'"':'')+'><div style="display:flex;align-items:center;gap:8px"><span style="font-size:13px;line-height:18px;font-weight:600">Version '+v.n+'</span>'+src+'<span style="margin-left:auto;color:var(--ink3)">'+v.time+'</span></div>'+ch+acts+'</div>';
@@ -806,20 +806,20 @@ function historyPanel(){
 function prModal(){
  if(!S.pr)return '';
  var ch=diffKeys();
- if(S.prDone)return '<div class="scrim"><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="prT"><div style="padding:20px;display:flex;flex-direction:column;gap:10px"><span style="display:grid;place-items:center;width:32px;height:32px;border-radius:8px;background:var(--raised)">'+ico('check','#EDEDF0',16)+'</span><h2 id="prT" style="margin:0;font-size:18px;line-height:24px;font-weight:600">Pull request ready</h2><span style="color:var(--ink2);line-height:18px">This prototype isn’t connected to a repository, so nothing was sent. In Kerf, this opens a pull request on GitHub with '+ch.length+' change'+(ch.length===1?'':'s')+', before and after images, and a Vercel preview link for reviewers.</span></div><div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)"><button type="button" class="light" style="height:32px" data-act="closePr">Done</button></div></section></div>';
+ if(S.prDone)return '<div class="scrim"><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="prT"><div style="padding:20px;display:flex;flex-direction:column;gap:10px"><span style="display:grid;place-items:center;width:32px;height:32px;border-radius:8px;background:var(--raised)">'+ico('check','#EDEDF0',16)+'</span><h2 id="prT" style="margin:0;font-size:18px;line-height:24px;font-weight:600">Pull request ready</h2><span style="color:var(--ink2);line-height:18px">This prototype isn’t connected to a repository, so nothing was sent. In Tovi, this opens a pull request on GitHub with '+ch.length+' change'+(ch.length===1?'':'s')+', before and after images, and a Vercel preview link for reviewers.</span></div><div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)"><button type="button" class="light" style="height:32px" data-act="closePr">Done</button></div></section></div>';
  var files={};ch.forEach(function(c){files[fileOf(c)]=1});
  var title=ch.length?(ch.length===1?label(ch[0]):'Design updates on /shop'):'No changes yet';
  return '<div class="scrim"><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="prT">'+
  '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:16px 16px 12px"><div style="display:flex;flex-direction:column;gap:4px"><h2 id="prT" style="margin:0;font-size:18px;line-height:24px;font-weight:600;letter-spacing:-.01em">Create pull request</h2><span style="color:var(--ink2)">Your developers review it on GitHub before anything goes live.</span></div><button type="button" class="icon" data-act="closePr" aria-label="Close">'+ico('x','#B0B0BA',14)+'</button></div>'+
  (ch.length?'<div style="display:flex;flex-direction:column;gap:14px;padding:4px 16px 16px">'+
  '<label><span class="secT">Title</span><input type="text" value="'+esc(title)+'"></label>'+
- '<label><span class="secT">Note for reviewers</span><textarea rows="3">Changes made in Kerf on /shop. Before and after images are attached for each one.'+(S.scopeNotes?' Also requested: '+esc(S.scopeNotes)+' (needs development).':'')+'</textarea></label>'+
+ '<label><span class="secT">Note for reviewers</span><textarea rows="3">Changes made in Tovi on /shop. Before and after images are attached for each one.'+(S.scopeNotes?' Also requested: '+esc(S.scopeNotes)+' (needs development).':'')+'</textarea></label>'+
  '<div style="display:flex;align-items:center;gap:8px;color:var(--ink2)"><span class="chip mono" style="color:var(--ink)">kerf/card-updates</span>→<span class="chip mono" style="color:var(--ink)">main</span></div>'+
  '<div style="border:1px solid var(--line);border-radius:6px"><div style="display:flex;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--line)"><span style="font-weight:500">'+ch.length+' change'+(ch.length===1?'':'s')+'</span><span style="color:var(--ink3)">'+Object.keys(files).length+' file'+(Object.keys(files).length===1?'':'s')+'</span></div>'+
  ch.map(function(c){return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px"><span class="dot"></span><span style="flex:1">'+esc(label(c))+(codeOf(c)?'<br><span class="mono" style="color:var(--ink3)">'+esc(codeOf(c))+'</span>':'')+'</span><span class="mono" style="color:var(--ink2)">'+fileOf(c).split('/').pop()+'</span></div>'}).join('')+'</div>'+
  '<label style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" checked style="width:14px;height:14px;margin:0;accent-color:#2B66D9">Attach before and after images for each change</label></div>'+
  '<div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line);background:#1F1F23"><button type="button" class="outline" style="height:32px" data-act="closePr">Cancel</button><button type="button" class="primary solo" data-act="createPr">Create pull request</button></div>'
- :'<div class="empty" style="padding:4px 16px 20px">Make a change first: edit a screen, apply a note or ask Kerf. Everything you change lands here.</div>')+
+ :'<div class="empty" style="padding:4px 16px 20px">Make a change first: edit a screen, apply a note or ask Tovi. Everything you change lands here.</div>')+
  '</section></div>';
 }
 
@@ -831,7 +831,7 @@ function render(){
  var body;
  if(S.view==='history')body='<div class="body"><main class="stage">'+stageHistory()+'</main>'+historyPanel()+'</div>';
  else body='<div class="body">'+(S.mode==='edit'?leftPanel():'')+'<main class="stage '+S.mode+' tool-'+S.tool+'" id="stage">'+stageCanvas()+toolbar()+'</main>'+(S.mode==='edit'?rightPanel():'')+'</div>';
- app.innerHTML=topBar()+body+prModal()+'<div class="mobileNote">Kerf is designed for desktop screens. Open this on a laptop for the full editor.</div>';
+ app.innerHTML=topBar()+body+prModal()+'<div class="mobileNote">Tovi is designed for desktop screens. Open this on a laptop for the full editor.</div>';
  var f=document.getElementById('frame');if(f)f.scrollTop=st;
  var cs=document.getElementById('chatScroll');if(cs)cs.scrollTop=cs.scrollHeight;
  decorate();
@@ -875,7 +875,7 @@ function runRequest(text,where){
   var out=applyAI(r.changes||{},'ai');
   if(!out){
    if(where==='chat')S.chat.push({role:'kerf',kind:'none',ai:usedAI});
-   else showToast('Kerf couldn’t map that yet. Try cards, ratings, buttons, the heading or filter chips.');
+   else showToast('Tovi couldn’t map that yet. Try cards, ratings, buttons, the heading or filter chips.');
    S.ask=false;render();return;
   }
   var lead=out.where.some(function(w){return /4 screens/.test(w)})?'ProductCard is used on 4 screens, so this changes all of them. Here’s what I did:':'Here’s what I changed:';
@@ -900,7 +900,7 @@ function applyNotes(){
   S.busy=false;var cnt=S.notes.length;
   var out=applyAI(all,'notes');S.notes=[];S.tool=S.mode==='edit'?'select':'interact';
   if(out)showToast('Applied '+cnt+' note'+(cnt>1?'s':'')+': '+out.labels.join(' · ')+(scoped?' · '+scoped+' need developers':''),out.n);
-  else showToast(scoped?'Those notes need developers, not design changes.':'Kerf couldn’t map those notes yet. Try cards, buttons, the heading or chips.');
+  else showToast(scoped?'Those notes need developers, not design changes.':'Tovi couldn’t map those notes yet. Try cards, buttons, the heading or chips.');
   render();
  });
 }
@@ -972,7 +972,7 @@ document.addEventListener('click',function(e){
    if(el0&&S.sel&&S.sel.k===el0.getAttribute('data-k')&&String(S.sel.i)===String(el0.getAttribute('data-i'))){
     e.preventDefault();
     if(EDIT_TEXT[S.sel.k]){beginTextEdit(el0);return}
-    if(DATA_TEXT[S.sel.k]){showToast('Product names and prices come from data/products.ts. Kerf edits design, not data.');render()}
+    if(DATA_TEXT[S.sel.k]){showToast('Product names and prices come from data/products.ts. Tovi edits design, not data.');render()}
     return;
    }
    e.preventDefault();var el=t.closest('[data-k]');
@@ -1026,7 +1026,7 @@ document.addEventListener('click',function(e){
   case 'deselect':S.sel=null;render();break;
   case 'set':var key=a.getAttribute('data-key');var val=v==='true'?true:v==='false'?false:v;setStore(key,val);break;
   case 'step':var sk=a.getAttribute('data-key');var d=Number(a.getAttribute('data-d'))*(sk==='headingSize'?4:2);var L=LIMITS[sk];setStore(sk,Math.max(L[0],Math.min(L[1],S.store[sk]+d)));break;
-  case 'rule':S.rule=false;showToast(v==='all'?'Price above Title is now the rule for ProductCard on all 4 screens':'Kept on /shop only. Kerf will create a ProductCard variant for this page');render();break;
+  case 'rule':S.rule=false;showToast(v==='all'?'Price above Title is now the rule for ProductCard on all 4 screens':'Kept on /shop only. Tovi will create a ProductCard variant for this page');render();break;
   case 'undo':var n=Number(v);if(undoVersion(n)){S.chat.forEach(function(m){if(m.n===n)m.undone=true});S.toast=null;S.hv=null;if(S.view==='history'&&S.versions.length<2){}render()}break;
   case 'compare':S.view='history';S.hv=Number(v)-1;S.toast=null;render();break;
   case 'toastClose':S.toast=null;render();break;

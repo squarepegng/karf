@@ -72,7 +72,7 @@ function parseHex(h) {
   if (x.length === 3) x = [...x].map((c) => c + c).join('');
   return /^[0-9a-f]{6}/i.test(x) ? [0, 2, 4].map((i) => parseInt(x.slice(i, i + 2), 16)) : null;
 }
-// A CSS value (in the format the variable is used with) → #RRGGBB, or null if Kerf can't read it.
+// A CSS value (in the format the variable is used with) → #RRGGBB, or null if Tovi can't read it.
 export function valueToHex(value, fn) {
   const v = String(value).trim();
   if (/^#[0-9a-f]{3,8}$/i.test(v)) return toHexRGB(...parseHex(v));
@@ -87,7 +87,7 @@ export function valueToHex(value, fn) {
 // #RRGGBB → a value in the same format as the old one ("15 118 110", "174 77% 26%", "#0F766E"…).
 export function hexToValue(hex, old, fn) {
   const rgb = parseHex(hex);
-  if (!rgb) throw new KerfError(`“${hex}” isn’t a colour Kerf can read. Use #RRGGBB.`);
+  if (!rgb) throw new KerfError(`“${hex}” isn’t a colour Tovi can read. Use #RRGGBB.`);
   const v = String(old).trim();
   const comma = v.includes(',');
   if (/^#/.test(v)) return toHexRGB(...rgb);
@@ -95,7 +95,7 @@ export function hexToValue(hex, old, fn) {
   if (/^hsla?\(/i.test(v)) { const [h, s, l] = rgbToHsl(...rgb); return `hsl(${Math.round(h)}${comma ? ',' : ''} ${Math.round(s)}%${comma ? ',' : ''} ${Math.round(l)}%)`; }
   if (fn === 'rgb') return rgb.join(comma ? ', ' : ' ');
   if (fn === 'hsl') { const [h, s, l] = rgbToHsl(...rgb); const r1 = (x) => Math.round(x * 10) / 10; return `${r1(h)}${comma ? ',' : ''} ${r1(s)}%${comma ? ',' : ''} ${r1(l)}%`; }
-  throw new KerfError('Kerf can’t write this colour format yet.');
+  throw new KerfError('Tovi can’t write this colour format yet.');
 }
 
 function configFile(webRoot) {
@@ -115,7 +115,7 @@ export function listTokens(webRoot, theme) {
     if (vr) {
       const byTheme = new Map();
       for (const d of defs.get(vr.v) || []) { const hex = valueToHex(d.value, vr.fn); if (hex) byTheme.set(themeOf(d.selector), { theme: themeOf(d.selector), hex }); }
-      if (byTheme.size) out.push({ name, values: [...byTheme.values()], where: path.relative(webRoot, (defs.get(vr.v) || [])[0].file) });
+      if (byTheme.size) out.push({ name, var: vr.v, fn: vr.fn, values: [...byTheme.values()], where: path.relative(webRoot, (defs.get(vr.v) || [])[0].file) });
     } else if (/^#[0-9a-f]{3,8}$/i.test(raw) && cfgCode.toLowerCase().includes(String(raw).toLowerCase())) {
       out.push({ name, values: [{ theme: 'all', hex: valueToHex(raw) }], where: path.basename(cfg) });
     }
@@ -135,7 +135,7 @@ export function tokenEdit(webRoot, theme, name, hex, which = 'both') {
   const vr = varOf(raw);
   if (vr) {
     const defs = (varDefs(webRoot).get(vr.v) || []).filter((d) => which === 'both' || which === 'all' || themeOf(d.selector) === which);
-    if (!defs.length) throw new KerfError(`Kerf couldn’t find where “${name}” is defined${which === 'both' ? '' : ` for the ${which} theme`}.`);
+    if (!defs.length) throw new KerfError(`Tovi couldn’t find where “${name}” is defined${which === 'both' ? '' : ` for the ${which} theme`}.`);
     // Edit from the end of each file so earlier positions stay valid.
     for (const d of defs.sort((a, b) => (a.file === b.file ? b.start - a.start : a.file.localeCompare(b.file)))) {
       const c = code(d.file);
@@ -151,7 +151,7 @@ export function tokenEdit(webRoot, theme, name, hex, which = 'both') {
   const c = cfg && fs.readFileSync(cfg, 'utf8');
   const re = new RegExp(`(['"])${String(raw).replace(/[#]/g, '\\#')}\\1`, 'gi');
   const hits = c ? [...c.matchAll(re)] : [];
-  if (hits.length !== 1) throw new KerfError(`Kerf couldn’t safely find “${name}” in the Tailwind config.`);
+  if (hits.length !== 1) throw new KerfError(`Tovi couldn’t safely find “${name}” in the Tailwind config.`);
   const h = hits[0];
   files.set(cfg, c.slice(0, h.index) + `${h[1]}${toHexRGB(...parseHex(hex))}${h[1]}` + c.slice(h.index + h[0].length));
   return files;

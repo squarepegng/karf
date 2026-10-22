@@ -1,4 +1,4 @@
-// Kerf's AI: a designer's request plus the code behind the elements they point at
+// Tovi's AI: a designer's request plus the code behind the elements they point at
 // goes to Claude, which answers with the same property edits the panel makes.
 // Nothing is written here; the editor shows the proposal and applies it on approval.
 import { designName } from './labels.mjs';
@@ -30,8 +30,12 @@ function apiKey() {
 }
 
 const Proposal = z.object({
-  scope: z.enum(['done', 'partial', 'not_yet', 'needs_developer']).describe('done: edits cover the request. partial: edits cover part of it and the rest needs something Kerf cannot change yet. not_yet: it is a visual change but nothing in the toolset can do it yet. needs_developer: it changes behavior, data, logic or backend.'),
+  scope: z.enum(['done', 'partial', 'not_yet', 'needs_developer']).describe('done: edits cover the request. partial: edits cover part of it and the rest needs something Tovi cannot change yet. not_yet: it is a visual change but nothing in the toolset can do it yet. needs_developer: it changes behavior, data, logic or backend.'),
   message: z.string().describe('One or two plain sentences to the designer: what you changed and how far it reaches, or why it needs a developer'),
+  suggest: z.object({
+    mode: z.enum(['improve', 'explore']),
+    why: z.string().describe('One short plain sentence, e.g. "Your palette and spacing are what make this feel generic."'),
+  }).nullable().describe('Only in On system mode: set when the design system itself is the reason the screen looks weak, so a better result needs a better system. Otherwise null'),
   notes: z.array(z.object({
     note: z.number().int(),
     status: z.enum(['done', 'partial', 'not_possible']),
@@ -44,7 +48,7 @@ const Proposal = z.object({
       ops: z.array(z.object({ prop: z.enum(PROPS), value: z.string().describe('For w/h: hug, fill or px. For layout: row, col or none. A number for sizes (px; % for opacity and letterSpacing; 100-900 for fontWeight), a color token name or #RRGGBB for colors, a shadow key or "none", left/center/right/justify for align') })),
       text: z.string().nullable().describe('New text, only when the element’s text is editable and the request asks to change wording; otherwise null'),
       props: z.array(z.object({ name: z.string(), value: z.string() })).describe('Component property changes, only names listed as editable for that element, with one of its allowed values; [] if none'),
-      target: z.string().nullable().describe('For style edits: where to make the change. null lets Kerf choose (where the property is set now). Otherwise one of the element’s listed style targets: "element" (only this element), "table:NAME:KEY" (that entry of a style table, so every element using it), "table:NAME:*" (every entry), "css:NAME" (that CSS class everywhere), "const:NAME"'),
+      target: z.string().nullable().describe('For style edits: where to make the change. null lets Tovi choose (where the property is set now). Otherwise one of the element’s listed style targets: "element" (only this element), "table:NAME:KEY" (that entry of a style table, so every element using it), "table:NAME:*" (every entry), "css:NAME" (that CSS class everywhere), "const:NAME"'),
       action: z.enum(['style', 'delete', 'duplicate', 'move', 'swap', 'insert', 'replace', 'group', 'ungroup', 'image', 'token', 'code']).describe('style: ops/props/text only. The others change structure; put style changes for the same element in a separate style edit. token changes a design-system colour everywhere; code is a last-resort code change'),
       token: z.object({
         name: z.string().describe('A colour token name from the list'),
@@ -62,15 +66,15 @@ const Proposal = z.object({
       insertJsx: z.string().nullable().describe('For insert or replace: the new JSX. Plain tags (div, p, h2, span, img, button, ul/li…) or the project’s components and icons, Tailwind classes using the project’s tokens, fixed text only. No handlers, no expressions.'),
       groupWith: z.array(z.string()).nullable().describe('For group: ids of the neighboring siblings to wrap together with this element, in the same parent'),
       groupClass: z.string().nullable().describe('For group: Tailwind classes for the new frame, e.g. "flex flex-row items-center gap-3"'),
-      imageSrc: z.string().nullable().describe('For image: one of the uploaded images, "attachment:N" for an image attached to this message, or a URL the designer gave'),
+      imageSrc: z.string().nullable().describe('For image: one of the uploaded images, "attachment:N" for an image attached to this message, a URL the designer gave, or a new picture as "photo: <what it shows>" or "illustration: <what it shows>"'),
       imageAlt: z.string().nullable().describe('For image: alt text describing the image'),
       why: z.string().describe('A few words, e.g. "warmer, more premium card"'),
     }),
   ),
 });
 
-const SYSTEM = `You are the design assistant inside Kerf, a Figma-style editor that changes a team's real React + Tailwind code.
-A designer points at elements on a live screen and says what should change. You answer with property edits on those elements; Kerf turns each edit into the right Tailwind class in the source and shows your proposal for approval before writing anything.
+const SYSTEM = `You are the design assistant inside Tovi, a Figma-style editor that changes a team's real React + Tailwind code.
+A designer points at elements on a live screen and says what should change. You answer with property edits on those elements; Tovi turns each edit into the right Tailwind class in the source and shows your proposal for approval before writing anything.
 
 Choose the best approach first, as a senior product designer who also reads code would:
 1. What does the designer really mean? Read the request against the screen. "Too bright" on a dark screen means lower contrast so it sits in the dark theme (a darker, quieter fill, softer text, a subtler border), not just darker text. "Make it pop" means more contrast or emphasis against what's around it.
@@ -78,6 +82,12 @@ Choose the best approach first, as a senior product designer who also reads code
 3. How far should the change reach? If the request is about a kind of thing ("the chips", "all buttons", "the cards", "the dark theme"), change it at its source so every instance stays consistent: the table entry or every entry, the CSS class, the component definition, or the token. If it's about this one instance, change only it (target "element"). For a table of statuses or variants, give each entry the value that fits it and keep each status its own hue.
 4. Prefer, in order: style edits on the element or its source, then component properties, then token edits (only when the request is about the palette or theme itself, since a token changes every screen), then code edits (only when nothing else can do it).
 Start message with that approach in one plain sentence that says the reach, e.g. "Your status chips take their colours from one table used in 4 files, so I gave all four a darker fill and softer text there."
+
+Work like a sharp collaborator:
+- Resolve references from context: "this", "it", "here" mean the selection (or the element under the note's mark); follow-ups like "more", "smaller", "the other one" refer to your last proposal.
+- Keep sets consistent: when the target is one of a group of similar elements (cards, nav items, list rows, chips), change their shared source or all of them, unless the designer says "only this one".
+- Be decisive: for vague requests ("make it pop", "more premium"), make tasteful, on-system choices and say in one sentence what you chose. Ask one short question (and return no edits) only when two very different readings are equally likely.
+- Keep the message to one or two plain sentences. Don't list every class; the edit list shows the details.
 
 How to work:
 - When the request has numbered notes (the designer marked parts of the screen), answer each note on its own: set note on every edit, and fill notes with one entry per note saying what you changed for it or why it could not be done. Elements tagged (note N) sit under that note's mark. Keep message to one short overall sentence.
@@ -91,11 +101,13 @@ How to work:
 - To arrange some siblings differently from the rest (e.g. put an input and a button side by side while the label stays above), group them: action group on the first one, groupWith the others, and groupClass for the new frame's layout. Then set Fill width on the child that should take the remaining space. Ungroup removes a plain wrapper and keeps its children.
 - New elements must fit the design: reuse the project's components where one fits, and use the project's tokens and scales in their classes.
 - Layout works like Figma auto layout: layout row/col/none (direction), alignItems start/center/end/stretch, justify start/center/end/between, wrap wrap/nowrap, gap, padX/padY, margins mX/mY (px or auto), and width/height w/h as hug, fill or a px size.
+- To put a new picture in an image (a photo, a drawing, "an illustration of…", "a picture of…"), use action image with imageSrc "photo: <4 to 12 words of what it shows>" for real photographs, or "illustration: <…>" for drawn or flat art. Tovi shows the designer options to pick from. Never say you can't create images.
 - action token changes a design-system colour everywhere it's used: token.name from the token list, token.value #RRGGBB, token.theme light, dark or both.
 - action code is the last resort for visual changes no other action can make (classes computed in an unusual way, inline styles): code.file is the file shown for that element or its style sources, code.find an exact snippet of code you were shown that occurs once, code.replace the new text. Keep it minimal and visual only: never change logic, data, handlers or imports.
 - Always do what you can. If part of a request needs something not in your toolset yet (free positioning, animation, hover states, new pages), make the edits that get closest, set scope to partial, and say in one short sentence what you could not do yet. Never refuse a visual request outright when some of it is possible.
-- needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Kerf cannot make them yet; use not_yet for those.
+- needs_developer is only for requests that change behavior, data, logic, payments or accounts. Visual changes are never developer work, even when Tovi cannot make them yet; use not_yet for those.
 - This can be a conversation: earlier turns are included. Read follow-ups ("smaller", "undo that", "try again but warmer") against what you proposed before and whether it was applied.
+- Never say whether anything changed ("Nothing changed yet", "I haven't changed anything", "No edits"): Tovi shows that itself, next to your reply. When the designer is only asking a question, just answer it.
 - The message must describe only the edits you actually return. Write it for a designer, not a developer: plain words, no class names.`;
 
 function themeSummary(theme) {
@@ -125,6 +137,7 @@ function libSummary(library) {
 function describeTarget(t, i) {
   if (t.imgSrc) t = { ...t, text: `image: ${t.imgSrc}${t.alt ? ` (alt: ${t.alt})` : ''}` };
   const lines = [`[${t.loc}] <${t.tag}>${t.shared ? ' (component definition: editing it changes every place it’s used)' : ''}${t.instance ? ' (this one use of the component: delete, move or restyle just this one here)' : ''}${t.note != null ? ` (note ${t.note})` : ''}`];
+  if (Array.isArray(t.box) && t.box.length === 4) lines.push(`  box: ${t.box.map((n) => Math.round(+n || 0)).join(',')}${t.name ? ` · ${String(t.name).slice(0, 60)}` : ''}`);
   if (t.text) lines.push(`  text: ${JSON.stringify(t.text.slice(0, 100))}${t.textEditable ? ' (editable)' : ' (not editable)'}`);
   if (t.classes?.length) lines.push(`  classes: ${t.classes.join(' ')}`);
   if (t.measured) lines.push(`  measured: ${Object.entries(t.measured).map(([k, v]) => `${k} ${v}`).join(', ')}`);
@@ -196,9 +209,22 @@ const IMG_TYPES = /^image\/(jpeg|png|gif|webp)$/;
 const nameFor = (t) => designName(t.tag, t.text, { icon: !!t.lib });
 const noteOf = (e, t) => (Number.isInteger(e.note) && e.note > 0 ? e.note : Number.isInteger(t.note) ? t.note : null);
 
-export async function propose({ request, targets, history = [], images = [], tokens = [], webRoot = null }, theme, library) {
+// How far Tovi may go beyond the project's design system, chosen by the designer.
+const MODES = {
+  system: 'Mode: On system. Use the project\'s own tokens and scales. If the design system itself is why the screen looks weak (a muddy or clashing palette, poor contrast, inconsistent type or spacing), still answer on-system but set suggest to { mode: "improve", why }.',
+  improve: 'Mode: Improve the system. The designer thinks the current design system is part of the problem. Fix the foundation first: change colour tokens (action token) where the palette is weak, keeping each token\'s role (surface, content, primary…) and WCAG AA contrast, for the theme being shown (or both when it suits both). Then make element or source edits so the screen follows one clear type scale and a consistent spacing rhythm. In the message, describe the new direction in one sentence.',
+  explore: 'Mode: Explore freely, only for the elements given. You may leave the design system: raw #hex colours and sizes off the scale are fine if they make a clearly better design. Do not change tokens. Say in the message that this is an off-system exploration.',
+};
+const PRESETS = {
+  calm: 'Calm & precise: restrained palette with one accent, generous whitespace, crisp hierarchy, subtle borders over shadows (think Linear, Stripe).',
+  warm: 'Warm & editorial: warm neutrals, expressive type contrast, softer corners, magazine-like rhythm.',
+  bold: 'Bold & playful: saturated accent colours, big confident type, rounded shapes, lively contrast.',
+  minimal: 'Minimal: near-monochrome, few elements, lots of space, thin lines, quiet type.',
+};
+
+export async function propose({ request, targets, history = [], images = [], tokens = [], webRoot = null, screen = null, context = null, mode = 'system', direction = null }, theme, library) {
   const key = apiKey();
-  if (!key) throw new KerfError('Add your Anthropic key on Kerf’s start page (localhost:4100) to use AI.');
+  if (!key) throw new KerfError('Add your Anthropic key on Tovi’s start page (localhost:4100) to use AI.');
   if (!request || !String(request).trim()) throw new KerfError('Say or type what should change.');
   if (!targets?.length) throw new KerfError('Nothing on screen to work with. Select something or draw a note first.');
 
@@ -214,10 +240,25 @@ export async function propose({ request, targets, history = [], images = [], tok
     }
     return saved.get(n);
   };
-  const lastText = `Elements on screen:\n${targets.map(describeTarget).join('\n')}\n\n${imgs.length ? `The designer attached ${imgs.length} image${imgs.length > 1 ? 's' : ''} (above). Treat them as a reference to match, a screenshot pointing at a problem, or an image to put in the design, whichever the request means. To place one, use imageSrc "attachment:N" (or src="attachment:N" in insertJsx).\n\n` : ''}Request:\n${request}`;
-  const lastContent = imgs.length
-    ? [...imgs.flatMap((im, n) => [{ type: 'text', text: `Attachment ${n + 1}: ${String(im.name || 'image').slice(0, 80)}` }, { type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } }]), { type: 'text', text: lastText }]
-    : lastText;
+  // What the designer is looking at: page, screen size, theme and selection, so "this" and "here" resolve.
+  const ctx = context && typeof context === 'object' ? context : {};
+  const where = [
+    ctx.page ? `Page: ${String(ctx.page).slice(0, 80)} (${String(ctx.path || '').slice(0, 120)})` : '',
+    ctx.device ? `Screen size: ${ctx.device}${ctx.width ? `, ${ctx.width}px wide` : ''}${ctx.size ? ` (edits apply ${ctx.size})` : ''}` : '',
+    ctx.theme ? `The app is showing its ${ctx.theme} theme.` : '',
+    ctx.selected ? `Selected: ${String(ctx.selected).slice(0, 80)}. "This", "it" and "here" mean the selection unless the request says otherwise.` : 'Nothing is selected: the request is about the visible screen.',
+  ].filter(Boolean).join('\n');
+  const shot = screen && typeof screen.data === 'string' && screen.data.length < 7e6 && /^image\/(jpeg|png)$/.test(screen.media_type) ? screen : null;
+  const m = MODES[mode] ? mode : 'system';
+  const dir = direction && (direction.preset || direction.text) ? `Design direction for this project: ${[PRESETS[direction.preset], direction.text].filter(Boolean).join(' ')}${m === 'system' ? ' (keep within the design system).' : ''}` : '';
+  const refs = m !== 'system' && direction?.refs?.length ? direction.refs.slice(0, 3) : [];
+  const lastText = `${MODES[m]}\n${dir ? dir + '\n' : ''}${refs.length ? `The ${refs.length} reference image${refs.length > 1 ? 's' : ''} labelled "Reference" show the look the designer wants.\n` : ''}${where}\n${shot ? 'The first image is a screenshot of exactly what the designer sees. Use it to judge contrast, alignment, spacing and hierarchy. Element boxes below are x,y,w,h in CSS pixels of that same visible area.\n' : ''}\nElements on screen:\n${targets.map(describeTarget).join('\n')}\n\n${imgs.length ? `The designer attached ${imgs.length} image${imgs.length > 1 ? 's' : ''} (above). Treat them as a reference to match, a screenshot pointing at a problem, or an image to put in the design, whichever the request means. To place one, use imageSrc "attachment:N" (or src="attachment:N" in insertJsx).\n\n` : ''}Request:\n${request}`;
+  const lastContent = [
+    ...(shot ? [{ type: 'text', text: 'Screenshot of the screen:' }, { type: 'image', source: { type: 'base64', media_type: shot.media_type, data: shot.data } }] : []),
+    ...refs.flatMap((r, n) => [{ type: 'text', text: `Reference ${n + 1} for the design direction:` }, { type: 'image', source: { type: 'base64', media_type: r.media_type, data: r.data } }]),
+    ...imgs.flatMap((im, n) => [{ type: 'text', text: `Attachment ${n + 1}: ${String(im.name || 'image').slice(0, 80)}` }, { type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.data } }]),
+    { type: 'text', text: lastText },
+  ];
   const client = new Anthropic({ apiKey: key });
   let res;
   try {
@@ -227,16 +268,17 @@ export async function propose({ request, targets, history = [], images = [], tok
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       output_config: { effort: 'medium', format: betaZodOutputFormat(Proposal) },
-      system: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}\n${tokens.length ? `Colour tokens you can change with action token (light / dark values): ${tokens.map((t) => `${t.name} ${t.values.map((v) => `${v.theme} ${v.hex}`).join(' / ')}`).join('; ')}\n` : ''}${libSummary(library)}`,
+      // The instructions and design system are the same on every request: cache them so later requests start faster.
+      system: [{ type: 'text', text: `${SYSTEM}\n\nThis project's design system:\n${themeSummary(theme)}\n${tokens.length ? `Colour tokens you can change with action token (light / dark values): ${tokens.map((t) => `${t.name} ${t.values.map((v) => `${v.theme} ${v.hex}`).join(' / ')}`).join('; ')}\n` : ''}${libSummary(library)}`, cache_control: { type: 'ephemeral' } }],
       messages: [
         ...history.slice(-8).map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: String(h.text).slice(0, 2000) })),
         { role: 'user', content: lastContent },
       ],
     });
   } catch (e) {
-    if (e instanceof Anthropic.AuthenticationError) throw new KerfError('Anthropic didn’t accept the saved key. Save a new one on Kerf’s start page.');
+    if (e instanceof Anthropic.AuthenticationError) throw new KerfError('Anthropic didn’t accept the saved key. Save a new one on Tovi’s start page.');
     if (e instanceof Anthropic.RateLimitError) throw new KerfError('Claude is busy right now. Try again in a moment.');
-    if (e instanceof Anthropic.APIError) { console.error('Kerf AI error:', e.status, e.message); throw new KerfError(`Claude couldn’t answer (${e.status}). Try again.`); }
+    if (e instanceof Anthropic.APIError) { console.error('Tovi AI error:', e.status, e.message); throw new KerfError(`Claude couldn’t answer (${e.status}). Try again.`); }
     throw e;
   }
   if (res.stop_reason === 'refusal') throw new KerfError('Claude declined this request. Try rewording it as a visual change.');
@@ -290,6 +332,11 @@ export async function propose({ request, targets, history = [], images = [], tok
         st.others = (e.groupWith || []).filter((l) => allowed.has(l) && l.split(':')[0] === e.loc.split(':')[0]);
         st.className = (e.groupClass || 'flex flex-row items-center gap-2').replace(/[^\w\s:/.[\]#-]/g, '');
       }
+      const ask = e.action === 'image' && String(e.imageSrc || '').match(/^\s*(photo|illustration)\s*:\s*(.+)$/i);
+      if (ask) {
+        edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops: [], props: [], text: null, structure: { type: 'imageAsk', kind: ask[1].toLowerCase(), prompt: ask[2].trim().slice(0, 160), alt: e.imageAlt || null }, why: e.why });
+        continue;
+      }
       if (e.action === 'image') {
         const att = String(e.imageSrc || '').match(/^attachment:(\d)$/);
         if (att) e.imageSrc = attachmentSrc(+att[1]);
@@ -314,5 +361,7 @@ export async function propose({ request, targets, history = [], images = [], tok
     if (ops.length || text || props.length) edits.push({ loc: e.loc, tag: t.tag, name: nameFor(t), note: noteOf(e, t), ops, text, props, why: e.why, dom: t.dom || [], ...(target ? { target, where: whereOf(target) } : {}) });
   }
   const notes = Array.isArray(p.notes) ? p.notes.filter((n) => Number.isInteger(n.note) && n.note > 0).map((n) => ({ note: n.note, status: n.status, summary: n.summary })) : null;
-  return { scope: p.scope, message: p.message, notes: notes?.length ? notes : null, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens } };
+  if (m === 'explore') edits.forEach((e) => { if (!e.structure) e.offSystem = true; });
+  if (m !== 'improve') { for (let k = edits.length - 1; k >= 0; k--) if (m === 'explore' && edits[k].structure?.type === 'token') edits.splice(k, 1); }
+  return { scope: p.scope, message: p.message, mode: m, suggest: m === 'system' && p.suggest ? { mode: p.suggest.mode, why: p.suggest.why } : null, notes: notes?.length ? notes : null, edits, model: res.model, usage: { input: res.usage.input_tokens, output: res.usage.output_tokens, cacheRead: res.usage.cache_read_input_tokens || 0, cacheWrite: res.usage.cache_creation_input_tokens || 0 } };
 }

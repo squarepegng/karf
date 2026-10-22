@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Run a React + Tailwind app with Kerf attached: Vite apps here, Next.js apps via kerf-next.mjs.
+// Run a React + Tailwind app with Tovi attached: Vite apps here, Next.js apps via kerf-next.mjs.
 // The app's repo and config are not modified.
 //   node bin/kerf.mjs /path/to/app/web
 import path from 'node:path';
@@ -21,7 +21,7 @@ const viteDir = path.dirname(req.resolve('vite/package.json'));
 const vite = await import(pathToFileURL(path.join(viteDir, 'dist/node/index.js')).href);
 const configFile = ['vite.config.ts', 'vite.config.js', 'vite.config.mjs'].map((f) => path.join(webRoot, f)).find((f) => fs.existsSync(f));
 
-// Load the app's config ourselves so Kerf's tagger runs before any other plugin
+// Load the app's config ourselves so Tovi's tagger runs before any other plugin
 // (React's plugin rewrites the file, which would shift every line and column).
 const loaded = configFile ? await vite.loadConfigFromFile({ command: 'serve', mode: 'development' }, configFile, webRoot) : null;
 const userConfig = loaded ? loaded.config : {};
@@ -33,5 +33,5 @@ const server = await vite.createServer({
 });
 await server.listen();
 server.printUrls();
-console.log(`  Kerf editor: ${server.resolvedUrls?.local?.[0] || "http://localhost:5173/"}__kerf/`);
+console.log(`  Tovi editor: ${server.resolvedUrls?.local?.[0] || "http://localhost:5173/"}__kerf/`);
 }

@@ -1,13 +1,15 @@
-# Kerf: handoff for the next AI session
+# Tovi: handoff for the next AI session
 
 **Read this first, then `CLAUDE.md` (product decisions, PRD links, design tokens), then `CHECKLIST.md` (open decisions).**
 Last updated: 2026-10-21.
 
 ---
 
-## 1. What Kerf is (one paragraph)
+## 1. What Tovi is (one paragraph)
 
-Kerf lets designers and founders edit their team's **real, running React + Tailwind app** the way they'd edit in Figma: select anything, change colour, type, spacing, layout, size, images, structure. Kerf writes the change into the source code as a careful developer would (AST edits of Tailwind classes, never find-and-replace), and the changes go to developers as one **GitHub pull request**. It also has AI that does the same edits from plain-English requests: an Ask bar, ⌘K chat and on-screen notes. "Kerf" is the working name. The user sometimes types "Kev" or "karf". The GitHub repo is `squarepegng/karf`.
+_Renamed from Kerf in October 2026. Internal names (`data-kerf`, `/__kerf/`, `.kerf/`, `~/Kerf/projects/`, `kerf/…` branches, `kerf-*.mjs`) are kept on purpose; see CLAUDE.md._
+
+Tovi lets designers and founders edit their team's **real, running React + Tailwind app** the way they'd edit in Figma: select anything, change colour, type, spacing, layout, size, images, structure. Tovi writes the change into the source code as a careful developer would (AST edits of Tailwind classes, never find-and-replace), and the changes go to developers as one **GitHub pull request**. It also has AI that does the same edits from plain-English requests: an Ask bar, ⌘K chat and on-screen notes. "Tovi" is the working name. The user sometimes types "Kev" or "karf". The GitHub repo is `squarepegng/tovi`.
 
 ## 2. Who you're working with (important)
 
@@ -16,7 +18,7 @@ Kerf lets designers and founders edit their team's **real, running React + Tailw
 - **They want Figma/Framer-quality UI.** It should be clean, intuitive and Figma-like, never developer-ish. "Speak designer, not developer" is a standing rule.
 - **Security rules:**
   - Never ask them to paste tokens or passwords in chat.
-  - Never read, print or repeat the Anthropic API key. It lives in `engine/.env` (git-ignored) and is set from the key field on the Kerf start page.
+  - Never read, print or repeat the Anthropic API key. It lives in `engine/.env` (git-ignored) and is set from the key field on the Tovi start page.
   - Keys were pasted in chat earlier in this project. Treat those as compromised; the user was told to revoke them.
   - Don't copy sign-in tokens or other credentials between sites or apps, even for testing.
 - **Git rules:**
@@ -29,13 +31,13 @@ Kerf lets designers and founders edit their team's **real, running React + Tailw
 
 | What | Where |
 |---|---|
-| Kerf repo (git root) | `/Users/mac/Documents/kerf` → GitHub `squarepegng/karf` |
+| Tovi repo (git root) | `/Users/mac/Documents/kerf` → GitHub `squarepegng/tovi` |
 | The real product (engine + editor) | `/Users/mac/Documents/kerf/engine` |
-| Original single-file prototype | `index.html` on `main` of `squarepegng/karf`, deployed by Vercel from `main` |
+| Original single-file prototype | `index.html` on `main` of `squarepegng/tovi`, deployed by Vercel from `main` |
 | Project context and decisions | `/Users/mac/Documents/kerf/CLAUDE.md` |
 | Open decisions checklist | `/Users/mac/Documents/kerf/CHECKLIST.md` |
 | The user's own test app: Stratemark | `/Users/mac/Documents/STRATEMARK-app` → GitHub `squarepegng/STRATEMARK-app` (web app in `apps/web`, Vite + React + Tailwind v3) |
-| Kerf's own copy of Stratemark (opened from its GitHub link) | `/Users/mac/Kerf/projects/squarepegng-stratemark-app`. **The user's ~63 unsent Kerf edits live here**, saved in `apps/web/.kerf/session.json`. Do not reset or delete. |
+| Tovi's own copy of Stratemark (opened from its GitHub link) | `/Users/mac/Kerf/projects/squarepegng-stratemark-app`. **The user's ~63 unsent Tovi edits live here**, saved in `apps/web/.kerf/session.json`. Do not reset or delete. |
 | PRD | https://claude.ai/code/artifact/dcb2536a-92df-4e67-b457-ef372bced01b |
 | Design system | https://claude.ai/artifact/9zuJsZn7HJ4JoPgjHpsgDH |
 | Editor UI designs (6 screens) | https://claude.ai/artifact/HvAysqH9RWNmgXdTbJanM9 |
@@ -61,9 +63,9 @@ cd ~/Documents/kerf/engine && node bin/kerf-home.mjs
 | PR | What's in it | State |
 |---|---|---|
 | #1, #2 | Prototype Edit mode; the engine that opens a GitHub project and edits it like Figma | Merged |
-| [#3](https://github.com/squarepegng/karf/pull/3) | AI (Ask, ⌘K chat, notes with per-note results, image attachments, dictation); component properties; structure edits (delete, duplicate, move, swap, insert, replace, group/ungroup, images); layout tools and on-canvas handles; plain-language changes; saved sessions; cva variant editing; history and Create PR | Merged 2026-10-21 |
-| [#4](https://github.com/squarepegng/karf/pull/4) | Designer names everywhere; panel shows only what fits; Figma-style canvas (zoom, fit, device frames); fixes (disabled elements selectable, autofocus no longer steals shortcuts, plain PR dialog, Save as a version, start-page logs hidden) | Merged 2026-10-21 |
-| [#5](https://github.com/squarepegng/karf/pull/5) | Edit per screen size ("All sizes" / "Mobile only"…); Next.js 13+ support; clear messages for unsupported projects; Tailwind TS configs; `HANDOFF.md`, `CHECKLIST.md`, updated README | Merged 2026-10-21 |
+| [#3](https://github.com/squarepegng/tovi/pull/3) | AI (Ask, ⌘K chat, notes with per-note results, image attachments, dictation); component properties; structure edits (delete, duplicate, move, swap, insert, replace, group/ungroup, images); layout tools and on-canvas handles; plain-language changes; saved sessions; cva variant editing; history and Create PR | Merged 2026-10-21 |
+| [#4](https://github.com/squarepegng/tovi/pull/4) | Designer names everywhere; panel shows only what fits; Figma-style canvas (zoom, fit, device frames); fixes (disabled elements selectable, autofocus no longer steals shortcuts, plain PR dialog, Save as a version, start-page logs hidden) | Merged 2026-10-21 |
+| [#5](https://github.com/squarepegng/tovi/pull/5) | Edit per screen size ("All sizes" / "Mobile only"…); Next.js 13+ support; clear messages for unsupported projects; Tailwind TS configs; `HANDOFF.md`, `CHECKLIST.md`, updated README | Merged 2026-10-21 |
 
 All were squash-merged. The old branches `kerf/ai-layer`, `kerf/sprint-1` and `kerf/sprint-2` are fully contained in `main`; don't build on them. Start new work on a fresh branch from `main`.
 
@@ -78,8 +80,8 @@ All were squash-merged. The old branches `kerf/ai-layer`, `kerf/sprint-1` and `k
 | File (`engine/`) | Job |
 |---|---|
 | `bin/kerf-home.mjs` | Start page (port 4100): open a GitHub link or folder, save the key, show status (logs hidden under "Technical details") |
-| `bin/kerf.mjs` | Runner. Next.js apps go to `kerf-next.mjs`; otherwise it loads the app's own `vite.config` with Kerf's plugin first |
-| `bin/kerf-next.mjs` | Next.js runner: custom HTTP server; `/__kerf/*` goes to Kerf, the rest to Next. Adds Kerf's loader by hooking Next's config loader through `Module._load`, so the user's `next.config` is never touched |
+| `bin/kerf.mjs` | Runner. Next.js apps go to `kerf-next.mjs`; otherwise it loads the app's own `vite.config` with Tovi's plugin first |
+| `bin/kerf-next.mjs` | Next.js runner: custom HTTP server; `/__kerf/*` goes to Tovi, the rest to Next. Adds Tovi's loader by hooking Next's config loader through `Module._load`, so the user's `next.config` is never touched |
 | `src/next-loader.cjs` | Webpack "pre" loader that tags JSX for Next |
 | `src/plugin.mjs` | `createKerf(webRoot)`: the shared core (tagging + `/__kerf` API routes). The default export is the Vite plugin |
 | `src/project.mjs` | Clone or locate the project, find apps, `appProblem()` gives plain reasons for unsupported setups, install, start |
@@ -111,7 +113,7 @@ cd /Users/mac/Documents/kerf/engine && node bin/kerf.mjs $SP/sm/apps/web   # usu
 # afterwards: kill the server, then: git -C /Users/mac/Documents/STRATEMARK-app worktree remove --force $SP/sm
 ```
 
-- Stratemark's screens beyond the access-code page need a sign-in Kerf can't do. Test on the access-code screen and the 404 page. **Don't** copy sign-in data across.
+- Stratemark's screens beyond the access-code page need a sign-in Tovi can't do. Test on the access-code screen and the 404 page. **Don't** copy sign-in data across.
 - For Next.js, a sample app was made with `npx create-next-app@14.2.15 shop --ts --tailwind --no-eslint --app --no-src-dir --import-alias "@/*" --use-npm` in a scratch folder.
 - Real AI calls cost the user money. Keep AI tests few.
 - Use the built-in browser to check the UI; `javascript_tool` is handy for reading state inside the iframe.
@@ -158,7 +160,7 @@ The user is marking **`CHECKLIST.md`** (Keep / Later / Remove) and will say whic
 - **My top recommendations:**
   - **2.1 "Match to Figma":** compare a Figma frame with the live screen and fix the drift as a PR.
   - **2.3 States and real content.**
-  - **1.1 One-step install** and **1.3 Safer PRs**, which must come before testers use Kerf alone.
+  - **1.1 One-step install** and **1.3 Safer PRs**, which must come before testers use Tovi alone.
 - **Conflict to resolve:** 3.2 (merge notes into the Ask box) vs 3.3 (keep notes as their own mode). 3.1 (merge the Ask bar and ⌘K chat) is a separate choice.
 - **Never add free positioning** (drag anywhere). Auto layout stays the backbone.
 
@@ -166,7 +168,7 @@ The user is marking **`CHECKLIST.md`** (Keep / Later / Remove) and will say whic
 
 ## 11. Conversation history in brief
 
-1. Pushed the prototype and `CLAUDE.md` to `squarepegng/karf` and deployed it on Vercel. A browser-clicking deploy loop wasted credits; prefer CLI.
+1. Pushed the prototype and `CLAUDE.md` to `squarepegng/tovi` and deployed it on Vercel. A browser-clicking deploy loop wasted credits; prefer CLI.
 2. The user clarified the goal: real Figma-style editing of any element, not a demo. We rebuilt Edit mode (PR #1, merged), then made it Figma/Framer-clean on request.
 3. Built the real engine to open any React + Tailwind codebase from a GitHub link or folder (the start page) instead of per-app editors. Tested on Stratemark.
 4. Added real Claude AI (Ask, ⌘K, notes) using the user's saved key (PR #2 merged; PR #3 open with much more).
@@ -175,4 +177,4 @@ The user is marking **`CHECKLIST.md`** (Keep / Later / Remove) and will say whic
 7. Full product review, followed by Sprint 1 (designer language, Figma canvas, quick fixes; PR #4) and Sprint 2 (per-size edits, Next.js, unsupported messages; PR #5).
 8. Wrote `CHECKLIST.md` of every suggestion for the user to decide on. They'll come back with choices.
 
-**Next step for whoever picks this up:** wait for the user's checklist choices, or answer their question. Don't start new features unasked. After any engine change, restart their Kerf (kill ports 4100/5173, then run `node bin/kerf-home.mjs` in terminal tab c4) so they get the new code.
+**Next step for whoever picks this up:** wait for the user's checklist choices, or answer their question. Don't start new features unasked. After any engine change, restart their Tovi (kill ports 4100/5173, then run `node bin/kerf-home.mjs` in terminal tab c4) so they get the new code.

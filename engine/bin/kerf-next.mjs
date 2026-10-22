@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Run a Next.js + Tailwind app's own dev server with Kerf attached.
-// The app's repo and config are not modified: Kerf loads next.config itself and adds its loader.
+// Run a Next.js + Tailwind app's own dev server with Tovi attached.
+// The app's repo and config are not modified: Tovi loads next.config itself and adds its loader.
 //   node bin/kerf-next.mjs /path/to/app
 import path from 'node:path';
 import http from 'node:http';
@@ -21,7 +21,7 @@ const freePort = (p) => new Promise((resolve) => {
 const port = await freePort(Number(process.env.PORT) || 3000);
 
 // Next reads next.config itself (and ignores config passed in code in dev), so wrap its config loader:
-// every config it loads gets Kerf's loader added, and the app's own file stays untouched.
+// every config it loads gets Tovi's loader added, and the app's own file stays untouched.
 const Module = req('node:module');
 const CONFIG = req.resolve('next/dist/server/config');
 const addLoader = (cfg) => {
@@ -75,4 +75,4 @@ if (typeof app.getUpgradeHandler === 'function') {
   server.on('upgrade', (rq, socket, head) => { if (rq.url.startsWith('/_next/')) up(rq, socket, head); });
 }
 console.log(`  ➜  Local:   http://localhost:${port}/`);
-console.log(`  Kerf editor: http://localhost:${port}/__kerf/`);
+console.log(`  Tovi editor: http://localhost:${port}/__kerf/`);

@@ -40,7 +40,7 @@ function inJSX(parent, what) {
     : parent?.type === 'ArrowFunctionExpression' || parent?.type === 'ReturnStatement' || parent?.type === 'ParenthesizedExpression'
       ? 'the outer box of its page or component, or repeated by code (a list)'
       : 'placed by code';
-  throw new KerfError(`Kerf can’t ${what} this element because it’s ${why}. ${what.startsWith('insert') ? 'Add it inside instead, or select an element within it.' : 'Select the element around it, or one inside it.'}`);
+  throw new KerfError(`Tovi can’t ${what} this element because it’s ${why}. ${what.startsWith('insert') ? 'Add it inside instead, or select an element within it.' : 'Select the element around it, or one inside it.'}`);
 }
 
 /* ---------- imports ---------- */
@@ -111,7 +111,7 @@ export function checkSnippet(jsx, isKnownComponent) {
     if (n.type === 'JSXSpreadAttribute') throw new KerfError('New elements can’t spread properties.');
     if (n.type === 'JSXAttribute') {
       const nm = n.name.name;
-      if (/^on[A-Z]/.test(nm) || nm === 'ref' || nm === 'dangerouslySetInnerHTML') throw new KerfError(`New elements can’t have ${nm}: Kerf adds visuals, not behavior.`);
+      if (/^on[A-Z]/.test(nm) || nm === 'ref' || nm === 'dangerouslySetInnerHTML') throw new KerfError(`New elements can’t have ${nm}: Tovi adds visuals, not behavior.`);
     }
     if (n.type === 'JSXExpressionContainer' && !['StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'JSXEmptyExpression'].includes(n.expression.type) && !(n.expression.type === 'TemplateLiteral' && !n.expression.expressions.length)) {
       throw new KerfError('New elements can only contain fixed text and values, not code.');
@@ -119,7 +119,7 @@ export function checkSnippet(jsx, isKnownComponent) {
     if (n.type === 'JSXOpeningElement') {
       const nm = n.name.type === 'JSXIdentifier' ? n.name.name : null;
       if (!nm) throw new KerfError('New elements must use plain tags or your components.');
-      if (/^[a-z]/.test(nm)) { if (!SAFE_TAGS.has(nm)) throw new KerfError(`<${nm}> isn’t an element Kerf inserts.`); }
+      if (/^[a-z]/.test(nm)) { if (!SAFE_TAGS.has(nm)) throw new KerfError(`<${nm}> isn’t an element Tovi inserts.`); }
       else if (!isKnownComponent(nm)) throw new KerfError(`${nm} isn’t one of this project’s components or icons.`);
       else comps.push(nm);
     }
@@ -196,7 +196,7 @@ export function structureEdit(code, line, col, op, ctx) {
     if (pos !== 'inside' && !canSibling && el.closingElement) { atStart = pos === 'before'; pos = 'inside'; note = ` (it’s the outer box of this page or component, so it went inside, at the ${atStart ? 'top' : 'bottom'})`; }
     else if (pos === 'inside' && !el.closingElement && canSibling) { pos = 'after'; note = ` (<${name}> can’t hold elements, so it went after it)`; }
     if (pos === 'inside') {
-      if (!el.closingElement) throw new KerfError(`<${name}> can’t hold other elements, and it has no neighbors Kerf can add to. Select the box around it.`);
+      if (!el.closingElement) throw new KerfError(`<${name}> can’t hold other elements, and it has no neighbors Tovi can add to. Select the box around it.`);
       const cl = el.closingElement.start, cls = lineStart(code, cl);
       if (atStart) s.appendLeft(el.openingElement.end, `\n${ind}  ${op.jsx}`);
       else if (!code.slice(cls, cl).trim()) s.appendLeft(cls, `${ind}  ${op.jsx}\n`); // closing tag on its own line
@@ -262,7 +262,7 @@ export function structureEdit(code, line, col, op, ctx) {
       const a = attr(k);
       if (!a) s.appendLeft(el.openingElement.name.end, ` ${k}=${JSON.stringify(v)}`);
       else if (a.value?.type === 'StringLiteral') s.overwrite(a.value.start, a.value.end, JSON.stringify(v));
-      else throw new KerfError(`This image’s ${k} is set by code, so Kerf can’t change it here.`);
+      else throw new KerfError(`This image’s ${k} is set by code, so Tovi can’t change it here.`);
     };
     const parts = [];
     if (op.src) {
@@ -274,20 +274,21 @@ export function structureEdit(code, line, col, op, ctx) {
         const decl = ast.program.body.find((n) => n.type === 'ImportDeclaration' && n.specifiers.some((sp) => sp.type === 'ImportDefaultSpecifier' && sp.local.name === id));
         let uses = 0;
         walkP(ast.program, (n, p) => { if (n.type === 'Identifier' && n.name === id && p?.type !== 'ImportDefaultSpecifier') uses++; });
-        if (!decl || uses > 1) throw new KerfError('This image comes from code used elsewhere, so Kerf won’t change it here.');
+        if (!decl || uses > 1) throw new KerfError('This image comes from code used elsewhere, so Tovi won’t change it here.');
         s.overwrite(a.value.start, a.value.end, JSON.stringify(op.src));
         removedNames.push(id);
       } else setLit('src', op.src);
       parts.push('image');
     }
     if (op.alt != null) { setLit('alt', String(op.alt)); parts.push('alt text'); }
-    label = `Changed ${parts.join(' and ') || 'image'}`;
+    // A photo's credit (e.g. "Photo by … on Unsplash") rides along in the change label, so it reaches the pull request.
+    label = `Changed ${parts.join(' and ') || 'image'}${op.credit ? ` (${String(op.credit).slice(0, 120)})` : ''}`;
   } else throw new KerfError(`Unknown change: ${op.type}`);
 
   let out = s.toString();
   for (const [nm, src] of imports) out = ensureImport(out, nm, src);
   out = pruneImports(out, removedNames.filter((n) => !imports.some(([i]) => i === n)));
   try { parseCode(out, { strict: true }); }
-  catch (e) { throw new KerfError(`Kerf stopped: the change would break the file (${e.message}).`); }
+  catch (e) { throw new KerfError(`Tovi stopped: the change would break the file (${e.message}).`); }
   return { code: out, summary: { added: [], removed: [], offScale: [], text: null, props: [], action: label }, moved, shift };
 }

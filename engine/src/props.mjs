@@ -2,7 +2,7 @@
 // (variant="primary", weight="duotone", size={20}) that a designer can change.
 import { parseCode, walk } from './ast.mjs';
 
-// Props Kerf may add to icons from known libraries, with the values they accept.
+// Props Tovi may add to icons from known libraries, with the values they accept.
 export const ICON_LIBS = {
   '@phosphor-icons/react': { weight: ['thin', 'light', 'regular', 'bold', 'fill', 'duotone'], size: 'number', mirrored: 'boolean' },
   'lucide-react': { size: 'number', strokeWidth: 'number', absoluteStrokeWidth: 'boolean' },
@@ -55,8 +55,8 @@ export function propsInfo(code, el) {
 // Check a requested value against what the prop accepts; returns the clean value or throws.
 export function checkProp(info, name, value) {
   const p = info.props.find((x) => x.name === name);
-  if (!p) throw new Error(`${name} isn’t a property Kerf can change on this component.`);
-  if (!p.editable) throw new Error(`${name} is set by code here, so Kerf won’t change it.`);
+  if (!p) throw new Error(`${name} isn’t a property Tovi can change on this component.`);
+  if (!p.editable) throw new Error(`${name} is set by code here, so Tovi won’t change it.`);
   if (p.kind === 'option') {
     if (!p.options.includes(String(value))) throw new Error(`${name} must be one of: ${p.options.join(', ')}.`);
     return String(value);

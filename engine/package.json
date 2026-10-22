@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Kerf Phase 1: tag rendered elements with their source, and edit Tailwind classes in that source safely.",
+  "description": "Tovi Phase 1: tag rendered elements with their source, and edit Tailwind classes in that source safely.",
   "bin": {
     "kerf": "./bin/kerf.mjs"
   },

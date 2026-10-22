@@ -1,4 +1,4 @@
-// End-to-end check against a running app with Kerf attached:
+// End-to-end check against a running app with Tovi attached:
 // make real edits through the API, then the caller type-checks and diffs.
 //   node scripts/live-check.mjs http://localhost:5173
 const base = (process.argv[2] || 'http://localhost:5173') + '/__kerf';

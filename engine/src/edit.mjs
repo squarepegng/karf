@@ -21,7 +21,7 @@ export function parseLoc(loc, webRoot) {
   if (!m) throw new KerfError(`Bad location: ${loc}`);
   const file = path.resolve(webRoot, m[1]);
   const inside = file.startsWith(path.resolve(webRoot) + path.sep) && !/[\\/](node_modules|\.next|\.git|dist|build|out)[\\/]/.test(file.slice(path.resolve(webRoot).length));
-  if (!inside || !/\.[jt]sx$/.test(file)) throw new KerfError('Kerf only edits your app’s own .jsx and .tsx files.');
+  if (!inside || !/\.[jt]sx$/.test(file)) throw new KerfError('Tovi only edits your app’s own .jsx and .tsx files.');
   return { rel: m[1], file, line: +m[2], col: +m[3] };
 }
 
@@ -62,7 +62,7 @@ function literal(n) {
   return null;
 }
 
-// Where this element's classes live, and whether Kerf can safely rewrite them.
+// Where this element's classes live, and whether Tovi can safely rewrite them.
 export function classInfo(el, cvas) {
   const open = el.openingElement;
   const attr = open.attributes.find((a) => a.type === 'JSXAttribute' && a.name.name === 'className');
@@ -84,7 +84,7 @@ export function classInfo(el, cvas) {
       return { kind: 'call-empty', fn: e.callee.name, insertAt: e.arguments.length ? e.arguments[0].start : e.end - 1, hasArgs: e.arguments.length > 0, classes: [] };
     }
   }
-  return { kind: 'dynamic', classes: [], reason: 'Its classes are computed by code, so Kerf can’t change them safely here.' };
+  return { kind: 'dynamic', classes: [], reason: 'Its classes are computed by code, so Tovi can’t change them safely here.' };
 }
 
 const split = (s) => s.split(/\s+/).filter(Boolean);
@@ -143,7 +143,7 @@ export function editSourced({ file, code, src, ops, theme, scope = 'key', target
     const table = (name) => src.parts.find((p) => p.kind === 'table' && p.name === name);
     if (t?.kind === 'table' || (!t && scope === 'all' && owner?.p.kind === 'table')) {
       const tp = table(t?.name || owner.p.name);
-      if (!tp) throw new KerfError(`Kerf couldn’t find the style table ${t?.name}.`);
+      if (!tp) throw new KerfError(`Tovi couldn’t find the style table ${t?.name}.`);
       const key = t ? t.key : '*';
       const keys = key === '*' ? tp.entries.map((e) => e.key) : [key];
       for (const k of keys) {
@@ -153,14 +153,14 @@ export function editSourced({ file, code, src, ops, theme, scope = 'key', target
       }
     } else if (t?.kind === 'css' || t?.kind === 'const') {
       const p = src.parts.find((x) => x.kind === t.kind && x.name === t.name);
-      if (!p) throw new KerfError(`Kerf couldn’t find ${t.kind === 'css' ? '.' : ''}${t.name}.`);
+      if (!p) throw new KerfError(`Tovi couldn’t find ${t.kind === 'css' ? '.' : ''}${t.name}.`);
       places.push([p, sourceLabel(p)]);
     } else if (owner && t?.kind !== 'element' && scope !== 'here') {
       places.push([owner.l, owner.p.kind === 'literal' || owner.p.kind === 'branch' ? 'this element' : sourceLabel(owner.p)]);
     } else {
       // Only this element: its own class string, placed after whatever sets the property now.
       if (owner && owner.p.kind !== 'literal' && owner.p.kind !== 'css' && !src.merge) {
-        throw new KerfError(`This style comes from ${sourceLabel(owner.p)}, and this element’s classes aren’t merged with tailwind-merge, so Kerf can only change it there (for every element that uses it).`);
+        throw new KerfError(`This style comes from ${sourceLabel(owner.p)}, and this element’s classes aren’t merged with tailwind-merge, so Tovi can only change it there (for every element that uses it).`);
       }
       const after = owner && owner.p.kind !== 'css' ? owner.p.order : -Infinity;
       const mine = owner && owner.p.kind === 'literal' ? owner.l : [...own].reverse().find((p) => p.order > after);
@@ -187,7 +187,17 @@ export function editSourced({ file, code, src, ops, theme, scope = 'key', target
     if (w.new) {
       if (!text) continue;
       const s = ms(file), e = src.expr;
-      if (src.call) s.appendLeft(src.call.end - 1, src.call.arguments.length ? `, '${text}'` : `'${text}'`);
+      // Right after the last argument, so a trailing comma (cn(a, b,)) stays valid.
+      if (src.call) {
+        const args = src.call.arguments, last = args[args.length - 1];
+        if (!last) s.appendLeft(src.call.end - 1, `'${text}'`);
+        else {
+          // Arguments on their own lines get the new one on its own line too, at the same indent.
+          const lineStart = code.lastIndexOf('\n', last.start - 1) + 1, indent = code.slice(lineStart, last.start);
+          const multiline = code.slice(src.call.start, last.start).includes('\n') && /^\s*$/.test(indent);
+          s.appendLeft(last.end, multiline ? `,\n${indent}'${text}'` : `, '${text}'`);
+        }
+      }
       else if (e.type === 'TemplateLiteral') s.appendLeft(e.end - 1, ` ${text}`);
       else s.overwrite(e.start, e.end, `\`\${${code.slice(e.start, e.end)}} ${text}\``);
       continue;
@@ -199,14 +209,14 @@ export function editSourced({ file, code, src, ops, theme, scope = 'key', target
   for (const [f, { s }] of files) {
     const next = s.toString();
     if (/\.[cm]?[jt]sx?$/.test(f)) {
-      try { parseCode(next, { strict: true, file: f }); } catch (e) { throw new KerfError(`Kerf stopped: the change would break ${path.basename(f)} (${e.message}).`); }
+      try { parseCode(next, { strict: true, file: f }); } catch (e) { throw new KerfError(`Tovi stopped: the change would break ${path.basename(f)} (${e.message}).`); }
     }
     out.set(f, next);
   }
   return { files: out, summary };
 }
 
-// Text Kerf may retype: one fixed string, not data or an expression.
+// Text Tovi may retype: one fixed string, not data or an expression.
 export function textInfo(el) {
   const isComment = (c) => c.type === 'JSXExpressionContainer' && c.expression.type === 'JSXEmptyExpression';
   const kids = el.children.filter((c) => !(c.type === 'JSXText' && !c.value.trim()) && !isComment(c));
@@ -237,8 +247,17 @@ export function describe(code, line, col, ctx = {}) {
     cva: ci.kind === 'cva' ? { name: ci.entry.name, groups: Object.fromEntries(Object.entries(ci.entry.groups).map(([g, v]) => [g, Object.keys(v)])), defaults: ci.entry.defaults } : undefined,
     text: ti.editable ? { editable: true, value: ti.value } : { editable: false, reason: ti.reason },
     ...propsInfo(code, el),
+    sized: sizedProps(ci.classes, ctx.theme),
     ...sourcedDescribe(code, el, ctx),
   };
+}
+// Properties set differently per screen size (md:text-lg…), so the panel can mark them, like Framer's overrides.
+const SIZED_PROPS = ['bg', 'color', 'borderC', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'align', 'radius', 'padX', 'padY', 'mX', 'mY', 'gap', 'borderW', 'opacity', 'shadow', 'w', 'h', 'layout', 'alignItems', 'justify'];
+function sizedProps(classes, theme) {
+  const screens = new Set((theme?.screens || []).map((x) => x.name));
+  const rest = (classes || []).map((c) => c.match(/^([\w-]+):([^:]+)$/)).filter((m) => m && screens.has(m[1])).map((m) => m[2]);
+  if (!rest.length) return [];
+  return SIZED_PROPS.filter((p) => { try { const m = matcher(p, theme); return rest.some((c) => m(c)); } catch { return false; } });
 }
 function sourcedDescribe(code, el, ctx) {
   const src = sourcedInfo(code, el, ctx);
@@ -382,7 +401,7 @@ export function editElement(code, line, col, { ops = [], text, props = [], cva, 
   try {
     parseCode(out, { strict: true });
   } catch (e) {
-    throw new KerfError(`Kerf stopped: the change would break the file (${e.message}).`);
+    throw new KerfError(`Tovi stopped: the change would break the file (${e.message}).`);
   }
   return { code: out, summary };
 }
@@ -417,7 +436,7 @@ export function createEditor(webRoot, getTheme, library) {
     },
     describe(loc, dom) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);
-      return { file: rel, line, ...describe(fs.readFileSync(file, 'utf8'), line, col, { file, webRoot, dom }) };
+      return { file: rel, line, ...describe(fs.readFileSync(file, 'utf8'), line, col, { file, webRoot, dom, theme: getTheme() }) };
     },
     edit(loc, change) {
       const { rel, file, line, col } = parseLoc(loc, webRoot);
@@ -447,13 +466,13 @@ export function createEditor(webRoot, getTheme, library) {
     // A small code change Claude wrote, for styles no tool can reach. Exactly one match, and it must still parse.
     code(relFile, find, replace, change = {}) {
       const file = path.resolve(webRoot, String(relFile || ''));
-      if (!file.startsWith(path.resolve(webRoot) + path.sep) || /[\\/](node_modules|\.next|\.git|dist|build)[\\/]/.test(file) || !/\.(m?[jt]sx?|css)$/.test(file) || !fs.existsSync(file)) throw new KerfError('Kerf only changes your app’s own code and CSS files.');
+      if (!file.startsWith(path.resolve(webRoot) + path.sep) || /[\\/](node_modules|\.next|\.git|dist|build)[\\/]/.test(file) || !/\.(m?[jt]sx?|css)$/.test(file) || !fs.existsSync(file)) throw new KerfError('Tovi only changes your app’s own code and CSS files.');
       const before = fs.readFileSync(file, 'utf8');
       const n = find ? before.split(find).length - 1 : 0;
-      if (n !== 1) throw new KerfError(n ? 'That code appears more than once, so Kerf won’t guess which to change.' : 'The code to change wasn’t found. The file may have changed; try again.');
+      if (n !== 1) throw new KerfError(n ? 'That code appears more than once, so Tovi won’t guess which to change.' : 'The code to change wasn’t found. The file may have changed; try again.');
       const after = before.replace(find, () => replace);
       if (/\.m?[jt]sx?$/.test(file)) {
-        try { parseCode(after, { strict: true, file }); } catch (e) { throw new KerfError(`Kerf stopped: the change would break ${path.basename(file)} (${e.message}).`); }
+        try { parseCode(after, { strict: true, file }); } catch (e) { throw new KerfError(`Tovi stopped: the change would break ${path.basename(file)} (${e.message}).`); }
       }
       const rel = path.relative(webRoot, file).split(path.sep).join('/');
       return record(file, rel, before, after, `code:${rel}`, { ...change, code: { file: rel } }, { added: [], removed: [], changes: [], offScale: [], text: null, props: [], action: change.label || `Code change in ${rel}` });
@@ -462,7 +481,7 @@ export function createEditor(webRoot, getTheme, library) {
       const h = history.pop();
       if (!h) return { undone: false };
       for (const f of [h, ...(h.more || [])]) {
-        if (fs.readFileSync(f.file, 'utf8') !== f.after) { history.push(h); throw new KerfError(`${path.relative(webRoot, f.file)} changed outside Kerf since this edit, so Kerf won’t overwrite it.`); }
+        if (fs.readFileSync(f.file, 'utf8') !== f.after) { history.push(h); throw new KerfError(`${path.relative(webRoot, f.file)} changed outside Tovi since this edit, so Tovi won’t overwrite it.`); }
       }
       fs.writeFileSync(h.file, h.before);
       for (const m of h.more || []) fs.writeFileSync(m.file, m.before);
